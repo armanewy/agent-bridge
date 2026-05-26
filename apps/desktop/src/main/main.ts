@@ -1,4 +1,16 @@
-import { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, nativeImage, ipcMain, shell } from "electron";
+import {
+  app,
+  BrowserWindow,
+  Menu,
+  Tray,
+  dialog,
+  globalShortcut,
+  nativeImage,
+  ipcMain,
+  shell,
+  type MessageBoxOptions,
+  type OpenDialogOptions
+} from "electron";
 import { access, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
@@ -117,6 +129,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
     setupService.configureNativeHost(input)
   );
+  ipcMain.handle("agentbridge:selectRepoFolder", () => selectRepoFolder());
   ipcMain.handle("agentbridge:openDataFolder", () => openDataFolder(dataDir));
   ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(dataDir, nativeHostLogPath));
   ipcMain.handle("agentbridge:clearLocalData", () => clearLocalData(dataDir));
@@ -147,13 +160,13 @@ app.on("will-quit", () => {
 });
 
 function registerQuickActions(): void {
-  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openConnect"));
+  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openStart"));
   const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(TRAY_ICON_SVG).toString("base64")}`);
   tray = new Tray(icon);
   tray.setToolTip("AgentBridge");
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Open AgentBridge", click: () => showMainWindow("openConnect") },
+      { label: "Open AgentBridge", click: () => showMainWindow("openStart") },
       { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
       { label: "Open latest task", click: () => showMainWindow("openTasks") },
       { type: "separator" },
@@ -176,7 +189,7 @@ function registerAppMenu(dataDir: string, nativeHostLogPath: string): void {
       {
         label: "File",
         submenu: [
-          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openConnect") },
+          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openStart") },
           { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
           { label: "Open Data Folder", click: () => void openDataFolder(dataDir) },
           { label: "Open Native Host Log", click: () => void openNativeHostLog(dataDir, nativeHostLogPath) }
@@ -205,7 +218,7 @@ function registerAppMenu(dataDir: string, nativeHostLogPath: string): void {
 
 function showAboutDialog(dataDir: string): void {
   const owner = mainWindow ?? BrowserWindow.getAllWindows()[0];
-  const options = {
+  const options: MessageBoxOptions = {
     type: "info",
     title: "About AgentBridge",
     message: "AgentBridge",
@@ -215,7 +228,7 @@ function showAboutDialog(dataDir: string): void {
       "Local-first: task cards, artifacts, and settings stay on this machine by default.",
       `Data directory: ${dataDir}`
     ].join("\n")
-  } as const;
+  };
   if (owner) {
     void dialog.showMessageBox(owner, options);
     return;
@@ -223,7 +236,7 @@ function showAboutDialog(dataDir: string): void {
   void dialog.showMessageBox(options);
 }
 
-function showMainWindow(action?: "openConnect" | "openTasks" | "createTaskFromLatestCapture"): void {
+function showMainWindow(action?: "openStart" | "openConnect" | "openTasks" | "createTaskFromLatestCapture"): void {
   const window = mainWindow ?? BrowserWindow.getAllWindows()[0];
   if (!window) {
     void createWindow().then(() => {
@@ -246,6 +259,16 @@ function showMainWindow(action?: "openConnect" | "openTasks" | "createTaskFromLa
 async function openDataFolder(dataDir: string): Promise<void> {
   await mkdir(dataDir, { recursive: true });
   await shell.openPath(dataDir);
+}
+
+async function selectRepoFolder(): Promise<string | undefined> {
+  const owner = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  const options: OpenDialogOptions = {
+    title: "Choose repo folder",
+    properties: ["openDirectory"]
+  };
+  const result = owner ? await dialog.showOpenDialog(owner, options) : await dialog.showOpenDialog(options);
+  return result.canceled ? undefined : result.filePaths[0];
 }
 
 async function openNativeHostLog(dataDir: string, nativeHostLogPath: string): Promise<void> {

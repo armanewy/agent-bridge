@@ -18,7 +18,7 @@ interface ConnectCenterProps {
   onSelectTarget(id: string): void;
   onSelectCapture(id: string): void;
   onDiscover(): void;
-  onCreateDemoCapture(): void;
+  onCreateDemoCapture?(): void;
   onCreateWorkflowLink(): void;
   onCreateTaskFromWorkflowLink(id: string): void;
 }
@@ -136,10 +136,12 @@ export function ConnectCenter({
             <Cable size={16} />
             Create Link
           </button>
-          <button type="button" className="secondary-button" onClick={onCreateDemoCapture}>
-            <Chrome size={16} />
-            Use demo capture
-          </button>
+          {onCreateDemoCapture ? (
+            <button type="button" className="secondary-button" onClick={onCreateDemoCapture}>
+              <Chrome size={16} />
+              Use demo capture
+            </button>
+          ) : null}
         </div>
       </section>
 
@@ -203,7 +205,7 @@ export function ConnectCenter({
           sources={sources}
           selectedCaptureId={selectedCaptureId}
           onSelectCapture={onSelectCapture}
-          onCreateDemoCapture={onCreateDemoCapture}
+          {...(onCreateDemoCapture ? { onCreateDemoCapture } : {})}
         />
       ) : null}
     </div>

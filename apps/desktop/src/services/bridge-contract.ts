@@ -149,6 +149,7 @@ export interface AgentBridgeApi {
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   getSetupStatus(): Promise<SetupStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
+  selectRepoFolder(): Promise<string | undefined>;
   openDataFolder(): Promise<void>;
   openNativeHostLog(): Promise<void>;
   clearLocalData(): Promise<void>;

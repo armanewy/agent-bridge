@@ -428,6 +428,9 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockExtensionId = input.extensionId.trim();
       return mockSetupStatus();
     },
+    async selectRepoFolder() {
+      return "C:\\Users\\aoztu\\Documents\\Agent Bridge";
+    },
     async openDataFolder() {
       return undefined;
     },

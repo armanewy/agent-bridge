@@ -33,6 +33,7 @@ const api: AgentBridgeApi = {
   runVerification: (input: VerificationRunRequest) => ipcRenderer.invoke("agentbridge:runVerification", input),
   getSetupStatus: () => ipcRenderer.invoke("agentbridge:getSetupStatus"),
   configureNativeHost: (input: ConfigureNativeHostRequest) => ipcRenderer.invoke("agentbridge:configureNativeHost", input),
+  selectRepoFolder: () => ipcRenderer.invoke("agentbridge:selectRepoFolder"),
   openDataFolder: () => ipcRenderer.invoke("agentbridge:openDataFolder"),
   openNativeHostLog: () => ipcRenderer.invoke("agentbridge:openNativeHostLog"),
   clearLocalData: () => ipcRenderer.invoke("agentbridge:clearLocalData"),

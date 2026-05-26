@@ -1,6 +1,6 @@
 # Backlog
 
-## Done In Waves 7-13
+## Done In Waves 7-14
 
 - Mission / HandoffCard / TaskSpec core model.
 - Local-store v2 for missions, artifacts, runs, and verification results.
@@ -11,11 +11,12 @@
 - First-run setup status and native-host manifest generation.
 - Real capture-to-Mission default flow.
 - Mission-aware delivery provenance.
-- Connect-first Link Center with explicit source, workspace, and target selection.
+- Start-first ChatGPT/browser tab -> repo -> Codex flow.
+- Advanced Link Center with explicit source, workspace, and target selection.
 - Verification preflight and artifact viewer.
 - Follow-up HandoffCard dry-run/send path.
 - Extension broad content-script removal.
-- Simple Mode navigation: Connect, Tasks, Settings, Advanced.
+- Simple Mode navigation: Start, Tasks, Settings, Advanced.
 - Task Card Preview copy and layout.
 - Guided setup wizard presentation.
 - Task detail timeline, next action, and readable work record.
@@ -28,11 +29,12 @@
 - Desktop-window discovery as detected components with compatibility and risk badges.
 - Capability badges for Capture, Send, Verify, Observe, Official route, Risky, and Unsupported.
 - Workflow Link to Task Card creation using the latest matching capture.
+- Repo folder picker for the focused Codex setup flow.
+- Demo capture tools moved out of the default path.
 
 ## P0 Dogfood Hardening
 
 - Add a visible end-to-end demo script result after real extension capture.
-- Add Codex repo directory picker.
 - Replace packaged native-host Node dependency with a standalone native-host binary.
 - Add production Chrome Web Store extension ID/install path.
 - Polish quick-action routing in packaged Electron with a real tray icon.

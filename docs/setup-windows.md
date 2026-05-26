@@ -75,7 +75,7 @@ Open Settings in the desktop app. The guided setup walks through:
 4. Send a dry-run task to Codex.
 5. Optional verification commands.
 
-The setup screen presents this as desktop-app onboarding. Registry, native-host, local bridge, and helper paths stay behind diagnostics. After setup is ready, go back to Connect, create a Workflow Link, and create Task Cards from captured browser text.
+The setup screen presents this as desktop-app onboarding. Registry, native-host, local bridge, and helper paths stay behind diagnostics. After setup is ready, go back to Start, create the ChatGPT -> repo -> Codex link, and create Task Cards from captured browser text.
 
 ## Register Native Host
 

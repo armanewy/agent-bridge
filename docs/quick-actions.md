@@ -5,7 +5,7 @@ AgentBridge should be usable from normal developer flow without living in the da
 ## Implemented
 
 - Chrome extension command: `Ctrl+Shift+Y` captures selected text from the active tab through explicit `chrome.scripting.executeScript`.
-- Desktop shortcut: `Ctrl+Shift+A` focuses AgentBridge and opens Connect.
+- Desktop shortcut: `Ctrl+Shift+A` focuses AgentBridge and opens Start.
 - Tray menu:
   - Open AgentBridge
   - Create Task from latest capture
@@ -19,7 +19,7 @@ Quick actions route into the same safe flow as the visible UI:
 
 ```text
 latest capture
--> Connect
+-> Start
 -> Task Card Preview
 -> Send to Codex or save draft
 ```
@@ -34,5 +34,5 @@ The extension never scrapes in the background. Browser capture remains user-trig
 4. Select text in a browser tab.
 5. Press `Ctrl+Shift+Y`.
 6. Open or focus AgentBridge with `Ctrl+Shift+A`.
-7. Confirm the capture appears in Connect under the selected source.
+7. Confirm Start shows the active route and latest capture status.
 8. Use the tray menu item "Create Task from latest capture" and confirm the Task Card Preview opens.

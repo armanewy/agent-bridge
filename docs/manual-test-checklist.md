@@ -25,8 +25,9 @@
 
 - `pnpm desktop:package` creates `apps/desktop/release/win-unpacked/AgentBridge.exe`.
 - `AgentBridge.exe` launches without requiring a browser pointed at localhost.
-- Vite development preview loads Connect at `http://127.0.0.1:5173`.
+- Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
+- Demo capture tools are only under Advanced.
 - Codex target rejects invalid paths in Electron mode.
 - Task Card Preview shows task title, repo/agent, acceptance criteria, verification steps, redaction warnings, and expandable raw prompt/source details.
 - Dry-run Codex delivery creates a local delivery attempt.

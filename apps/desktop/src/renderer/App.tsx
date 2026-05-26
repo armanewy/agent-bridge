@@ -23,19 +23,21 @@ import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
 import { ConnectCenter } from "../components/connect/ConnectCenter.js";
+import { CaptureInbox } from "../components/capture/CaptureInbox.js";
 import { HandoffPreview } from "../components/handoff-preview/HandoffPreview.js";
 import { LinkManager } from "../components/link-manager/LinkManager.js";
 import { MissionPanel } from "../components/mission/MissionPanel.js";
 import { SetupPanel } from "../components/setup/SetupPanel.js";
+import { StartPage } from "../components/start/StartPage.js";
 
-type View = "connect" | "tasks" | "settings" | "advanced";
-type AdvancedView = "sources" | "targets" | "links" | "audit";
+type View = "start" | "tasks" | "settings" | "advanced";
+type AdvancedView = "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
 
 const api = getAgentBridgeApi();
 
 export function App(): JSX.Element {
-  const [view, setView] = useState<View>("connect");
-  const [advancedView, setAdvancedView] = useState<AdvancedView>("sources");
+  const [view, setView] = useState<View>("start");
+  const [advancedView, setAdvancedView] = useState<AdvancedView>("components");
   const [sources, setSources] = useState<SourceEndpoint[]>([]);
   const [targets, setTargets] = useState<TargetEndpoint[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -92,7 +94,7 @@ export function App(): JSX.Element {
       }
       if (action?.type === "createTaskFromLatestCapture") {
         const capture = captures[0];
-        setView("connect");
+        setView("start");
         if (capture?.id) {
           setSelectedCaptureId(capture.id);
         }
@@ -104,7 +106,7 @@ export function App(): JSX.Element {
         setLinkError("Create a Workflow Link before using the tray shortcut to create a task.");
         return;
       }
-      setView("connect");
+      setView("start");
     };
     window.addEventListener("agentbridge:quickAction", handleQuickAction);
     return () => window.removeEventListener("agentbridge:quickAction", handleQuickAction);
@@ -145,11 +147,26 @@ export function App(): JSX.Element {
     setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
     setSelectedSourceId((current) => current ?? nextSources[0]?.id);
     setSelectedTargetId((current) => current ?? nextTargets.find((target) => target.kind === "codexDeepLink")?.id ?? nextTargets[0]?.id);
-    setSelectedSourceComponentId((current) => current ?? nextComponents.find((component) => component.roleCapabilities.canBeSource)?.id);
-    setSelectedWorkspaceComponentId((current) => current ?? nextComponents.find((component) => component.roleCapabilities.canBeWorkspace)?.id);
-    setSelectedTargetComponentId((current) =>
-      current ?? nextComponents.find((component) => component.provider === "codex")?.id ?? nextComponents.find((component) => component.roleCapabilities.canBeTarget)?.id
-    );
+    setSelectedSourceComponentId((current) => {
+      const currentComponent = nextComponents.find((component) => component.id === current);
+      if (currentComponent?.roleCapabilities.canBeSource && !isDemoSourceComponent(currentComponent)) {
+        return current;
+      }
+      return nextComponents.find((component) => component.roleCapabilities.canBeSource && !isDemoSourceComponent(component))?.id;
+    });
+    setSelectedWorkspaceComponentId((current) => {
+      const currentComponent = nextComponents.find((component) => component.id === current);
+      return currentComponent?.roleCapabilities.canBeWorkspace
+        ? current
+        : nextComponents.find((component) => component.roleCapabilities.canBeWorkspace)?.id;
+    });
+    setSelectedTargetComponentId((current) => {
+      const currentComponent = nextComponents.find((component) => component.id === current);
+      if (currentComponent?.roleCapabilities.canBeTarget) {
+        return current;
+      }
+      return nextComponents.find((component) => component.provider === "codex")?.id ?? nextComponents.find((component) => component.roleCapabilities.canBeTarget)?.id;
+    });
     const nextSelectedMissionId = selectedMissionIdRef.current ?? nextMissions[0]?.id;
     selectedMissionIdRef.current = nextSelectedMissionId;
     setSelectedMissionId(nextSelectedMissionId);
@@ -172,26 +189,67 @@ export function App(): JSX.Element {
     const result = await api.discoverLinkableComponents();
     setComponents(result.components);
     setDiscoveryWarnings(result.warnings);
-    setSelectedSourceComponentId((current) => current ?? result.components.find((component) => component.roleCapabilities.canBeSource)?.id);
-    setSelectedWorkspaceComponentId((current) => current ?? result.components.find((component) => component.roleCapabilities.canBeWorkspace)?.id);
-    setSelectedTargetComponentId((current) =>
-      current ?? result.components.find((component) => component.provider === "codex")?.id ?? result.components.find((component) => component.roleCapabilities.canBeTarget)?.id
-    );
+    setSelectedSourceComponentId((current) => {
+      const currentComponent = result.components.find((component) => component.id === current);
+      if (currentComponent?.roleCapabilities.canBeSource && !isDemoSourceComponent(currentComponent)) {
+        return current;
+      }
+      return result.components.find((component) => component.roleCapabilities.canBeSource && !isDemoSourceComponent(component))?.id;
+    });
+    setSelectedWorkspaceComponentId((current) => {
+      const currentComponent = result.components.find((component) => component.id === current);
+      return currentComponent?.roleCapabilities.canBeWorkspace
+        ? current
+        : result.components.find((component) => component.roleCapabilities.canBeWorkspace)?.id;
+    });
+    setSelectedTargetComponentId((current) => {
+      const currentComponent = result.components.find((component) => component.id === current);
+      if (currentComponent?.roleCapabilities.canBeTarget) {
+        return current;
+      }
+      return result.components.find((component) => component.provider === "codex")?.id ?? result.components.find((component) => component.roleCapabilities.canBeTarget)?.id;
+    });
   }
 
   async function createCodexTarget(): Promise<void> {
     setTargetError(undefined);
     try {
-      await api.configureCodexTarget(repoPath.trim(), {
-        ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
-        ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
-        ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
-      });
-      await discoverComponents();
-      await refresh();
+      await configureCodexTargetForPath(repoPath.trim());
     } catch (error) {
       setTargetError(error instanceof Error ? error.message : String(error));
     }
+  }
+
+  async function configureCodexTargetForPath(path: string): Promise<void> {
+    if (!path) {
+      throw new Error("Choose a repo folder first.");
+    }
+    await api.configureCodexTarget(path, {
+      ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
+      ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
+      ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
+    });
+    await discoverComponents();
+    await refresh();
+  }
+
+  async function chooseRepoFolder(): Promise<void> {
+    setTargetError(undefined);
+    try {
+      const selectedPath = await api.selectRepoFolder();
+      if (!selectedPath) {
+        return;
+      }
+      setRepoPath(selectedPath);
+      await configureCodexTargetForPath(selectedPath);
+    } catch (error) {
+      setTargetError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function useCurrentChatGptTab(): Promise<void> {
+    setLinkError("In Chrome, open ChatGPT, select text, then press Ctrl+Shift+Y or use the AgentBridge extension.");
+    await refresh();
   }
 
   async function createLink(): Promise<void> {
@@ -214,8 +272,12 @@ export function App(): JSX.Element {
   async function createWorkflowLink(): Promise<void> {
     setLinkError(undefined);
     const source = components.find((component) => component.id === selectedSourceComponentId);
-    const workspace = components.find((component) => component.id === selectedWorkspaceComponentId);
-    const target = components.find((component) => component.id === selectedTargetComponentId);
+    const workspace =
+      components.find((component) => component.id === selectedWorkspaceComponentId) ??
+      components.find((component) => component.roleCapabilities.canBeWorkspace && component.backingRef.repoPath === codexTarget?.repoPath);
+    const target =
+      components.find((component) => component.id === selectedTargetComponentId) ??
+      components.find((component) => component.provider === "codex" && component.backingRef.targetId === codexTarget?.id);
 
     if (!source || !target) {
       setLinkError("Select a source and target first.");
@@ -260,6 +322,7 @@ export function App(): JSX.Element {
       selectedMissionIdRef.current = nextPreview.mission.id;
       setSelectedMissionId(nextPreview.mission.id);
       setMissionDetail(nextMissionDetail);
+      setView("start");
     } catch (error) {
       setLinkError(error instanceof Error ? error.message : String(error));
     }
@@ -383,7 +446,7 @@ export function App(): JSX.Element {
           </div>
         </div>
         <nav aria-label="Main navigation">
-          <NavButton icon={<Network size={18} />} label="Connect" active={view === "connect"} onClick={() => setView("connect")} />
+          <NavButton icon={<Network size={18} />} label="Start" active={view === "start"} onClick={() => setView("start")} />
           <NavButton icon={<ClipboardList size={18} />} label="Tasks" active={view === "tasks"} onClick={() => setView("tasks")} />
           <NavButton icon={<Settings size={18} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} />
           <NavButton
@@ -407,43 +470,44 @@ export function App(): JSX.Element {
           </button>
         </header>
 
-        {view === "connect" ? (
-          <div className="connect-screen">
-            <ConnectCenter
+        {view === "start" ? (
+          <div className="start-screen">
+            <StartPage
               components={components}
               workflowLinks={workflowLinks}
               captures={captures}
-              sources={sources}
+              targets={targets}
+              missions={missions}
               selectedSourceComponentId={selectedSourceComponentId}
               selectedWorkspaceComponentId={selectedWorkspaceComponentId}
               selectedTargetComponentId={selectedTargetComponentId}
-              selectedCaptureId={selectedCaptureId}
               linkError={linkError}
-              discoveryWarnings={discoveryWarnings}
-              onSelectSource={setSelectedSourceComponentId}
-              onSelectWorkspace={setSelectedWorkspaceComponentId}
-              onSelectTarget={setSelectedTargetComponentId}
-              onSelectCapture={setSelectedCaptureId}
-              onDiscover={() => void discoverComponents()}
-              onCreateDemoCapture={() => void bindMockSource()}
+              targetError={targetError}
+              onUseCurrentTab={() => void useCurrentChatGptTab()}
+              onChooseRepo={() => void chooseRepoFolder()}
               onCreateWorkflowLink={() => void createWorkflowLink()}
               onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
+              onOpenTasks={() => setView("tasks")}
+              onOpenAdvanced={() => setView("advanced")}
+              onOpenSettings={() => setView("settings")}
             />
-            <HandoffPreview
-              preview={preview}
-              deliveryResult={deliveryResult}
-              onApproveDryRun={() => void dryRunCodex()}
-              onApproveSend={() => void sendCodex()}
-              onSaveDraft={() => {
-                setPreview(undefined);
-                setDeliveryResult(undefined);
-                setView("tasks");
-              }}
-              onCancel={() => {
-                setPreview(undefined);
-                setDeliveryResult(undefined);
-              }}
-            />
+            {preview ? (
+              <HandoffPreview
+                preview={preview}
+                deliveryResult={deliveryResult}
+                onApproveDryRun={() => void dryRunCodex()}
+                onApproveSend={() => void sendCodex()}
+                onSaveDraft={() => {
+                  setPreview(undefined);
+                  setDeliveryResult(undefined);
+                  setView("tasks");
+                }}
+                onCancel={() => {
+                  setPreview(undefined);
+                  setDeliveryResult(undefined);
+                }}
+              />
+            ) : null}
           </div>
         ) : null}
 
@@ -475,7 +539,7 @@ export function App(): JSX.Element {
               onExtensionIdChange={setExtensionId}
               onConfigureNativeHost={() => void configureNativeHost()}
               onRefresh={() => void refresh()}
-              onGoToConnect={() => setView("connect")}
+              onGoToConnect={() => setView("start")}
             />
             <CodexTargetPanel
               repoPath={repoPath}
@@ -514,20 +578,58 @@ export function App(): JSX.Element {
                 </div>
               </div>
               <div className="segmented-control advanced-tabs">
+                <button type="button" className={advancedView === "components" ? "selected" : ""} onClick={() => setAdvancedView("components")}>
+                  Components
+                </button>
+                <button type="button" className={advancedView === "captures" ? "selected" : ""} onClick={() => setAdvancedView("captures")}>
+                  Captures
+                </button>
+                <button type="button" className={advancedView === "links" ? "selected" : ""} onClick={() => setAdvancedView("links")}>
+                  Links
+                </button>
                 <button type="button" className={advancedView === "sources" ? "selected" : ""} onClick={() => setAdvancedView("sources")}>
                   Sources
                 </button>
                 <button type="button" className={advancedView === "targets" ? "selected" : ""} onClick={() => setAdvancedView("targets")}>
                   Targets
                 </button>
-                <button type="button" className={advancedView === "links" ? "selected" : ""} onClick={() => setAdvancedView("links")}>
-                  Links
-                </button>
                 <button type="button" className={advancedView === "audit" ? "selected" : ""} onClick={() => setAdvancedView("audit")}>
                   Audit
                 </button>
+                <button type="button" className={advancedView === "demo" ? "selected" : ""} onClick={() => setAdvancedView("demo")}>
+                  Demo tools
+                </button>
               </div>
             </section>
+            {advancedView === "components" ? (
+              <ConnectCenter
+                components={components}
+                workflowLinks={workflowLinks}
+                captures={captures}
+                sources={sources}
+                selectedSourceComponentId={selectedSourceComponentId}
+                selectedWorkspaceComponentId={selectedWorkspaceComponentId}
+                selectedTargetComponentId={selectedTargetComponentId}
+                selectedCaptureId={selectedCaptureId}
+                linkError={linkError}
+                discoveryWarnings={discoveryWarnings}
+                onSelectSource={setSelectedSourceComponentId}
+                onSelectWorkspace={setSelectedWorkspaceComponentId}
+                onSelectTarget={setSelectedTargetComponentId}
+                onSelectCapture={setSelectedCaptureId}
+                onDiscover={() => void discoverComponents()}
+                onCreateWorkflowLink={() => void createWorkflowLink()}
+                onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
+              />
+            ) : null}
+            {advancedView === "captures" ? (
+              <CaptureInbox
+                captures={captures}
+                sources={sources}
+                selectedCaptureId={selectedCaptureId}
+                onSelectCapture={setSelectedCaptureId}
+              />
+            ) : null}
             {advancedView === "sources" ? (
               <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
             ) : null}
@@ -573,6 +675,19 @@ export function App(): JSX.Element {
                   )}
                 </div>
               </div>
+            ) : null}
+            {advancedView === "demo" ? (
+              <section className="panel">
+                <div className="panel-heading">
+                  <div>
+                    <h2>Demo tools</h2>
+                    <p>Development-only seed data for trying Task Cards without a real Chrome capture.</p>
+                  </div>
+                </div>
+                <button type="button" className="secondary-button" onClick={() => void bindMockSource()}>
+                  Use demo capture
+                </button>
+              </section>
             ) : null}
           </div>
         ) : null}
@@ -645,6 +760,10 @@ function verificationCommandsFromComponent(component?: LinkableComponent): Array
   ].filter(Boolean) as Array<{ kind: "test" | "lint" | "typecheck"; command: string }>;
 }
 
+function isDemoSourceComponent(component: LinkableComponent): boolean {
+  return typeof component.backingRef.sourceId === "string" && component.backingRef.sourceId.includes("mock");
+}
+
 function describeSource(source: SourceEndpoint): { title: string; subtitle: string; detail?: string } {
   if (source.kind === "browserTab") {
     return { title: source.title || "Browser tab", subtitle: source.url, detail: source.boundAt };
@@ -664,7 +783,7 @@ function describeTarget(target: TargetEndpoint): { title: string; subtitle: stri
 
 function titleForView(view: View): string {
   return {
-    connect: "Connect",
+    start: "Start",
     tasks: "Tasks",
     settings: "Settings",
     advanced: "Advanced"
@@ -673,9 +792,9 @@ function titleForView(view: View): string {
 
 function subtitleForView(view: View): string {
   return {
-    connect: "Detect linkable components, create reusable routes, then turn captures into Task Cards.",
+    start: "Link one ChatGPT conversation to one repo and Codex.",
     tasks: "Task history, verification results, artifacts, and follow-up drafts.",
     settings: "Connect Chrome, choose a repo, and configure Codex delivery.",
-    advanced: "Operator views for sources, targets, links, and audit."
+    advanced: "Components, captures, links, sources, targets, audit, and demo tools."
   }[view];
 }

@@ -139,9 +139,139 @@ nav {
 }
 
 .connect-screen,
-.connect-layout {
+.connect-layout,
+.start-screen,
+.start-layout {
   display: grid;
   gap: 16px;
+}
+
+.start-layout {
+  grid-template-columns: minmax(0, 1fr);
+  align-items: start;
+}
+
+.start-flow-card {
+  display: grid;
+  gap: 18px;
+}
+
+.start-flow-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  align-items: flex-start;
+}
+
+.start-flow-heading > div {
+  min-width: 0;
+}
+
+.start-flow-heading h2 {
+  font-size: 34px;
+}
+
+.start-step-list {
+  display: grid;
+  gap: 12px;
+}
+
+.start-step {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  grid-template-columns: 36px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  background: #ffffff;
+}
+
+.start-step.ready {
+  border-color: #8ac3a9;
+  background: #f3fbf7;
+}
+
+.start-step.missing {
+  background: #fbfcfd;
+}
+
+.start-step-icon {
+  width: 36px;
+  height: 36px;
+  border-radius: 8px;
+  display: grid;
+  place-items: center;
+  background: #edf2f6;
+  color: #25313a;
+}
+
+.start-step strong,
+.start-step p {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.start-step p {
+  margin: 3px 0 0;
+  color: #64737f;
+}
+
+.start-action-row {
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+.active-link-card {
+  border: 1px solid #c8d2db;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+  background: #fbfcfd;
+}
+
+.active-link-card h3 {
+  margin: 0;
+  overflow-wrap: anywhere;
+}
+
+.active-link-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+}
+
+.metric {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+}
+
+.metric span,
+.metric strong {
+  display: block;
+  overflow-wrap: anywhere;
+}
+
+.metric span {
+  color: #64737f;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.latest-capture-strip {
+  border-left: 3px solid #205f4b;
+  padding: 8px 12px;
+  background: #ffffff;
+}
+
+.latest-capture-strip p {
+  margin: 4px 0 0;
 }
 
 .connect-hero {
@@ -684,6 +814,8 @@ pre {
   .home-grid,
   .workflow-route,
   .two-column,
+  .start-step,
+  .active-link-grid,
   .preview-grid,
   .prompt-columns {
     grid-template-columns: 1fr;
@@ -732,6 +864,11 @@ pre {
   background: #d8eee6;
   color: #205f4b;
   font-weight: 700;
+}
+
+.status-pill.muted {
+  background: #edf2f6;
+  color: #64737f;
 }
 
 .mission-detail-grid {
@@ -1154,6 +1291,7 @@ pre {
 
 .advanced-tabs {
   margin-bottom: 0;
+  grid-template-columns: repeat(auto-fit, minmax(98px, 1fr));
 }
 
 .advanced-panel {

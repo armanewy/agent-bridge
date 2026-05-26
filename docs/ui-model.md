@@ -1,20 +1,20 @@
 # UI Model
 
-The desktop app defaults to a Connect-first Simple Mode. Internal Mission, HandoffCard, Source, Target, Link, and Audit models still exist, but the default user language is Component, Link, Task, Repo, Agent, Send, Verify, Result, and History.
+The desktop app defaults to a Start-first Simple Mode. Internal Mission, HandoffCard, Source, Target, Link, Component, and Audit models still exist, but the default user language is Browser tab, Repo, Codex, Link, Task Card, Send, Verify, Result, and History.
 
 ## Simple Mode
 
-- Connect: detect linkable browser tabs, repos, desktop windows, and agent targets; select one source, one workspace, and one target; create a reusable Workflow Link.
+- Start: build and use one active route, `ChatGPT/browser tab -> repo -> Codex`.
 - Tasks: inspect task history, generated prompts, delivery attempts, artifacts, verification results, and follow-up drafts.
 - Settings: connect Chrome, choose a repo, configure Codex delivery, and set optional verification commands.
 
 The user-facing hierarchy is:
 
 ```text
-Components -> Links -> Tasks
+Browser tab -> Repo -> Codex -> Task Card
 ```
 
-Capture Inbox is secondary to the selected browser source. A Task Card is created from a Workflow Link after a capture exists for that source.
+The Start page hides empty Task Card previews and demo data. It shows the active link, latest real capture if available, and the primary action: Create Task Card.
 
 ## Advanced Mode
 
@@ -22,8 +22,11 @@ Advanced groups the operator views that should not be required for daily use:
 
 - Sources: captured browser sources.
 - Targets: Codex and Windows targets.
+- Components: detected browser tabs, repos, desktop windows, and agent targets.
+- Captures: raw capture inbox.
 - Links: saved source-to-target routing definitions.
 - Audit: local provenance events.
+- Demo tools: development-only mock capture actions.
 
 ## Task Card Preview
 
