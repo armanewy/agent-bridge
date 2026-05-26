@@ -30,7 +30,12 @@ import type {
   AgentEvent,
   AgentProviderProfile,
   AgentSessionRef,
-  AgentTurn
+  AgentTurn,
+  ExecutorTaskResult,
+  HandoffCard,
+  PlannerResponse,
+  ReviewResult,
+  TaskSpec
 } from "@agentbridge/core";
 
 const now = () => new Date().toISOString();
@@ -212,6 +217,116 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         .filter((event) => !filter.sessionRefId || event.sessionRefId === filter.sessionRefId)
         .filter((event) => !filter.turnId || event.turnId === filter.turnId)
         .filter((event) => !filter.type || event.type === filter.type);
+    },
+    async createWorkbenchMission(input = {}) {
+      const mission: Mission = {
+        id: `mission_${mockMissions.length + 1}`,
+        title: input.title ?? "Workbench task",
+        goal: input.goal ?? "Plan, execute, verify, and review an AI-agent task.",
+        status: "draft",
+        sourceIds: ["provider:openai-planner"],
+        captureIds: [],
+        handoffCardIds: [],
+        artifactIds: [],
+        runIds: [],
+        ...(input.repoContext ? { repoContext: input.repoContext } : {}),
+        verificationPlan: {
+          commands: input.verificationCommands ?? [],
+          manualChecklist: [],
+          expectedArtifacts: ["taskSpec", "generatedPrompt", "verificationResult"]
+        },
+        createdAt: now(),
+        updatedAt: now()
+      };
+      mockMissions = [mission, ...mockMissions];
+      mockMissionDetails.set(mission.id, {
+        mission,
+        handoffCards: [],
+        captures: [],
+        artifacts: [],
+        deliveryAttempts: [],
+        runs: [],
+        verificationResults: []
+      });
+      return mission;
+    },
+    async sendUserMessageToPlanner(missionId, text) {
+      const response: PlannerResponse = {
+        id: `planner_response_${mockAgentTurns.length + 1}`,
+        providerId: "openai-planner",
+        sessionRefId: "mock_planner_session",
+        turnId: `agent_turn_${mockAgentTurns.length + 1}`,
+        content: `Mock planner response: ${text}`,
+        artifactIds: [],
+        createdAt: now(),
+        metadata: { mock: true }
+      };
+      updateMockMission(missionId, { status: "planned" });
+      return response;
+    },
+    async createTaskSpecFromLatestPlannerTurn(missionId) {
+      const taskSpec = mockTaskSpec();
+      const card = mockHandoffCard(missionId, taskSpec);
+      updateMockMission(missionId, { status: "ready", handoffCardIds: [card.id] });
+      const detail = mockMissionDetails.get(missionId);
+      if (detail) {
+        detail.handoffCards = [card, ...detail.handoffCards];
+      }
+      return card;
+    },
+    async sendTaskSpecToExecutor(missionId) {
+      const result: ExecutorTaskResult = {
+        id: `executor_result_${mockAgentTurns.length + 1}`,
+        providerId: "codex",
+        deliveryMode: "dryRun",
+        success: true,
+        warnings: [],
+        artifactIds: [],
+        createdAt: now(),
+        metadata: { mock: true }
+      };
+      updateMockMission(missionId, { status: "delivered" });
+      return result;
+    },
+    async runMissionWorkbenchVerification(missionId, input = {}) {
+      return this.runVerification({ missionId, ...input });
+    },
+    async sendVerificationToPlannerForReview(missionId) {
+      const result: ReviewResult = {
+        id: `review_result_${mockAgentTurns.length + 1}`,
+        providerId: "openai-planner",
+        content: "Mock planner review: needs review.",
+        statusSuggestion: "needs_review",
+        artifactIds: [],
+        createdAt: now(),
+        metadata: { mock: true }
+      };
+      updateMockMission(missionId, { status: "needs_review" });
+      return result;
+    },
+    async createFollowUpFromPlannerReview(missionId) {
+      const card = mockHandoffCard(missionId, {
+        ...mockTaskSpec(),
+        title: "Follow-up task",
+        goal: "Fix the verification follow-up."
+      });
+      const detail = mockMissionDetails.get(missionId);
+      if (detail) {
+        detail.handoffCards = [card, ...detail.handoffCards];
+      }
+      return card;
+    },
+    async sendFollowUpToExecutor(_missionId) {
+      return {
+        id: `executor_result_${mockAgentTurns.length + 1}`,
+        providerId: "codex",
+        deliveryMode: "dryRun",
+        success: true,
+        warnings: [],
+        artifactIds: [],
+        createdAt: now(),
+        metadata: { mock: true, followUp: true }
+      };
     },
     async createWorkflowLink(input) {
       const link: WorkflowLink = {
@@ -762,6 +877,60 @@ function mockRepoComponent(repoContext: RepoContextPack, idSuffix: string): Link
     backingRef: { repoPath: repoContext.repoPath },
     metadata: repoContext,
     discoveredAt: now(),
+    updatedAt: now()
+  };
+}
+
+function updateMockMission(missionId: string, patch: Partial<Mission>): void {
+  mockMissions = mockMissions.map((mission) =>
+    mission.id === missionId
+      ? {
+          ...mission,
+          ...patch,
+          updatedAt: now()
+        }
+      : mission
+  );
+  const detail = mockMissionDetails.get(missionId);
+  if (detail) {
+    detail.mission = {
+      ...detail.mission,
+      ...patch,
+      updatedAt: now()
+    };
+  }
+}
+
+function mockTaskSpec(): TaskSpec {
+  return {
+    title: "Mock Workbench Task",
+    goal: "Send a scoped task to Codex.",
+    background: "Renderer mock data keeps the UI interactive in browser dev mode.",
+    instructions: ["Use the provider workbench flow."],
+    requirements: ["Store task history."],
+    constraints: ["Do not require Chrome extension setup."],
+    nonGoals: ["Do not add generic RPA."],
+    acceptanceCriteria: ["The task can be sent to Codex."],
+    suggestedFiles: ["apps/desktop/src/components/workbench/WorkbenchPage.tsx"],
+    verificationSteps: ["pnpm test"],
+    expectedSummaryFormat: "Summary, verification, remaining risk"
+  };
+}
+
+function mockHandoffCard(missionId: string, taskSpec: TaskSpec): HandoffCard {
+  return {
+    id: `card_${Date.now()}_${Math.random().toString(36).slice(2)}`,
+    missionId,
+    sourceId: "provider:openai-planner",
+    captureId: "mock_planner_turn",
+    targetId: "provider:codex",
+    recipe: "implementationBrief",
+    taskSpec,
+    generatedPrompt: buildMockPrompt(taskSpec.background, "implementationBrief"),
+    redactionFindings: [],
+    deliveryAttemptIds: [],
+    artifactIds: [],
+    createdAt: now(),
     updatedAt: now()
   };
 }

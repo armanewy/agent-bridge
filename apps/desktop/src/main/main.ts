@@ -32,6 +32,7 @@ import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromW
 import { ProviderRegistryService } from "../services/provider-registry-service.js";
 import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
+import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -106,10 +107,11 @@ app.whenReady().then(async () => {
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
   const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
-  providerRegistryService.registerProvider(new OpenAIPlannerProvider(store));
-  providerRegistryService.registerProvider(
-    new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient)
-  );
+  const openAiPlannerProvider = new OpenAIPlannerProvider(store);
+  const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient);
+  providerRegistryService.registerProvider(openAiPlannerProvider);
+  providerRegistryService.registerProvider(codexExecutorProvider);
+  const workbenchService = new WorkbenchService(store, openAiPlannerProvider, codexExecutorProvider, verificationService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
@@ -143,6 +145,30 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:listAgentTurns", (_event, sessionRefId: string) => providerRegistryService.listTurns(sessionRefId));
   ipcMain.handle("agentbridge:listAgentEvents", (_event, filter?: { providerId?: string; sessionRefId?: string; turnId?: string; type?: string }) =>
     providerRegistryService.listEvents(filter)
+  );
+  ipcMain.handle("agentbridge:createWorkbenchMission", (_event, input?: CreateWorkbenchMissionInput) =>
+    workbenchService.createWorkbenchMission(input)
+  );
+  ipcMain.handle("agentbridge:sendUserMessageToPlanner", (_event, missionId: string, text: string) =>
+    workbenchService.sendUserMessageToPlanner(missionId, text)
+  );
+  ipcMain.handle("agentbridge:createTaskSpecFromLatestPlannerTurn", (_event, missionId: string) =>
+    workbenchService.createTaskSpecFromLatestPlannerTurn(missionId)
+  );
+  ipcMain.handle("agentbridge:sendTaskSpecToExecutor", (_event, missionId: string, executorProviderId?: string, sessionRefId?: string) =>
+    workbenchService.sendTaskSpecToExecutor(missionId, executorProviderId, sessionRefId)
+  );
+  ipcMain.handle("agentbridge:runMissionWorkbenchVerification", (_event, missionId: string, input?: Omit<VerificationRunRequest, "missionId">) =>
+    workbenchService.runMissionVerification(missionId, input)
+  );
+  ipcMain.handle("agentbridge:sendVerificationToPlannerForReview", (_event, missionId: string) =>
+    workbenchService.sendVerificationToPlannerForReview(missionId)
+  );
+  ipcMain.handle("agentbridge:createFollowUpFromPlannerReview", (_event, missionId: string) =>
+    workbenchService.createFollowUpFromPlannerReview(missionId)
+  );
+  ipcMain.handle("agentbridge:sendFollowUpToExecutor", (_event, missionId: string, sessionRefId?: string) =>
+    workbenchService.sendFollowUpToExecutor(missionId, sessionRefId)
   );
   ipcMain.handle("agentbridge:createWorkflowLink", (_event, input: CreateWorkflowLinkInput) =>
     workflowLinkService.createWorkflowLink(input)

@@ -256,6 +256,7 @@ export type StructuredHandoff = z.infer<typeof StructuredHandoffSchema>;
 
 export const MissionStatusSchema = z.enum([
   "draft",
+  "planned",
   "ready",
   "approved",
   "delivered",
@@ -618,7 +619,7 @@ export const RunStepSchema = z.object({
   id: z.string().min(1),
   runId: z.string().min(1),
   missionId: z.string().min(1),
-  kind: z.enum(["capture", "transform", "approval", "delivery", "verification", "followUp"]),
+  kind: z.enum(["capture", "planning", "transform", "approval", "delivery", "verification", "review", "followUp"]),
   status: z.enum(["pending", "running", "passed", "failed", "skipped", "needs_review"]),
   title: z.string().min(1),
   details: z.record(z.unknown()),

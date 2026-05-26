@@ -28,6 +28,16 @@ const api: AgentBridgeApi = {
   listAgentSessions: (providerId?: string) => ipcRenderer.invoke("agentbridge:listAgentSessions", providerId),
   listAgentTurns: (sessionRefId: string) => ipcRenderer.invoke("agentbridge:listAgentTurns", sessionRefId),
   listAgentEvents: (filter) => ipcRenderer.invoke("agentbridge:listAgentEvents", filter),
+  createWorkbenchMission: (input) => ipcRenderer.invoke("agentbridge:createWorkbenchMission", input),
+  sendUserMessageToPlanner: (missionId, text) => ipcRenderer.invoke("agentbridge:sendUserMessageToPlanner", missionId, text),
+  createTaskSpecFromLatestPlannerTurn: (missionId) => ipcRenderer.invoke("agentbridge:createTaskSpecFromLatestPlannerTurn", missionId),
+  sendTaskSpecToExecutor: (missionId, executorProviderId, sessionRefId) =>
+    ipcRenderer.invoke("agentbridge:sendTaskSpecToExecutor", missionId, executorProviderId, sessionRefId),
+  runMissionWorkbenchVerification: (missionId, input) =>
+    ipcRenderer.invoke("agentbridge:runMissionWorkbenchVerification", missionId, input),
+  sendVerificationToPlannerForReview: (missionId) => ipcRenderer.invoke("agentbridge:sendVerificationToPlannerForReview", missionId),
+  createFollowUpFromPlannerReview: (missionId) => ipcRenderer.invoke("agentbridge:createFollowUpFromPlannerReview", missionId),
+  sendFollowUpToExecutor: (missionId, sessionRefId) => ipcRenderer.invoke("agentbridge:sendFollowUpToExecutor", missionId, sessionRefId),
   createWorkflowLink: (input) => ipcRenderer.invoke("agentbridge:createWorkflowLink", input),
   createTaskFromWorkflowLink: (input) => ipcRenderer.invoke("agentbridge:createTaskFromWorkflowLink", input),
   listCaptures: () => ipcRenderer.invoke("agentbridge:listCaptures"),

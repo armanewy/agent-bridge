@@ -23,12 +23,16 @@ import type {
   AgentProviderProfile,
   AgentSessionRef,
   AgentTurn,
+  ExecutorTaskResult,
   PlannerRequest,
+  PlannerResponse,
+  ReviewResult,
   VerificationResult,
   WorkflowLink
 } from "@agentbridge/core";
 import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
+import type { CreateWorkbenchMissionInput } from "./workbench-service.js";
 
 export interface WindowRevalidation {
   status: "available" | "changed" | "unavailable";
@@ -200,6 +204,14 @@ export interface AgentBridgeApi {
   listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
   listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
   listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
+  createWorkbenchMission(input?: CreateWorkbenchMissionInput): Promise<Mission>;
+  sendUserMessageToPlanner(missionId: string, text: string): Promise<PlannerResponse>;
+  createTaskSpecFromLatestPlannerTurn(missionId: string): Promise<HandoffCard>;
+  sendTaskSpecToExecutor(missionId: string, executorProviderId?: string, sessionRefId?: string): Promise<ExecutorTaskResult>;
+  runMissionWorkbenchVerification(missionId: string, input?: Omit<VerificationRunRequest, "missionId">): Promise<VerificationRunResponse>;
+  sendVerificationToPlannerForReview(missionId: string): Promise<ReviewResult>;
+  createFollowUpFromPlannerReview(missionId: string): Promise<HandoffCard>;
+  sendFollowUpToExecutor(missionId: string, sessionRefId?: string): Promise<ExecutorTaskResult>;
   listCaptures(): Promise<Capture[]>;
   listMissions(): Promise<Mission[]>;
   getMissionDetail(id: string): Promise<MissionDetail | undefined>;
