@@ -50,10 +50,10 @@ let tray: Tray | undefined;
 
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
-    width: 1280,
-    height: 860,
-    minWidth: 980,
-    minHeight: 680,
+    width: 760,
+    height: 940,
+    minWidth: 680,
+    minHeight: 760,
     center: true,
     title: "AgentBridge",
     webPreferences: {
