@@ -48,7 +48,9 @@ export interface CodexDeliveryRequest {
   target: CodexDeepLinkTarget;
   prompt: string;
   dryRun: boolean;
-  handoffId?: string;
+  missionId: string;
+  handoffCardId: string;
+  handoffId: string;
 }
 
 export interface CodexDeliveryResult {

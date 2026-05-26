@@ -241,13 +241,44 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       const params = new URLSearchParams();
       params.set("prompt", input.prompt);
       params.set("path", input.target.repoPath);
+      const attemptedAt = now();
+      const attempt = {
+        id: `delivery_${Date.now()}`,
+        handoffId: input.handoffId,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
+        targetId: input.target.id,
+        strategy: "codexDeepLink" as const,
+        success: true,
+        warnings: [],
+        targetMetadata: { dryRun: input.dryRun, repoPath: input.target.repoPath },
+        attemptedAt
+      };
+      const detail = mockMissionDetails.get(input.missionId);
+      if (detail) {
+        mockMissionDetails.set(input.missionId, {
+          ...detail,
+          mission: input.dryRun ? detail.mission : { ...detail.mission, status: "delivered", updatedAt: attemptedAt },
+          handoffCards: detail.handoffCards.map((card) =>
+            card.id === input.handoffCardId
+              ? { ...card, deliveryAttemptIds: [...card.deliveryAttemptIds, attempt.id], updatedAt: attemptedAt }
+              : card
+          ),
+          deliveryAttempts: [attempt, ...detail.deliveryAttempts]
+        });
+        mockMissions = mockMissions.map((mission) =>
+          mission.id === input.missionId ? mockMissionDetails.get(input.missionId)?.mission ?? mission : mission
+        );
+      }
       mockAuditEvents = [
         {
           id: `audit_${mockAuditEvents.length + 1}`,
           type: input.dryRun ? "deliveryAttempted" : "deliverySucceeded",
-          ...(input.handoffId ? { entityId: input.handoffId } : {}),
+          entityId: input.handoffId,
+          missionId: input.missionId,
+          handoffCardId: input.handoffCardId,
           details: { targetId: input.target.id, dryRun: input.dryRun },
-          createdAt: now()
+          createdAt: attemptedAt
         },
         ...mockAuditEvents
       ];

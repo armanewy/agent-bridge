@@ -42,7 +42,6 @@ export class CodexTargetService {
 
   async deliver(input: CodexDeliveryRequest): Promise<CodexDeliveryResult> {
     const attemptedAt = new Date().toISOString();
-    const handoffId = input.handoffId ?? "handoff_unknown";
 
     try {
       const deepLink = buildCodexDeepLink({
@@ -54,7 +53,9 @@ export class CodexTargetService {
       await this.store.appendAuditEvent({
         id: `audit_${randomUUID()}`,
         type: "deliveryAttempted",
-        entityId: handoffId,
+        entityId: input.handoffId,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
         details: { targetId: input.target.id, strategy: "codexDeepLink", dryRun: input.dryRun },
         createdAt: attemptedAt
       });
@@ -67,17 +68,22 @@ export class CodexTargetService {
       }
 
       const attempt = createAttempt({
-        handoffId,
+        handoffId: input.handoffId,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
         targetId: input.target.id,
         success: true,
         attemptedAt,
         targetMetadata: { repoPath: input.target.repoPath, deepLink, dryRun: input.dryRun }
       });
       await this.store.saveDeliveryAttempt(attempt);
+      await this.attachAttemptToMissionGraph(input, attempt.id);
       await this.store.appendAuditEvent({
         id: `audit_${randomUUID()}`,
         type: "deliverySucceeded",
-        entityId: handoffId,
+        entityId: input.handoffId,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
         details: { targetId: input.target.id, strategy: "codexDeepLink", dryRun: input.dryRun },
         createdAt: new Date().toISOString()
       });
@@ -91,30 +97,56 @@ export class CodexTargetService {
       };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      await this.store.saveDeliveryAttempt(
-        createAttempt({
-          handoffId,
-          targetId: input.target.id,
-          success: false,
-          attemptedAt,
-          error: message,
-          targetMetadata: { repoPath: input.target.repoPath, dryRun: input.dryRun }
-        })
-      );
+      const failedAttempt = createAttempt({
+        handoffId: input.handoffId,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
+        targetId: input.target.id,
+        success: false,
+        attemptedAt,
+        error: message,
+        targetMetadata: { repoPath: input.target.repoPath, dryRun: input.dryRun }
+      });
+      await this.store.saveDeliveryAttempt(failedAttempt);
+      await this.attachAttemptToHandoffCard(input.handoffCardId, failedAttempt.id);
       await this.store.appendAuditEvent({
         id: `audit_${randomUUID()}`,
         type: "deliveryFailed",
-        entityId: handoffId,
+        entityId: input.handoffId,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
         details: { targetId: input.target.id, strategy: "codexDeepLink", error: message },
         createdAt: new Date().toISOString()
       });
       throw error;
     }
   }
+
+  private async attachAttemptToMissionGraph(input: CodexDeliveryRequest, attemptId: string): Promise<void> {
+    await this.attachAttemptToHandoffCard(input.handoffCardId, attemptId);
+
+    if (!input.dryRun) {
+      await this.store.updateMissionStatus(input.missionId, "delivered");
+    }
+  }
+
+  private async attachAttemptToHandoffCard(handoffCardId: string, attemptId: string): Promise<void> {
+    const card = await this.store.getHandoffCard(handoffCardId);
+    if (card) {
+      const now = new Date().toISOString();
+      await this.store.saveHandoffCard({
+        ...card,
+        deliveryAttemptIds: unique([...card.deliveryAttemptIds, attemptId]),
+        updatedAt: now
+      });
+    }
+  }
 }
 
 function createAttempt(input: {
   handoffId: string;
+  missionId: string;
+  handoffCardId: string;
   targetId: string;
   success: boolean;
   attemptedAt: string;
@@ -124,6 +156,8 @@ function createAttempt(input: {
   return {
     id: `delivery_${randomUUID()}`,
     handoffId: input.handoffId,
+    missionId: input.missionId,
+    handoffCardId: input.handoffCardId,
     targetId: input.targetId,
     strategy: "codexDeepLink",
     success: input.success,
@@ -132,4 +166,8 @@ function createAttempt(input: {
     targetMetadata: input.targetMetadata,
     attemptedAt: input.attemptedAt
   };
+}
+
+function unique(values: string[]): string[] {
+  return [...new Set(values)];
 }

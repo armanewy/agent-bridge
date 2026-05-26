@@ -169,6 +169,8 @@ export function App(): JSX.Element {
         target: preview.target,
         prompt: preview.handoffCard.generatedPrompt,
         dryRun: true,
+        missionId: preview.mission.id,
+        handoffCardId: preview.handoffCard.id,
         handoffId: preview.handoff.id
       })
     );
@@ -185,6 +187,8 @@ export function App(): JSX.Element {
         target: preview.target,
         prompt: preview.handoffCard.generatedPrompt,
         dryRun: false,
+        missionId: preview.mission.id,
+        handoffCardId: preview.handoffCard.id,
         handoffId: preview.handoff.id
       })
     );

@@ -22,19 +22,15 @@ export class MissionService {
       this.store.listVerificationResultsForMission(id)
     ]);
     const handoffCardIds = new Set(handoffCards.map((card) => card.id));
-    const handoffIds = new Set(
-      (await this.store.listRecentHandoffs(1000))
-        .filter((handoff) => handoff.missionId === id || (handoff.handoffCardId && handoffCardIds.has(handoff.handoffCardId)))
-        .map((handoff) => handoff.id)
+    const captures = (await Promise.all(mission.captureIds.map((captureId) => this.store.getCapture(captureId)))).filter(
+      (capture): capture is Capture => Boolean(capture)
     );
+    const deliveryAttemptIds = new Set(handoffCards.flatMap((card) => card.deliveryAttemptIds));
     const deliveryAttempts = (await this.store.listDeliveryAttempts()).filter(
       (attempt) =>
         attempt.missionId === id ||
         (attempt.handoffCardId && handoffCardIds.has(attempt.handoffCardId)) ||
-        handoffIds.has(attempt.handoffId)
-    );
-    const captures = (await Promise.all(mission.captureIds.map((captureId) => this.store.getCapture(captureId)))).filter(
-      (capture): capture is Capture => Boolean(capture)
+        deliveryAttemptIds.has(attempt.id)
     );
 
     return {
