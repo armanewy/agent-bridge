@@ -116,7 +116,7 @@ export function App(): JSX.Element {
     setDeliveryResult(
       await api.deliverToCodex({
         target: preview.target,
-        prompt: preview.handoff.prompt,
+        prompt: preview.handoffCard.generatedPrompt,
         dryRun: true,
         handoffId: preview.handoff.id
       })
@@ -132,7 +132,7 @@ export function App(): JSX.Element {
     setDeliveryResult(
       await api.deliverToCodex({
         target: preview.target,
-        prompt: preview.handoff.prompt,
+        prompt: preview.handoffCard.generatedPrompt,
         dryRun: false,
         handoffId: preview.handoff.id
       })

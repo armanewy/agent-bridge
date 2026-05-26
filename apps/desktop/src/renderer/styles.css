@@ -309,6 +309,7 @@ button:disabled {
 }
 
 .preview-grid,
+.task-spec-grid,
 .prompt-columns,
 .link-canvas {
   display: grid;
@@ -320,12 +321,29 @@ button:disabled {
 }
 
 .preview-grid > div,
+.task-spec-grid > div,
 .prompt-columns > div,
 .link-node {
   border: 1px solid #dce3e9;
   border-radius: 8px;
   padding: 12px;
   min-width: 0;
+}
+
+.task-spec-grid {
+  margin-top: 14px;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+}
+
+.spec-section ul {
+  margin: 8px 0 0;
+  padding-left: 18px;
+  color: #25313a;
+  line-height: 1.4;
+}
+
+.spec-section li + li {
+  margin-top: 5px;
 }
 
 .preview-grid strong,

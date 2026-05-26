@@ -68,6 +68,11 @@ export function HandoffPreview({
           <strong>{preview.deliveryStrategy}</strong>
           <p>{preview.handoff.prompt.length} characters</p>
         </div>
+        <div>
+          <span className="eyebrow">Mission</span>
+          <strong>{preview.mission.title}</strong>
+          <p>{preview.mission.status}</p>
+        </div>
       </div>
 
       {preview.handoff.redactionFindings.length > 0 ? (
@@ -82,14 +87,22 @@ export function HandoffPreview({
         </div>
       )}
 
+      <div className="task-spec-grid">
+        <SpecSection title="Goal" items={[preview.taskSpec.goal]} />
+        <SpecSection title="Requirements" items={preview.taskSpec.requirements} />
+        <SpecSection title="Constraints" items={preview.taskSpec.constraints} />
+        <SpecSection title="Acceptance Criteria" items={preview.taskSpec.acceptanceCriteria} />
+        <SpecSection title="Verification Steps" items={preview.taskSpec.verificationSteps} />
+      </div>
+
       <div className="prompt-columns">
         <div>
           <span className="eyebrow">Original Capture</span>
           <pre>{preview.originalCaptureExcerpt}</pre>
         </div>
         <div>
-          <span className="eyebrow">Transformed Prompt</span>
-          <pre>{preview.handoff.prompt}</pre>
+          <span className="eyebrow">Generated Prompt</span>
+          <pre>{preview.handoffCard.generatedPrompt}</pre>
         </div>
       </div>
 
@@ -102,5 +115,18 @@ export function HandoffPreview({
         </div>
       ) : null}
     </section>
+  );
+}
+
+function SpecSection({ title, items }: { title: string; items: string[] }): JSX.Element {
+  return (
+    <div className="spec-section">
+      <span className="eyebrow">{title}</span>
+      <ul>
+        {items.map((item) => (
+          <li key={item}>{item}</li>
+        ))}
+      </ul>
+    </div>
   );
 }

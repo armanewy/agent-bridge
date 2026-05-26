@@ -102,10 +102,53 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       const capture = mockCaptures.find((item) => item.id === input.captureId) ?? mockCapture;
       const target = mockTargets.find((item) => item.id === input.targetId);
       const prompt = buildMockPrompt(capture.text, input.recipe);
+      const mission = {
+        id: "mission_mock",
+        title: "Build AgentBridge MVP flow",
+        goal: "Compile a browser capture into a Codex-ready task.",
+        status: "draft" as const,
+        sourceIds: [capture.sourceId],
+        captureIds: [capture.id],
+        handoffCardIds: ["card_mock"],
+        artifactIds: ["artifact_prompt_mock"],
+        runIds: [],
+        createdAt: now(),
+        updatedAt: now()
+      };
+      const taskSpec = {
+        title: "Build AgentBridge MVP flow",
+        goal: "Compile a browser capture into a Codex-ready task.",
+        background: capture.text,
+        instructions: ["Inspect the repository before editing.", "Preserve existing patterns."],
+        requirements: ["Keep capture user-triggered.", "Show approval preview before delivery."],
+        constraints: ["Do not broaden scope.", "Do not add providers."],
+        nonGoals: ["No autonomous routing."],
+        acceptanceCriteria: ["Codex receives the approved generated prompt."],
+        suggestedFiles: [],
+        verificationSteps: ["Run relevant tests."],
+        expectedSummaryFormat: "Summary, verification, risks."
+      };
+      const handoffCard = {
+        id: "card_mock",
+        missionId: mission.id,
+        sourceId: capture.sourceId,
+        captureId: capture.id,
+        targetId: input.targetId,
+        recipe: input.recipe,
+        taskSpec,
+        generatedPrompt: prompt,
+        redactionFindings: [],
+        deliveryAttemptIds: [],
+        artifactIds: ["artifact_prompt_mock"],
+        createdAt: now(),
+        updatedAt: now()
+      };
       const source = mockSources.find((item) => item.id === capture.sourceId);
       return {
         handoff: {
           id: "handoff_mock",
+          missionId: mission.id,
+          handoffCardId: handoffCard.id,
           captureId: capture.id,
           sourceId: capture.sourceId,
           targetId: input.targetId,
@@ -123,6 +166,21 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
           redactionFindings: [],
           createdAt: now()
         },
+        mission,
+        handoffCard,
+        taskSpec,
+        artifacts: [
+          {
+            id: "artifact_prompt_mock",
+            missionId: mission.id,
+            handoffCardId: handoffCard.id,
+            kind: "generatedPrompt",
+            title: "Generated prompt",
+            content: prompt,
+            metadata: {},
+            createdAt: now()
+          }
+        ],
         ...(source ? { source } : {}),
         ...(target ? { target } : {}),
         originalCaptureExcerpt: capture.text.slice(0, 320),

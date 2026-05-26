@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { Capture } from "../src/types.js";
-import { buildPrompt, transformCapture } from "../src/transform.js";
+import { buildPrompt, createTaskSpecFromCapture, renderTaskSpecForTarget, transformCapture } from "../src/transform.js";
 
 const capture: Capture = {
   id: "cap_1",
@@ -26,5 +26,36 @@ describe("deterministic transforms", () => {
     });
 
     expect(handoff.redactionFindings[0]?.kind).toBe("bearerToken");
+  });
+
+  it("turns raw captures into TaskSpecs", () => {
+    const taskSpec = createTaskSpecFromCapture({ capture, recipe: "implementationBrief" });
+
+    expect(taskSpec.goal).toContain("Implement");
+    expect(taskSpec.requirements.length).toBeGreaterThan(0);
+  });
+
+  it("renders TaskSpecs into Codex-ready prompts", () => {
+    const taskSpec = createTaskSpecFromCapture({ capture, recipe: "implementationBrief" });
+    const prompt = renderTaskSpecForTarget(
+      taskSpec,
+      {
+        id: "target_1",
+        kind: "codexDeepLink",
+        repoPath: process.cwd(),
+        openMode: "newThread",
+        boundAt: "2026-01-01T00:00:00.000Z"
+      },
+      {
+        repoPath: process.cwd(),
+        currentBranch: "main",
+        gitStatusSummary: "clean",
+        testCommand: "pnpm test"
+      }
+    );
+
+    expect(prompt).toContain("AgentBridge TaskSpec for Codex");
+    expect(prompt).toContain("Repo context:");
+    expect(prompt).toContain("Test command: pnpm test");
   });
 });

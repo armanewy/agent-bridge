@@ -2,9 +2,13 @@ import type {
   BrowserTabSource,
   Capture,
   CodexDeepLinkTarget,
+  Artifact,
+  HandoffCard,
   Handoff,
   Link,
+  Mission,
   SourceEndpoint,
+  TaskSpec,
   TargetEndpoint,
   WindowsDesktopWindowTarget,
   AuditEvent
@@ -20,10 +24,15 @@ export interface PreviewRequest {
   captureId: string;
   targetId: string;
   recipe: "rawRelay" | "implementationBrief" | "codeReviewRequest" | "debuggingRequest";
+  missionId?: string;
 }
 
 export interface DeliveryPreview {
   handoff: Handoff;
+  mission: Mission;
+  handoffCard: HandoffCard;
+  taskSpec: TaskSpec;
+  artifacts: Artifact[];
   source?: SourceEndpoint | undefined;
   target?: TargetEndpoint | undefined;
   originalCaptureExcerpt: string;
