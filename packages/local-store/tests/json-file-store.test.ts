@@ -6,6 +6,7 @@ import { JsonFileStore } from "../src/index.js";
 import type {
   Artifact,
   AuditEvent,
+  CodexThreadRef,
   DeliveryAttempt,
   Handoff,
   HandoffCard,
@@ -95,6 +96,26 @@ describe("JsonFileStore", () => {
     expect(await store.listLinkableComponents()).toEqual([component]);
     expect(await store.getWorkflowLink(workflowLink.id)).toEqual(workflowLink);
     expect(await store.listWorkflowLinks()).toEqual([workflowLink]);
+  });
+
+  it("roundtrips Codex thread refs", async () => {
+    const store = new JsonFileStore(tempDir);
+    const ref: CodexThreadRef = {
+      id: "codex_thread_1",
+      threadId: "thread_123",
+      name: "Existing task",
+      repoPath: tempDir,
+      status: "idle",
+      source: "manual",
+      lastSeenAt: new Date().toISOString(),
+      metadata: {}
+    };
+
+    await store.saveCodexThreadRef(ref);
+
+    expect(await store.getCodexThreadRef(ref.threadId)).toEqual(ref);
+    expect(await store.listCodexThreadRefs(tempDir)).toEqual([ref]);
+    expect(await store.listCodexThreadRefs("C:/other")).toEqual([]);
   });
 
   it("saves handoffs and audit events", async () => {

@@ -61,12 +61,18 @@ describe("WorkflowLinkService", () => {
       sourceComponentId: sourceComponent.id,
       workspaceComponentId: workspaceComponent.id,
       targetComponentId: targetComponent.id,
-      recipe: "implementationBrief"
+      recipe: "implementationBrief",
+      codexThreadId: "thread_123",
+      codexThreadName: "Existing task",
+      codexOpenMode: "existingThread",
+      codexIntegrationMode: "deepLink"
     });
     const preview = await service.createTaskFromWorkflowLink({ workflowLinkId: link.id });
 
     expect(preview.handoffCard.sourceId).toBe(source.id);
     expect(preview.handoffCard.targetId).toBe(target.id);
+    expect(preview.handoffCard.codexThreadId).toBe("thread_123");
+    expect(preview.handoffCard.codexDeliveryMode).toBe("existingThread");
     expect(preview.taskSpec.title).toBeTruthy();
   });
 

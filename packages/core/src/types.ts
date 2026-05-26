@@ -104,13 +104,39 @@ export const WindowsDesktopWindowTargetSchema = z.object({
 });
 export type WindowsDesktopWindowTarget = z.infer<typeof WindowsDesktopWindowTargetSchema>;
 
+export const CodexThreadStatusSchema = z.enum(["unknown", "notLoaded", "idle", "active", "systemError", "archived"]);
+export type CodexThreadStatus = z.infer<typeof CodexThreadStatusSchema>;
+
+export const CodexThreadSourceSchema = z.enum(["manual", "deepLink", "appServer", "sdk"]);
+export type CodexThreadSource = z.infer<typeof CodexThreadSourceSchema>;
+
+export const CodexIntegrationModeSchema = z.enum(["deepLink", "appServer", "sdk"]);
+export type CodexIntegrationMode = z.infer<typeof CodexIntegrationModeSchema>;
+
+export const CodexOpenModeSchema = z.enum(["newThread", "existingThread"]);
+export type CodexOpenMode = z.infer<typeof CodexOpenModeSchema>;
+
+export const CodexThreadRefSchema = z.object({
+  id: z.string().min(1),
+  threadId: z.string().min(1),
+  name: z.string().optional(),
+  repoPath: z.string().optional(),
+  status: CodexThreadStatusSchema.optional(),
+  source: CodexThreadSourceSchema,
+  lastSeenAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type CodexThreadRef = z.infer<typeof CodexThreadRefSchema>;
+
 export const CodexDeepLinkTargetSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("codexDeepLink"),
   repoPath: z.string().min(1),
   originUrl: z.string().url().optional(),
   existingThreadId: z.string().optional(),
-  openMode: z.literal("newThread"),
+  existingThreadName: z.string().optional(),
+  openMode: CodexOpenModeSchema,
+  integrationMode: CodexIntegrationModeSchema.optional(),
   boundAt: TimestampSchema
 });
 export type CodexDeepLinkTarget = z.infer<typeof CodexDeepLinkTargetSchema>;
@@ -221,6 +247,10 @@ export const WorkflowLinkSchema = z.object({
   targetComponentId: z.string().min(1),
   recipe: z.enum(["rawRelay", "implementationBrief", "codeReviewRequest", "debuggingRequest"]),
   verificationCommandDefaults: z.array(VerificationCommandSchema).default([]),
+  codexThreadId: z.string().optional(),
+  codexThreadName: z.string().optional(),
+  codexOpenMode: CodexOpenModeSchema.optional(),
+  codexIntegrationMode: CodexIntegrationModeSchema.optional(),
   enabled: z.boolean(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
@@ -297,6 +327,10 @@ export const HandoffCardSchema = z.object({
   approvalId: z.string().optional(),
   deliveryAttemptIds: z.array(z.string()),
   artifactIds: z.array(z.string()),
+  codexThreadId: z.string().optional(),
+  codexThreadName: z.string().optional(),
+  codexDeliveryMode: CodexOpenModeSchema.optional(),
+  codexIntegrationMode: CodexIntegrationModeSchema.optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
 });

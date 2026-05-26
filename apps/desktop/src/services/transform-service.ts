@@ -67,6 +67,10 @@ export class TransformService {
       redactionFindings,
       deliveryAttemptIds: [],
       artifactIds: artifacts.map((artifact) => artifact.id),
+      ...(input.codexThreadId ? { codexThreadId: input.codexThreadId } : {}),
+      ...(input.codexThreadName ? { codexThreadName: input.codexThreadName } : {}),
+      ...(input.codexOpenMode ? { codexDeliveryMode: input.codexOpenMode } : {}),
+      ...(input.codexIntegrationMode ? { codexIntegrationMode: input.codexIntegrationMode } : {}),
       createdAt: now,
       updatedAt: now
     };

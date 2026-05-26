@@ -1,13 +1,21 @@
 import { existsSync, statSync } from "node:fs";
 import type { CodexDeepLinkTarget } from "../types.js";
 
-export interface CodexDeepLinkInput {
+export interface CodexNewThreadDeepLinkInput {
   prompt: string;
   repoPath: string;
   originUrl?: string;
 }
 
-export function validateCodexDeepLinkInput(input: CodexDeepLinkInput): string[] {
+export interface CodexExistingThreadDeepLinkInput {
+  threadId: string;
+}
+
+export type CodexDeepLinkInput =
+  | (CodexNewThreadDeepLinkInput & { openMode?: "newThread" })
+  | (CodexExistingThreadDeepLinkInput & { openMode: "existingThread" });
+
+export function validateCodexDeepLinkInput(input: CodexNewThreadDeepLinkInput): string[] {
   const errors: string[] = [];
 
   if (!input.prompt.trim()) {
@@ -25,7 +33,7 @@ export function validateCodexDeepLinkInput(input: CodexDeepLinkInput): string[] 
   return errors;
 }
 
-export function buildCodexDeepLink(input: CodexDeepLinkInput): string {
+export function buildCodexNewThreadDeepLink(input: CodexNewThreadDeepLinkInput): string {
   const errors = validateCodexDeepLinkInput(input);
   if (errors.length > 0) {
     throw new Error(errors.join(" "));
@@ -41,20 +49,44 @@ export function buildCodexDeepLink(input: CodexDeepLinkInput): string {
   return `codex://threads/new?${params.toString()}`;
 }
 
+export function buildCodexExistingThreadDeepLink(input: CodexExistingThreadDeepLinkInput): string {
+  const threadId = input.threadId.trim();
+  if (!threadId) {
+    throw new Error("Codex thread ID is required.");
+  }
+
+  return `codex://threads/${encodeURIComponent(threadId)}`;
+}
+
+export function buildCodexDeepLink(input: CodexDeepLinkInput): string {
+  if (input.openMode === "existingThread") {
+    return buildCodexExistingThreadDeepLink(input);
+  }
+
+  return buildCodexNewThreadDeepLink(input);
+}
+
 export function createCodexDeepLinkTarget(input: {
   id: string;
   repoPath: string;
   originUrl?: string;
   existingThreadId?: string;
+  existingThreadName?: string;
+  openMode?: "newThread" | "existingThread";
+  integrationMode?: "deepLink" | "appServer" | "sdk";
   boundAt?: string;
 }): CodexDeepLinkTarget {
+  const openMode = input.openMode ?? (input.existingThreadId ? "existingThread" : "newThread");
+
   return {
     id: input.id,
     kind: "codexDeepLink",
     repoPath: input.repoPath,
     ...(input.originUrl ? { originUrl: input.originUrl } : {}),
     ...(input.existingThreadId ? { existingThreadId: input.existingThreadId } : {}),
-    openMode: "newThread",
+    ...(input.existingThreadName ? { existingThreadName: input.existingThreadName } : {}),
+    openMode,
+    integrationMode: input.integrationMode ?? "deepLink",
     boundAt: input.boundAt ?? new Date().toISOString()
   };
 }

@@ -1,20 +1,29 @@
 import { randomUUID } from "node:crypto";
 import {
-  buildCodexDeepLink,
+  buildCodexExistingThreadDeepLink,
+  buildCodexNewThreadDeepLink,
   createCodexDeepLinkTarget,
   validateCodexDeepLinkInput,
+  type CodexIntegrationMode,
   type CodexDeepLinkTarget,
+  type CodexOpenMode,
   type DeliveryAttempt
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { CodexDeliveryRequest, CodexDeliveryResult } from "./bridge-contract.js";
+import type { CodexAppServerClient } from "./codex-app-server-client.js";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 import { repoCommandSettingsKey } from "./repo-context-service.js";
 
 export type OpenExternal = (url: string) => Promise<void>;
+type CodexDeliveryMode = NonNullable<CodexDeliveryResult["deliveryMode"]>;
 
 export class CodexTargetService {
-  constructor(private readonly store: LocalStore, private readonly openExternal?: OpenExternal) {}
+  constructor(
+    private readonly store: LocalStore,
+    private readonly openExternal?: OpenExternal,
+    private readonly appServerClient?: CodexAppServerClient
+  ) {}
 
   async configureTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget> {
     const validationErrors = validateCodexDeepLinkInput({ repoPath, prompt: "validation" });
@@ -42,13 +51,10 @@ export class CodexTargetService {
 
   async deliver(input: CodexDeliveryRequest): Promise<CodexDeliveryResult> {
     const attemptedAt = new Date().toISOString();
+    const route = resolveCodexRoute(input);
 
     try {
-      const deepLink = buildCodexDeepLink({
-        prompt: input.prompt,
-        repoPath: input.target.repoPath,
-        ...(input.target.originUrl ? { originUrl: input.target.originUrl } : {})
-      });
+      const delivery = await this.prepareDelivery(input, route);
 
       await this.store.appendAuditEvent({
         id: `audit_${randomUUID()}`,
@@ -56,16 +62,9 @@ export class CodexTargetService {
         entityId: input.handoffId,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        details: { targetId: input.target.id, strategy: "codexDeepLink", dryRun: input.dryRun },
+        details: { targetId: input.target.id, strategy: "codexDeepLink", deliveryMode: route.deliveryMode, dryRun: input.dryRun },
         createdAt: attemptedAt
       });
-
-      if (!input.dryRun) {
-        if (!this.openExternal) {
-          throw new Error("No opener configured for Codex deep links.");
-        }
-        await this.openExternal(deepLink);
-      }
 
       const attempt = createAttempt({
         handoffId: input.handoffId,
@@ -74,25 +73,37 @@ export class CodexTargetService {
         targetId: input.target.id,
         success: true,
         attemptedAt,
-        targetMetadata: { repoPath: input.target.repoPath, deepLink, dryRun: input.dryRun }
+        warnings: delivery.warnings,
+        targetMetadata: {
+          repoPath: input.target.repoPath,
+          deepLink: delivery.deepLink,
+          dryRun: input.dryRun,
+          deliveryMode: route.deliveryMode,
+          codexThreadId: route.threadId,
+          codexTurnId: delivery.codexTurnId
+        }
       });
       await this.store.saveDeliveryAttempt(attempt);
-      await this.attachAttemptToMissionGraph(input, attempt.id);
+      await this.attachAttemptToMissionGraph(input, attempt.id, delivery.markDelivered);
       await this.store.appendAuditEvent({
         id: `audit_${randomUUID()}`,
         type: "deliverySucceeded",
         entityId: input.handoffId,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        details: { targetId: input.target.id, strategy: "codexDeepLink", dryRun: input.dryRun },
+        details: { targetId: input.target.id, strategy: "codexDeepLink", deliveryMode: route.deliveryMode, dryRun: input.dryRun },
         createdAt: new Date().toISOString()
       });
 
       return {
         success: true,
-        deepLink,
+        deepLink: delivery.deepLink,
         promptLength: input.prompt.length,
         repoPath: input.target.repoPath,
+        deliveryMode: route.deliveryMode,
+        ...(route.threadId ? { codexThreadId: route.threadId } : {}),
+        ...(delivery.codexTurnId ? { codexTurnId: delivery.codexTurnId } : {}),
+        ...(delivery.warnings.length > 0 ? { warnings: delivery.warnings } : {}),
         ...(input.dryRun ? {} : { openedAt: new Date().toISOString() })
       };
     } catch (error) {
@@ -105,7 +116,12 @@ export class CodexTargetService {
         success: false,
         attemptedAt,
         error: message,
-        targetMetadata: { repoPath: input.target.repoPath, dryRun: input.dryRun }
+        targetMetadata: {
+          repoPath: input.target.repoPath,
+          dryRun: input.dryRun,
+          deliveryMode: route.deliveryMode,
+          codexThreadId: route.threadId
+        }
       });
       await this.store.saveDeliveryAttempt(failedAttempt);
       await this.attachAttemptToHandoffCard(input.handoffCardId, failedAttempt.id);
@@ -115,17 +131,73 @@ export class CodexTargetService {
         entityId: input.handoffId,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        details: { targetId: input.target.id, strategy: "codexDeepLink", error: message },
+        details: { targetId: input.target.id, strategy: "codexDeepLink", deliveryMode: route.deliveryMode, error: message },
         createdAt: new Date().toISOString()
       });
       throw error;
     }
   }
 
-  private async attachAttemptToMissionGraph(input: CodexDeliveryRequest, attemptId: string): Promise<void> {
-    await this.attachAttemptToHandoffCard(input.handoffCardId, attemptId);
+  private async prepareDelivery(
+    input: CodexDeliveryRequest,
+    route: ResolvedCodexRoute
+  ): Promise<{ deepLink: string; codexTurnId?: string; warnings: string[]; markDelivered: boolean }> {
+    if (route.openMode === "newThread") {
+      const deepLink = buildCodexNewThreadDeepLink({
+        prompt: input.prompt,
+        repoPath: input.target.repoPath,
+        ...(input.target.originUrl ? { originUrl: input.target.originUrl } : {})
+      });
+      if (!input.dryRun) {
+        await this.openDeepLink(deepLink);
+      }
+      return { deepLink, warnings: [], markDelivered: !input.dryRun };
+    }
+
+    if (!route.threadId) {
+      throw new Error("Existing Codex thread delivery requires a thread ID.");
+    }
+
+    const deepLink = buildCodexExistingThreadDeepLink({ threadId: route.threadId });
+
+    if (route.deliveryMode === "sdkRun") {
+      throw new Error("Codex SDK existing-thread delivery is not implemented yet.");
+    }
+
+    if (route.deliveryMode === "appServerTurnStart") {
+      if (input.dryRun) {
+        return { deepLink, warnings: [], markDelivered: false };
+      }
+      if (!this.appServerClient) {
+        throw new Error("Codex App Server is not configured, so AgentBridge cannot send into an existing Codex thread.");
+      }
+      await this.appServerClient.resumeThread(route.threadId, { cwd: input.target.repoPath });
+      const turn = await this.appServerClient.startTurn(route.threadId, input.prompt, { cwd: input.target.repoPath });
+      return { deepLink, ...(turn.turnId ? { codexTurnId: turn.turnId } : {}), warnings: [], markDelivered: true };
+    }
 
     if (!input.dryRun) {
+      await this.openDeepLink(deepLink);
+    }
+
+    return {
+      deepLink,
+      warnings: ["Opened existing Codex thread only. Prompt was staged in AgentBridge but not sent into the existing thread."],
+      markDelivered: false
+    };
+  }
+
+  private async openDeepLink(deepLink: string): Promise<void> {
+    if (!this.openExternal) {
+      throw new Error("No opener configured for Codex deep links.");
+    }
+    await this.openExternal(deepLink);
+  }
+
+  private async attachAttemptToMissionGraph(input: CodexDeliveryRequest, attemptId: string, markDelivered: boolean): Promise<void> {
+    await this.attachAttemptToHandoffCard(input.handoffCardId, attemptId);
+
+    if (markDelivered) {
       await this.store.updateMissionStatus(input.missionId, "delivered");
     }
   }
@@ -151,6 +223,7 @@ function createAttempt(input: {
   success: boolean;
   attemptedAt: string;
   targetMetadata: Record<string, unknown>;
+  warnings?: string[];
   error?: string;
 }): DeliveryAttempt {
   return {
@@ -161,7 +234,7 @@ function createAttempt(input: {
     targetId: input.targetId,
     strategy: "codexDeepLink",
     success: input.success,
-    warnings: [],
+    warnings: input.warnings ?? [],
     ...(input.error ? { error: input.error } : {}),
     targetMetadata: input.targetMetadata,
     attemptedAt: input.attemptedAt
@@ -170,4 +243,32 @@ function createAttempt(input: {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+interface ResolvedCodexRoute {
+  openMode: CodexOpenMode;
+  integrationMode: CodexIntegrationMode;
+  deliveryMode: CodexDeliveryMode;
+  threadId?: string;
+}
+
+function resolveCodexRoute(input: CodexDeliveryRequest): ResolvedCodexRoute {
+  const threadId = input.codexThreadId ?? input.target.existingThreadId;
+  const openMode = input.codexOpenMode ?? input.target.openMode ?? (threadId ? "existingThread" : "newThread");
+  const integrationMode = input.codexIntegrationMode ?? input.target.integrationMode ?? "deepLink";
+
+  if (openMode === "existingThread") {
+    return {
+      openMode,
+      integrationMode,
+      deliveryMode: integrationMode === "appServer" ? "appServerTurnStart" : integrationMode === "sdk" ? "sdkRun" : "existingDeepLinkOpen",
+      ...(threadId ? { threadId } : {})
+    };
+  }
+
+  return {
+    openMode: "newThread",
+    integrationMode,
+    deliveryMode: "newDeepLink"
+  };
 }

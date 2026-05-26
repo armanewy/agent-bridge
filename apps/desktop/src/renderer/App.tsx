@@ -9,6 +9,7 @@ import {
 import type {
   Capture,
   CodexDeepLinkTarget,
+  CodexThreadRef,
   Link,
   LinkableComponent,
   AuditEvent,
@@ -43,6 +44,7 @@ export function App(): JSX.Element {
   const [links, setLinks] = useState<Link[]>([]);
   const [components, setComponents] = useState<LinkableComponent[]>([]);
   const [workflowLinks, setWorkflowLinks] = useState<WorkflowLink[]>([]);
+  const [codexThreads, setCodexThreads] = useState<CodexThreadRef[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
@@ -64,6 +66,8 @@ export function App(): JSX.Element {
   const [selectedSourceComponentId, setSelectedSourceComponentId] = useState<string | undefined>();
   const [selectedWorkspaceComponentId, setSelectedWorkspaceComponentId] = useState<string | undefined>();
   const [selectedTargetComponentId, setSelectedTargetComponentId] = useState<string | undefined>();
+  const [selectedCodexThreadId, setSelectedCodexThreadId] = useState<string | undefined>();
+  const [manualCodexThreadId, setManualCodexThreadId] = useState("");
   const [linkError, setLinkError] = useState<string | undefined>();
   const [discoveryWarnings, setDiscoveryWarnings] = useState<string[]>([]);
   const [preview, setPreview] = useState<DeliveryPreview | undefined>();
@@ -134,11 +138,14 @@ export function App(): JSX.Element {
       api.listMissions(),
       api.getSetupStatus()
     ]);
+    const nextCodexTarget = nextTargets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
+    const nextCodexThreads = await api.listCodexThreads(nextCodexTarget?.repoPath);
     setSources(nextSources);
     setTargets(nextTargets);
     setLinks(nextLinks);
     setComponents(nextComponents);
     setWorkflowLinks(nextWorkflowLinks);
+    setCodexThreads(nextCodexThreads);
     setCaptures(nextCaptures);
     setAuditEvents(nextAuditEvents);
     setMissions(nextMissions);
@@ -147,6 +154,9 @@ export function App(): JSX.Element {
     setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
     setSelectedSourceId((current) => current ?? nextSources[0]?.id);
     setSelectedTargetId((current) => current ?? nextTargets.find((target) => target.kind === "codexDeepLink")?.id ?? nextTargets[0]?.id);
+    setSelectedCodexThreadId((current) =>
+      current && nextCodexThreads.some((thread) => thread.threadId === current) ? current : undefined
+    );
     setSelectedSourceComponentId((current) => {
       const currentComponent = nextComponents.find((component) => component.id === current);
       if (currentComponent?.roleCapabilities.canBeSource && !isDemoSourceComponent(currentComponent)) {
@@ -289,13 +299,25 @@ export function App(): JSX.Element {
     }
 
     try {
+      const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
       await api.createWorkflowLink({
         name: `${source.label} → ${workspace ? `${workspace.label} → ` : ""}${target.label}`,
         sourceComponentId: source.id,
         ...(workspace ? { workspaceComponentId: workspace.id } : {}),
         targetComponentId: target.id,
         recipe,
-        verificationCommandDefaults: verificationCommandsFromComponent(workspace)
+        verificationCommandDefaults: verificationCommandsFromComponent(workspace),
+        ...(selectedCodexThread
+          ? {
+              codexThreadId: selectedCodexThread.threadId,
+              ...(selectedCodexThread.name ? { codexThreadName: selectedCodexThread.name } : {}),
+              codexOpenMode: "existingThread" as const,
+              codexIntegrationMode: selectedCodexThread.source === "appServer" ? ("appServer" as const) : ("deepLink" as const)
+            }
+          : {
+              codexOpenMode: "newThread" as const,
+              codexIntegrationMode: "deepLink" as const
+            })
       });
       const [nextComponents, nextWorkflowLinks] = await Promise.all([
         api.listLinkableComponents(),
@@ -328,6 +350,27 @@ export function App(): JSX.Element {
     }
   }
 
+  async function saveManualCodexThread(): Promise<void> {
+    setLinkError(undefined);
+    const threadId = manualCodexThreadId.trim();
+    if (!threadId) {
+      setLinkError("Paste a Codex thread ID first.");
+      return;
+    }
+
+    try {
+      const ref = await api.saveManualCodexThreadRef({
+        threadId,
+        ...(codexTarget?.repoPath ? { repoPath: codexTarget.repoPath } : {})
+      });
+      setSelectedCodexThreadId(ref.threadId);
+      setManualCodexThreadId("");
+      setCodexThreads(await api.listCodexThreads(codexTarget?.repoPath));
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function createPreview(captureId = selectedCaptureId, targetId = selectedTargetId): Promise<void> {
     const capture = captures.find((item) => item.id === captureId);
     const target = targets.find((item) => item.id === targetId);
@@ -336,7 +379,20 @@ export function App(): JSX.Element {
     }
 
     setDeliveryResult(undefined);
-    const nextPreview = await api.previewHandoff({ captureId: capture.id, targetId: target.id, recipe });
+    const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
+    const nextPreview = await api.previewHandoff({
+      captureId: capture.id,
+      targetId: target.id,
+      recipe,
+      ...(selectedCodexThread
+        ? {
+            codexThreadId: selectedCodexThread.threadId,
+            ...(selectedCodexThread.name ? { codexThreadName: selectedCodexThread.name } : {}),
+            codexOpenMode: "existingThread" as const,
+            codexIntegrationMode: selectedCodexThread.source === "appServer" ? ("appServer" as const) : ("deepLink" as const)
+          }
+        : {})
+    });
     const [nextMissions, nextMissionDetail] = await Promise.all([
       api.listMissions(),
       api.getMissionDetail(nextPreview.mission.id)
@@ -360,7 +416,11 @@ export function App(): JSX.Element {
         dryRun: true,
         missionId: preview.mission.id,
         handoffCardId: preview.handoffCard.id,
-        handoffId: preview.handoff.id
+        handoffId: preview.handoff.id,
+        ...(preview.handoffCard.codexThreadId ? { codexThreadId: preview.handoffCard.codexThreadId } : {}),
+        ...(preview.handoffCard.codexThreadName ? { codexThreadName: preview.handoffCard.codexThreadName } : {}),
+        ...(preview.handoffCard.codexDeliveryMode ? { codexOpenMode: preview.handoffCard.codexDeliveryMode } : {}),
+        ...(preview.handoffCard.codexIntegrationMode ? { codexIntegrationMode: preview.handoffCard.codexIntegrationMode } : {})
       })
     );
     await refresh();
@@ -378,7 +438,11 @@ export function App(): JSX.Element {
         dryRun: false,
         missionId: preview.mission.id,
         handoffCardId: preview.handoffCard.id,
-        handoffId: preview.handoff.id
+        handoffId: preview.handoff.id,
+        ...(preview.handoffCard.codexThreadId ? { codexThreadId: preview.handoffCard.codexThreadId } : {}),
+        ...(preview.handoffCard.codexThreadName ? { codexThreadName: preview.handoffCard.codexThreadName } : {}),
+        ...(preview.handoffCard.codexDeliveryMode ? { codexOpenMode: preview.handoffCard.codexDeliveryMode } : {}),
+        ...(preview.handoffCard.codexIntegrationMode ? { codexIntegrationMode: preview.handoffCard.codexIntegrationMode } : {})
       })
     );
     await refresh();
@@ -477,12 +541,18 @@ export function App(): JSX.Element {
               workflowLinks={workflowLinks}
               captures={captures}
               targets={targets}
+              codexThreads={codexThreads}
               missions={missions}
               selectedSourceComponentId={selectedSourceComponentId}
               selectedWorkspaceComponentId={selectedWorkspaceComponentId}
               selectedTargetComponentId={selectedTargetComponentId}
+              selectedCodexThreadId={selectedCodexThreadId}
+              manualCodexThreadId={manualCodexThreadId}
               linkError={linkError}
               targetError={targetError}
+              onSelectCodexThread={setSelectedCodexThreadId}
+              onManualCodexThreadIdChange={setManualCodexThreadId}
+              onSaveManualCodexThread={() => void saveManualCodexThread()}
               onUseCurrentTab={() => void useCurrentChatGptTab()}
               onChooseRepo={() => void chooseRepoFolder()}
               onCreateWorkflowLink={() => void createWorkflowLink()}

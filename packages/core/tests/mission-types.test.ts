@@ -6,11 +6,13 @@ import {
   MissionSchema,
   TaskSpecSchema,
   WorkflowLinkSchema,
+  CodexThreadRefSchema,
   type Handoff,
   type HandoffCard,
   type Mission,
   type TaskSpec,
-  type WorkflowLink
+  type WorkflowLink,
+  type CodexThreadRef
 } from "../src/types.js";
 import { browserTabComponent, componentStatusLabel, desktopWindowComponent } from "../src/components.js";
 
@@ -121,12 +123,30 @@ describe("mission-first schemas", () => {
       targetComponentId: "component_target_1",
       recipe: "implementationBrief",
       verificationCommandDefaults: [{ kind: "test", command: "pnpm test" }],
+      codexThreadId: "thread_123",
+      codexOpenMode: "existingThread",
+      codexIntegrationMode: "deepLink",
       enabled: true,
       createdAt: now,
       updatedAt: now
     };
 
     expect(WorkflowLinkSchema.parse(link).verificationCommandDefaults).toHaveLength(1);
+  });
+
+  it("parses CodexThreadRef", () => {
+    const ref: CodexThreadRef = {
+      id: "codex_thread_1",
+      threadId: "thread_123",
+      name: "Refactor flow",
+      repoPath: "C:/repo",
+      status: "idle",
+      source: "manual",
+      lastSeenAt: now,
+      metadata: {}
+    };
+
+    expect(CodexThreadRefSchema.parse(ref).threadId).toBe("thread_123");
   });
 
   it("marks detected desktop windows as inspectable until a safe target route exists", () => {

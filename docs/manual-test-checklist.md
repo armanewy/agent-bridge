@@ -31,6 +31,10 @@
 - Codex target rejects invalid paths in Electron mode.
 - Task Card Preview shows task title, repo/agent, acceptance criteria, verification steps, redaction warnings, and expandable raw prompt/source details.
 - Dry-run Codex delivery creates a local delivery attempt.
+- Save a manual Codex thread ID from `/status` and select it on Start.
+- Existing-thread dry run opens/stages `codex://threads/<thread-id>` and warns that the prompt is not injected without App Server.
+- With `CODEX_APP_SERVER_URL` configured, existing-thread delivery resumes the selected thread and starts a turn.
+- New-thread delivery still uses `codex://threads/new?prompt=...&path=...`.
 - Tasks view shows timeline, next action, artifacts, delivery attempts, and verification state.
 - Advanced Audit view lists local events and can clear them.
 

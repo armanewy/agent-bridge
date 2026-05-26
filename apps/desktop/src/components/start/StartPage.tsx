@@ -2,6 +2,7 @@ import { Bot, CheckCircle, Chrome, ClipboardList, FolderOpen, Link2, Settings } 
 import type {
   Capture,
   CodexDeepLinkTarget,
+  CodexThreadRef,
   LinkableComponent,
   Mission,
   TargetEndpoint,
@@ -13,12 +14,18 @@ interface StartPageProps {
   workflowLinks: WorkflowLink[];
   captures: Capture[];
   targets: TargetEndpoint[];
+  codexThreads: CodexThreadRef[];
   missions: Mission[];
   selectedSourceComponentId?: string | undefined;
   selectedWorkspaceComponentId?: string | undefined;
   selectedTargetComponentId?: string | undefined;
+  selectedCodexThreadId?: string | undefined;
+  manualCodexThreadId: string;
   linkError?: string | undefined;
   targetError?: string | undefined;
+  onSelectCodexThread(threadId?: string): void;
+  onManualCodexThreadIdChange(value: string): void;
+  onSaveManualCodexThread(): void;
   onUseCurrentTab(): void;
   onChooseRepo(): void;
   onCreateWorkflowLink(): void;
@@ -33,12 +40,18 @@ export function StartPage({
   workflowLinks,
   captures,
   targets,
+  codexThreads,
   missions,
   selectedSourceComponentId,
   selectedWorkspaceComponentId,
   selectedTargetComponentId,
+  selectedCodexThreadId,
+  manualCodexThreadId,
   linkError,
   targetError,
+  onSelectCodexThread,
+  onManualCodexThreadIdChange,
+  onSaveManualCodexThread,
   onUseCurrentTab,
   onChooseRepo,
   onCreateWorkflowLink,
@@ -62,6 +75,7 @@ export function StartPage({
     ? components.find((component) => component.id === activeLink.targetComponentId)
     : components.find((component) => component.id === selectedTargetComponentId);
   const codexTarget = targets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
+  const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
   const realCaptures = captures.filter((capture) => capture.metadata["mode"] !== "mock");
   const latestCapture = sourceComponent ? realCaptures.find((capture) => captureBelongsToComponent(capture, sourceComponent)) : undefined;
   const latestTask = missions[0];
@@ -106,13 +120,24 @@ export function StartPage({
           <StartStep
             icon={<Bot size={20} />}
             label="Codex"
-            title={codexTarget ? "Ready via codex://" : "Ready after repo selection"}
-            detail={codexTarget ? "Will open Codex with this repo when you send." : "Choose a repo to create the Codex deep-link target."}
+            title={codexTarget ? (selectedCodexThread ? "Existing session selected" : "New thread selected") : "Ready after repo selection"}
+            detail={codexTarget ? codexSessionDetail(selectedCodexThread) : "Choose a repo to create the Codex target."}
             status={codexTarget ? "ready" : "missing"}
             actionLabel={codexTarget ? "Check Codex" : "Choose repo"}
             onAction={codexTarget ? onOpenSettings : onChooseRepo}
           />
         </div>
+
+        {codexTarget ? (
+          <CodexSessionChooser
+            threads={codexThreads}
+            selectedThreadId={selectedCodexThreadId}
+            manualThreadId={manualCodexThreadId}
+            onSelectThread={onSelectCodexThread}
+            onManualThreadIdChange={onManualCodexThreadIdChange}
+            onSaveManualThread={onSaveManualCodexThread}
+          />
+        ) : null}
 
         {activeLink ? (
           <ActiveLinkSummary
@@ -223,6 +248,7 @@ function ActiveLinkSummary({
       <h3>{source?.label ?? "ChatGPT"} → {workspace?.label ?? "repo"} → {target?.label ?? "Codex"}</h3>
       <div className="active-link-grid">
         <Metric label="Recipe" value={link.recipe} />
+        <Metric label="Codex session" value={link.codexThreadId ? shortThread(link.codexThreadId) : "New thread"} />
         <Metric label="Verification" value={link.verificationCommandDefaults.length ? "Configured" : "Not configured"} />
         <Metric label="Capture" value={latestCapture ? `${latestCapture.text.length} characters` : "Missing"} />
       </div>
@@ -249,6 +275,72 @@ function ActiveLinkSummary({
         </button>
       </div>
     </div>
+  );
+}
+
+function CodexSessionChooser({
+  threads,
+  selectedThreadId,
+  manualThreadId,
+  onSelectThread,
+  onManualThreadIdChange,
+  onSaveManualThread
+}: {
+  threads: CodexThreadRef[];
+  selectedThreadId?: string | undefined;
+  manualThreadId: string;
+  onSelectThread(threadId?: string): void;
+  onManualThreadIdChange(value: string): void;
+  onSaveManualThread(): void;
+}): JSX.Element {
+  return (
+    <section className="session-panel">
+      <div className="panel-heading compact">
+        <div>
+          <h3>Codex session</h3>
+          <p>Choose an existing Codex thread, or start a new one for this repo.</p>
+        </div>
+      </div>
+      <div className="session-list">
+        <button
+          type="button"
+          className={!selectedThreadId ? "list-card selectable selected" : "list-card selectable"}
+          onClick={() => onSelectThread(undefined)}
+        >
+          <strong>Start new Codex thread</strong>
+          <span>AgentBridge sends the prompt with codex://threads/new.</span>
+        </button>
+        {threads.map((thread) => (
+          <button
+            type="button"
+            key={thread.threadId}
+            className={selectedThreadId === thread.threadId ? "list-card selectable selected" : "list-card selectable"}
+            onClick={() => onSelectThread(thread.threadId)}
+          >
+            <strong>{thread.name ?? `Codex thread ${shortThread(thread.threadId)}`}</strong>
+            <span>
+              {shortThread(thread.threadId)} · {thread.status ?? "unknown"} · {thread.source}
+            </span>
+            <small>
+              {thread.source === "appServer"
+                ? "AgentBridge can send into this existing Codex session."
+                : "AgentBridge can open this existing session; sending into it requires Codex App Server."}
+            </small>
+          </button>
+        ))}
+      </div>
+      <div className="inline-form">
+        <input
+          value={manualThreadId}
+          onChange={(event) => onManualThreadIdChange(event.target.value)}
+          placeholder="Paste Codex thread ID"
+        />
+        <button type="button" className="secondary-button" onClick={onSaveManualThread}>
+          Save thread
+        </button>
+      </div>
+      <p className="muted-help">In Codex, run /status to see the current thread ID.</p>
+    </section>
   );
 }
 
@@ -291,6 +383,20 @@ function repoDetail(component?: LinkableComponent, target?: CodexDeepLinkTarget)
     return target.repoPath;
   }
   return "Pick the local repository Codex should work in.";
+}
+
+function codexSessionDetail(thread?: CodexThreadRef): string {
+  if (!thread) {
+    return "New thread for this repo. Existing sessions can be selected below.";
+  }
+  if (thread.source === "appServer") {
+    return `Will send into existing session ${shortThread(thread.threadId)} through Codex App Server.`;
+  }
+  return `Will open existing session ${shortThread(thread.threadId)}; prompt injection needs Codex App Server.`;
+}
+
+function shortThread(threadId: string): string {
+  return threadId.length > 12 ? `${threadId.slice(0, 6)}…${threadId.slice(-4)}` : threadId;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

@@ -25,6 +25,8 @@ import { VerificationService } from "../services/verification-service.js";
 import { SetupService } from "../services/setup-service.js";
 import { HandoffCardDeliveryService } from "../services/handoff-card-delivery-service.js";
 import { ComponentDiscoveryService } from "../services/component-discovery-service.js";
+import { CodexAppServerClient } from "../services/codex-app-server-client.js";
+import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import type {
   CodexDeliveryRequest,
@@ -84,7 +86,11 @@ app.whenReady().then(async () => {
     ...(process.env.VITE_DEV_SERVER_URL ? { devServerUrl: process.env.VITE_DEV_SERVER_URL } : {})
   });
   const windowsTargetService = new WindowsTargetService();
-  const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
+  const codexAppServerClient = new CodexAppServerClient(
+    process.env.CODEX_APP_SERVER_URL ? { endpoint: process.env.CODEX_APP_SERVER_URL } : {}
+  );
+  const codexSessionService = new CodexSessionService(store, codexAppServerClient);
+  const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url), codexAppServerClient);
   const handoffCardDeliveryService = new HandoffCardDeliveryService(store, codexTargetService);
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
   const workflowLinkService = new WorkflowLinkService(store, transformService);
@@ -100,6 +106,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:listLinkableComponents", () => componentDiscoveryService.listComponents());
   ipcMain.handle("agentbridge:discoverLinkableComponents", () => componentDiscoveryService.discover());
   ipcMain.handle("agentbridge:listWorkflowLinks", () => workflowLinkService.listWorkflowLinks());
+  ipcMain.handle("agentbridge:listCodexThreads", (_event, repoPath?: string) => codexSessionService.listCodexThreads(repoPath));
+  ipcMain.handle("agentbridge:saveManualCodexThreadRef", (_event, input: { threadId: string; name?: string; repoPath?: string }) =>
+    codexSessionService.saveManualThreadRef(input.threadId, input.name, input.repoPath)
+  );
   ipcMain.handle("agentbridge:createWorkflowLink", (_event, input: CreateWorkflowLinkInput) =>
     workflowLinkService.createWorkflowLink(input)
   );

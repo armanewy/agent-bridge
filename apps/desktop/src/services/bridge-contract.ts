@@ -2,6 +2,9 @@ import type {
   BrowserTabSource,
   Capture,
   CodexDeepLinkTarget,
+  CodexIntegrationMode,
+  CodexOpenMode,
+  CodexThreadRef,
   DeliveryAttempt,
   Artifact,
   HandoffCard,
@@ -37,6 +40,10 @@ export interface PreviewRequest {
   targetId: string;
   recipe: "rawRelay" | "implementationBrief" | "codeReviewRequest" | "debuggingRequest";
   missionId?: string;
+  codexThreadId?: string;
+  codexThreadName?: string;
+  codexOpenMode?: CodexOpenMode;
+  codexIntegrationMode?: CodexIntegrationMode;
 }
 
 export interface DeliveryPreview {
@@ -58,6 +65,10 @@ export interface CodexDeliveryRequest {
   missionId: string;
   handoffCardId: string;
   handoffId: string;
+  codexThreadId?: string;
+  codexThreadName?: string;
+  codexOpenMode?: CodexOpenMode;
+  codexIntegrationMode?: CodexIntegrationMode;
 }
 
 export interface HandoffCardDeliveryRequest {
@@ -71,6 +82,10 @@ export interface CodexDeliveryResult {
   deepLink: string;
   promptLength: number;
   repoPath: string;
+  deliveryMode?: "newDeepLink" | "existingDeepLinkOpen" | "appServerTurnStart" | "sdkRun";
+  codexThreadId?: string;
+  codexTurnId?: string;
+  warnings?: string[];
   openedAt?: string;
   error?: string;
 }
@@ -135,8 +150,14 @@ export interface AgentBridgeApi {
     targetComponentId: string;
     recipe: WorkflowLink["recipe"];
     verificationCommandDefaults?: VerificationCommand[];
+    codexThreadId?: string;
+    codexThreadName?: string;
+    codexOpenMode?: CodexOpenMode;
+    codexIntegrationMode?: CodexIntegrationMode;
   }): Promise<WorkflowLink>;
   createTaskFromWorkflowLink(input: { workflowLinkId: string }): Promise<DeliveryPreview>;
+  listCodexThreads(repoPath?: string): Promise<CodexThreadRef[]>;
+  saveManualCodexThreadRef(input: { threadId: string; name?: string; repoPath?: string }): Promise<CodexThreadRef>;
   listCaptures(): Promise<Capture[]>;
   listMissions(): Promise<Mission[]>;
   getMissionDetail(id: string): Promise<MissionDetail | undefined>;

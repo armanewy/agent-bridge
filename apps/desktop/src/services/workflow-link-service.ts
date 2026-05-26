@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { Capture, LinkableComponent, VerificationCommand, WorkflowLink } from "@agentbridge/core";
+import type { Capture, CodexIntegrationMode, CodexOpenMode, LinkableComponent, VerificationCommand, WorkflowLink } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { TransformService } from "./transform-service.js";
 import type { DeliveryPreview } from "./bridge-contract.js";
@@ -11,6 +11,10 @@ export interface CreateWorkflowLinkInput {
   targetComponentId: string;
   recipe: WorkflowLink["recipe"];
   verificationCommandDefaults?: VerificationCommand[];
+  codexThreadId?: string;
+  codexThreadName?: string;
+  codexOpenMode?: CodexOpenMode;
+  codexIntegrationMode?: CodexIntegrationMode;
 }
 
 export interface CreateTaskFromWorkflowLinkInput {
@@ -51,6 +55,10 @@ export class WorkflowLinkService {
       targetComponentId: input.targetComponentId,
       recipe: input.recipe,
       verificationCommandDefaults: input.verificationCommandDefaults ?? [],
+      ...(input.codexThreadId ? { codexThreadId: input.codexThreadId } : {}),
+      ...(input.codexThreadName ? { codexThreadName: input.codexThreadName } : {}),
+      codexOpenMode: input.codexOpenMode ?? (input.codexThreadId ? "existingThread" : "newThread"),
+      codexIntegrationMode: input.codexIntegrationMode ?? "deepLink",
       enabled: true,
       createdAt: now,
       updatedAt: now
@@ -98,7 +106,11 @@ export class WorkflowLinkService {
     return this.transformService.previewHandoff({
       captureId: capture.id,
       targetId,
-      recipe: link.recipe
+      recipe: link.recipe,
+      ...(link.codexThreadId ? { codexThreadId: link.codexThreadId } : {}),
+      ...(link.codexThreadName ? { codexThreadName: link.codexThreadName } : {}),
+      ...(link.codexOpenMode ? { codexOpenMode: link.codexOpenMode } : {}),
+      ...(link.codexIntegrationMode ? { codexIntegrationMode: link.codexIntegrationMode } : {})
     });
   }
 

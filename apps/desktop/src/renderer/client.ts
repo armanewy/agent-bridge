@@ -16,6 +16,7 @@ import type {
   BrowserTabSource,
   Capture,
   CodexDeepLinkTarget,
+  CodexThreadRef,
   Link,
   LinkableComponent,
   AuditEvent,
@@ -52,6 +53,7 @@ let mockSources: SourceEndpoint[] = [mockSource];
 let mockTargets: TargetEndpoint[] = [];
 let mockLinks: Link[] = [];
 let mockWorkflowLinks: WorkflowLink[] = [];
+let mockCodexThreads: CodexThreadRef[] = [];
 let mockComponents: LinkableComponent[] = [mockBrowserTabComponent(mockSource)];
 let mockCaptures: Capture[] = [mockCapture];
 let mockAuditEvents: AuditEvent[] = [];
@@ -94,6 +96,23 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async listWorkflowLinks() {
       return mockWorkflowLinks;
     },
+    async listCodexThreads(repoPath?: string) {
+      return mockCodexThreads.filter((thread) => !repoPath || thread.repoPath === repoPath);
+    },
+    async saveManualCodexThreadRef(input) {
+      const ref: CodexThreadRef = {
+        id: `codex_thread_${mockCodexThreads.length + 1}`,
+        threadId: input.threadId.trim(),
+        ...(input.name ? { name: input.name } : {}),
+        ...(input.repoPath ? { repoPath: input.repoPath } : {}),
+        status: "unknown",
+        source: "manual",
+        lastSeenAt: now(),
+        metadata: {}
+      };
+      mockCodexThreads = [ref, ...mockCodexThreads.filter((thread) => thread.threadId !== ref.threadId)];
+      return ref;
+    },
     async createWorkflowLink(input) {
       const link: WorkflowLink = {
         id: `workflow_${mockWorkflowLinks.length + 1}`,
@@ -118,7 +137,15 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       if (!capture || !targetId) {
         throw new Error("Capture selected text first before creating a Task Card from this link.");
       }
-      return this.previewHandoff({ captureId: capture.id, targetId, recipe: link.recipe });
+      return this.previewHandoff({
+        captureId: capture.id,
+        targetId,
+        recipe: link.recipe,
+        ...(link.codexThreadId ? { codexThreadId: link.codexThreadId } : {}),
+        ...(link.codexThreadName ? { codexThreadName: link.codexThreadName } : {}),
+        ...(link.codexOpenMode ? { codexOpenMode: link.codexOpenMode } : {}),
+        ...(link.codexIntegrationMode ? { codexIntegrationMode: link.codexIntegrationMode } : {})
+      });
     },
     async listCaptures() {
       return mockCaptures;
@@ -211,6 +238,10 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         redactionFindings: [],
         deliveryAttemptIds: [],
         artifactIds: ["artifact_prompt_mock"],
+        ...(input.codexThreadId ? { codexThreadId: input.codexThreadId } : {}),
+        ...(input.codexThreadName ? { codexThreadName: input.codexThreadName } : {}),
+        ...(input.codexOpenMode ? { codexDeliveryMode: input.codexOpenMode } : {}),
+        ...(input.codexIntegrationMode ? { codexIntegrationMode: input.codexIntegrationMode } : {}),
         createdAt: now(),
         updatedAt: now()
       };
@@ -300,9 +331,17 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     },
     async deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult> {
       const params = new URLSearchParams();
-      params.set("prompt", input.prompt);
-      params.set("path", input.target.repoPath);
+      const existingThreadId = input.codexThreadId ?? input.target.existingThreadId;
+      if (!existingThreadId) {
+        params.set("prompt", input.prompt);
+        params.set("path", input.target.repoPath);
+      }
       const attemptedAt = now();
+      const deliveryMode = existingThreadId ? "existingDeepLinkOpen" : "newDeepLink";
+      const warnings = existingThreadId ? ["Opened existing Codex thread only. Prompt was staged in AgentBridge but not sent into the existing thread."] : [];
+      const deepLink = existingThreadId
+        ? `codex://threads/${encodeURIComponent(existingThreadId)}`
+        : `codex://threads/new?${params.toString()}`;
       const attempt = {
         id: `delivery_${Date.now()}`,
         handoffId: input.handoffId,
@@ -311,15 +350,15 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         targetId: input.target.id,
         strategy: "codexDeepLink" as const,
         success: true,
-        warnings: [],
-        targetMetadata: { dryRun: input.dryRun, repoPath: input.target.repoPath },
+        warnings,
+        targetMetadata: { dryRun: input.dryRun, repoPath: input.target.repoPath, deliveryMode, codexThreadId: existingThreadId },
         attemptedAt
       };
       const detail = mockMissionDetails.get(input.missionId);
       if (detail) {
         mockMissionDetails.set(input.missionId, {
           ...detail,
-          mission: input.dryRun ? detail.mission : { ...detail.mission, status: "delivered", updatedAt: attemptedAt },
+          mission: input.dryRun || existingThreadId ? detail.mission : { ...detail.mission, status: "delivered", updatedAt: attemptedAt },
           handoffCards: detail.handoffCards.map((card) =>
             card.id === input.handoffCardId
               ? { ...card, deliveryAttemptIds: [...card.deliveryAttemptIds, attempt.id], updatedAt: attemptedAt }
@@ -345,9 +384,11 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       ];
       return {
         success: true,
-        deepLink: `codex://threads/new?${params.toString()}`,
+        deepLink,
         promptLength: input.prompt.length,
         repoPath: input.target.repoPath,
+        deliveryMode,
+        ...(existingThreadId ? { codexThreadId: existingThreadId, warnings } : {}),
         ...(input.dryRun ? {} : { openedAt: now() })
       };
     },
@@ -364,7 +405,11 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         dryRun: input.dryRun,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        handoffId: `handoff_card_${input.handoffCardId}`
+        handoffId: `handoff_card_${input.handoffCardId}`,
+        ...(card.codexThreadId ? { codexThreadId: card.codexThreadId } : {}),
+        ...(card.codexThreadName ? { codexThreadName: card.codexThreadName } : {}),
+        ...(card.codexDeliveryMode ? { codexOpenMode: card.codexDeliveryMode } : {}),
+        ...(card.codexIntegrationMode ? { codexIntegrationMode: card.codexIntegrationMode } : {})
       });
     },
     async runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse> {
@@ -442,6 +487,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockTargets = [];
       mockLinks = [];
       mockWorkflowLinks = [];
+      mockCodexThreads = [];
       mockComponents = [mockBrowserTabComponent(mockSource)];
       mockCaptures = [mockCapture];
       mockAuditEvents = [];

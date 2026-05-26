@@ -12,10 +12,10 @@ OpenAI documents that the Codex app registers the `codex://` URL scheme. `codex:
 
 ### Fit
 
-- Best current MVP path.
-- Reliable enough for starting a new thread.
-- Low setup complexity.
-- No direct way to observe the result or continue an existing thread beyond opening `codex://threads/<thread-id>`.
+- Best current fallback path.
+- Reliable enough for starting a new thread with `codex://threads/new?prompt=...&path=...`.
+- Can open an existing local thread with `codex://threads/<thread-id>`.
+- Existing-thread deep links do not inject a prompt into that thread. AgentBridge must show this as "opened existing thread; prompt staged but not sent" unless app-server or SDK delivery is active.
 
 ## Option 2: Codex TypeScript SDK
 
@@ -29,12 +29,13 @@ The official SDK page describes `@openai/codex-sdk` for server-side Node.js 18+ 
 
 ## Option 3: Codex App Server
 
-The app-server docs expose JSON-RPC methods for starting, resuming, reading, and managing threads. Documented methods include `thread/start`, `thread/resume`, `turn/start`, `thread/read`, `thread/turns/list`, `thread/inject_items`, and status-change notifications.
+The app-server docs expose JSON-RPC methods for starting, resuming, reading, and managing threads. Documented methods include `thread/list`, `thread/loaded/list`, `thread/read`, `thread/resume`, and `turn/start`.
 
 ### Fit
 
-- Most powerful local integration path.
-- Supports observing thread status and turn progress.
+- Preferred path for continuing an existing Codex session.
+- `thread/resume` reopens an existing thread and `turn/start` appends a new turn to that target thread.
+- Supports future observation of thread status and turn progress.
 - Higher complexity and requires careful handling of approval policy, sandbox policy, shell commands, and thread lifecycle.
 
 ## Option 4: UI Automation Fallback
@@ -49,4 +50,10 @@ Use Windows UI Automation only if official routes fail or the user explicitly ch
 
 ## Recommendation
 
-Keep deep links for the MVP. Add a Codex SDK adapter next for start/resume/run and result observation. Use app-server only after the SDK path proves insufficient, because app-server is powerful but expands the security and lifecycle surface.
+Use three modes:
+
+1. New thread: `codex://threads/new?prompt=...&path=...`.
+2. Existing thread fallback: `codex://threads/<thread-id>` opens the session only and keeps the generated prompt available in AgentBridge.
+3. Existing thread continuation: Codex App Server `thread/resume` plus `turn/start` sends the generated prompt into the selected thread.
+
+Keep SDK as a future implementation path for resume/run if app-server is unavailable or too unstable for packaged desktop use.

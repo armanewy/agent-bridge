@@ -6,6 +6,7 @@ import {
   AuditEventSchema,
   ArtifactSchema,
   CaptureSchema,
+  CodexThreadRefSchema,
   HandoffSchema,
   HandoffCardSchema,
   LinkSchema,
@@ -21,6 +22,7 @@ import {
   type Artifact,
   type AuditEvent,
   type Capture,
+  type CodexThreadRef,
   type Handoff,
   type HandoffCard,
   type Link,
@@ -38,7 +40,7 @@ import {
   type WorkflowLink
 } from "@agentbridge/core";
 
-export const CURRENT_STORE_VERSION = 3;
+export const CURRENT_STORE_VERSION = 4;
 
 export interface LocalStore {
   saveLink(link: Link): Promise<void>;
@@ -52,6 +54,9 @@ export interface LocalStore {
   getWorkflowLink(id: string): Promise<WorkflowLink | undefined>;
   listWorkflowLinks(): Promise<WorkflowLink[]>;
   deleteWorkflowLink(id: string): Promise<boolean>;
+  saveCodexThreadRef(ref: CodexThreadRef): Promise<void>;
+  getCodexThreadRef(threadId: string): Promise<CodexThreadRef | undefined>;
+  listCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]>;
   saveSource(source: SourceEndpoint): Promise<void>;
   getSource(id: string): Promise<SourceEndpoint | undefined>;
   listSources(): Promise<SourceEndpoint[]>;
@@ -100,6 +105,7 @@ interface StoreData {
   links: Record<string, Link>;
   linkableComponents: Record<string, LinkableComponent>;
   workflowLinks: Record<string, WorkflowLink>;
+  codexThreadRefs: Record<string, CodexThreadRef>;
   sources: Record<string, SourceEndpoint>;
   targets: Record<string, TargetEndpoint>;
   captures: Record<string, Capture>;
@@ -184,6 +190,23 @@ export class JsonFileStore implements LocalStore {
       delete data.workflowLinks[id];
     });
     return deleted;
+  }
+
+  async saveCodexThreadRef(ref: CodexThreadRef): Promise<void> {
+    CodexThreadRefSchema.parse(ref);
+    await this.update((data) => {
+      data.codexThreadRefs[ref.threadId] = ref;
+    });
+  }
+
+  async getCodexThreadRef(threadId: string): Promise<CodexThreadRef | undefined> {
+    return (await this.read()).codexThreadRefs[threadId];
+  }
+
+  async listCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]> {
+    return Object.values((await this.read()).codexThreadRefs)
+      .filter((ref) => !repoPath || normalizePath(ref.repoPath) === normalizePath(repoPath))
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
   }
 
   async saveSource(source: SourceEndpoint): Promise<void> {
@@ -468,6 +491,7 @@ export function createEmptyStore(): StoreData {
     links: {},
     linkableComponents: {},
     workflowLinks: {},
+    codexThreadRefs: {},
     sources: {},
     targets: {},
     captures: {},
@@ -500,4 +524,8 @@ function migrate(data: StoreData): StoreData {
     ...data,
     version: CURRENT_STORE_VERSION
   };
+}
+
+function normalizePath(value?: string): string | undefined {
+  return value?.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }

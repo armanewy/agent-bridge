@@ -168,7 +168,10 @@ export function codexTargetComponent(target: CodexDeepLinkTarget, discoveredAt =
     metadata: {
       delivery: "codex://",
       repoPath: target.repoPath,
-      openMode: target.openMode
+      openMode: target.openMode,
+      integrationMode: target.integrationMode ?? "deepLink",
+      ...(target.existingThreadId ? { existingThreadId: target.existingThreadId } : {}),
+      ...(target.existingThreadName ? { existingThreadName: target.existingThreadName } : {})
     },
     discoveredAt,
     updatedAt: discoveredAt

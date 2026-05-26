@@ -27,7 +27,11 @@ export class HandoffCardDeliveryService {
       dryRun: input.dryRun,
       missionId: input.missionId,
       handoffCardId: input.handoffCardId,
-      handoffId: `handoff_card_${card.id}_${randomUUID()}`
+      handoffId: `handoff_card_${card.id}_${randomUUID()}`,
+      ...(card.codexThreadId ? { codexThreadId: card.codexThreadId } : {}),
+      ...(card.codexThreadName ? { codexThreadName: card.codexThreadName } : {}),
+      ...(card.codexDeliveryMode ? { codexOpenMode: card.codexDeliveryMode } : {}),
+      ...(card.codexIntegrationMode ? { codexIntegrationMode: card.codexIntegrationMode } : {})
     });
   }
 }
