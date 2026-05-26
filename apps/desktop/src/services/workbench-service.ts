@@ -17,11 +17,13 @@ import {
   type Run,
   type RunStep,
   type TaskSpec,
-  type VerificationCommand
+  type VerificationCommand,
+  type WorkspaceCandidate
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { VerificationRunRequest, VerificationRunResponse } from "./bridge-contract.js";
 import type { VerificationService } from "./verification-service.js";
+import type { WorkspaceResolverService } from "./workspace-resolver-service.js";
 
 export interface CreateWorkbenchMissionInput {
   title?: string;
@@ -30,13 +32,21 @@ export interface CreateWorkbenchMissionInput {
   verificationCommands?: VerificationCommand[];
 }
 
+export interface AttachWorkspaceInput {
+  repoPath: string;
+  repoName?: string;
+  branch?: string;
+  source?: WorkspaceCandidate["source"] | "userSelected";
+}
+
 export class WorkbenchService {
   constructor(
     private readonly store: LocalStore,
     private readonly planner: PlannerProvider,
     private readonly executor: ExecutorProvider,
     private readonly verificationService: VerificationService,
-    private readonly now: () => string = () => new Date().toISOString()
+    private readonly now: () => string = () => new Date().toISOString(),
+    private readonly workspaceResolver?: WorkspaceResolverService
   ) {}
 
   async createWorkbenchMission(input: CreateWorkbenchMissionInput = {}): Promise<Mission> {
@@ -61,8 +71,9 @@ export class WorkbenchService {
       updatedAt: now
     };
     await this.store.saveMission(mission);
+    const savedMission = input.repoContext ? mission : await this.attachHighConfidenceWorkspace(mission);
     await this.appendRunStep(mission.id, "planning", "Create workbench mission", "passed", []);
-    return mission;
+    return savedMission;
   }
 
   async sendUserMessageToPlanner(missionId: string, text: string): Promise<PlannerResponse> {
@@ -162,6 +173,9 @@ export class WorkbenchService {
       throw new Error(`Executor provider ${executorProviderId} is not registered for this workbench.`);
     }
     const mission = await this.requireMission(missionId);
+    if (!sessionRefId && !mission.repoContext?.repoPath) {
+      throw new Error("Choose workspace to create a new Codex thread.");
+    }
     const card = await this.latestHandoffCard(missionId, (item) => item.recipe !== "debuggingRequest");
     const result = await this.executor.sendTask({
       missionId,
@@ -189,8 +203,31 @@ export class WorkbenchService {
   }
 
   async runMissionVerification(missionId: string, input: Omit<VerificationRunRequest, "missionId"> = {}): Promise<VerificationRunResponse> {
+    const mission = await this.requireMission(missionId);
+    if (!mission.repoContext?.repoPath) {
+      throw new Error("Choose workspace to run verification.");
+    }
     await this.store.updateMissionStatus(missionId, "verifying");
     return this.verificationService.runVerification({ missionId, ...input });
+  }
+
+  async attachWorkspaceToMission(missionId: string, input: AttachWorkspaceInput): Promise<Mission> {
+    const mission = await this.requireMission(missionId);
+    if (!input.repoPath.trim()) {
+      throw new Error("Workspace repo path is required.");
+    }
+    const updated: Mission = {
+      ...mission,
+      repoContext: {
+        repoPath: input.repoPath,
+        ...(input.repoName ? { repoName: input.repoName } : {}),
+        ...(input.branch ? { currentBranch: input.branch } : {})
+      },
+      updatedAt: this.now()
+    };
+    await this.store.saveMission(updated);
+    await this.appendRunStep(missionId, "planning", "Attach workspace", "passed", []);
+    return updated;
   }
 
   async sendVerificationToPlannerForReview(missionId: string): Promise<ReviewResult> {
@@ -357,6 +394,28 @@ export class WorkbenchService {
       throw new Error(`Mission ${missionId} was not found.`);
     }
     return mission;
+  }
+
+  private async attachHighConfidenceWorkspace(mission: Mission): Promise<Mission> {
+    if (!this.workspaceResolver) {
+      return mission;
+    }
+    const candidates = await this.workspaceResolver.inferForMission(mission.id);
+    const best = this.workspaceResolver.getBestCandidate(candidates);
+    if (!best?.repoPath || best.confidence < 90) {
+      return mission;
+    }
+    const updated: Mission = {
+      ...mission,
+      repoContext: {
+        repoPath: best.repoPath,
+        ...(best.repoName ? { repoName: best.repoName } : {}),
+        ...(best.branch ? { currentBranch: best.branch } : {})
+      },
+      updatedAt: this.now()
+    };
+    await this.store.saveMission(updated);
+    return updated;
   }
 
   private async latestHandoffCard(missionId: string, predicate: (card: HandoffCard) => boolean = () => true): Promise<HandoffCard> {

@@ -7,6 +7,8 @@
 - BYOK OpenAI planning remains Advanced only.
 - User intent can start a mission before repo selection.
 - Repo/workspace is inferred when possible and requested only when Codex new-thread creation, verification, or repo file operations require it.
+- Existing Codex sessions with cwd/workspace metadata can provide workspace evidence; a user should not have to pick the same repo again.
+- Planning, TaskSpec creation, and hosted Planner review can proceed in Bridge mode without reading source files.
 - Repo files stay local unless explicit policy and user approval allow file upload.
 - Browser extensions, ChatGPT Desktop probes, and external browser-tab imports are Advanced adapters, not default requirements.
 - The desktop default navigation item is `Workbench`.
@@ -73,7 +75,8 @@
 
 ## Known Limitations
 
-- Hosted planner implementation is the production target; current BYOK planner still requires an OpenAI API key until cloud auth/provider code lands.
+- Hosted planner is the default production path, but development builds still need the AgentBridge Cloud base URL/auth flow configured before cloud-backed planning works outside mocks.
+- Workspace inference is evidence-based. Low-confidence hints never block Bridge mode and still require user confirmation before repo-bound work.
 - Production builds need a stable Chrome extension ID and Web Store listing URL.
 - Development builds can still use manual extension ID entry in Settings for optional unpacked-extension testing.
 - The Tasks detail view shows source capture excerpt, TaskSpec, artifacts, delivery attempts, timeline, next action, and verification status.

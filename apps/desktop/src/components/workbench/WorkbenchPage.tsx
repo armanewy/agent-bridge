@@ -8,7 +8,8 @@ import type {
   CodexDeepLinkTarget,
   CodexThreadRef,
   HandoffCard,
-  Mission
+  Mission,
+  WorkspaceCandidate
 } from "@agentbridge/core";
 import type { AutopilotStatus, CodexAppServerStatus, MissionDetail } from "../../services/bridge-contract.js";
 
@@ -19,11 +20,13 @@ interface WorkbenchPageProps {
   codexTarget?: CodexDeepLinkTarget | undefined;
   codexThreads: CodexThreadRef[];
   agentSessions: AgentSessionRef[];
+  workspaceCandidates: WorkspaceCandidate[];
   providerProfiles: AgentProviderProfile[];
   codexAppServerStatus?: CodexAppServerStatus | undefined;
   autopilotStatus?: AutopilotStatus | undefined;
   error?: string | undefined;
   onChooseRepo(): void;
+  onUseWorkspaceCandidate(candidate: WorkspaceCandidate): void;
   onSelectMission(id: string): void;
   onCreateMission(): void;
   onAskPlanner(text: string): void;
@@ -48,11 +51,13 @@ export function WorkbenchPage({
   codexTarget,
   codexThreads,
   agentSessions,
+  workspaceCandidates,
   providerProfiles,
   codexAppServerStatus,
   autopilotStatus,
   error,
   onChooseRepo,
+  onUseWorkspaceCandidate,
   onSelectMission,
   onCreateMission,
   onAskPlanner,
@@ -74,7 +79,7 @@ export function WorkbenchPage({
   const [steeringText, setSteeringText] = useState("");
   const [autopilotMode, setAutopilotMode] = useState<"manual" | "supervised" | "autonomous">("supervised");
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
-  const planner = providerProfiles.find((profile) => profile.id === "openai-planner");
+  const planner = providerProfiles.find((profile) => profile.id === "agentbridge-hosted-planner") ?? providerProfiles.find((profile) => profile.kind === "planner");
   const codex = providerProfiles.find((profile) => profile.id === "codex");
   const taskCard = missionDetail?.handoffCards.find((card) => card.recipe !== "debuggingRequest");
   const followUpCard = missionDetail?.handoffCards.find((card) => card.recipe === "debuggingRequest");
@@ -109,8 +114,10 @@ export function WorkbenchPage({
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard);
-  const canStartMission = Boolean(codexTarget && intentText.trim());
+  const canStartMission = Boolean(intentText.trim());
   const activeRun = autopilotStatus?.run;
+  const missionWorkspace = missionDetail?.mission.repoContext;
+  const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
 
   return (
     <div className="workbench-layout">
@@ -119,9 +126,19 @@ export function WorkbenchPage({
           <div>
             <span className="eyebrow">Mission</span>
             <h2>What do you want done?</h2>
-            <p>Choose a repo, describe the outcome once, then let AgentBridge plan, send, verify, and review.</p>
+            <p>State the goal once. AgentBridge plans first, then asks for a workspace only when Codex or verification needs it.</p>
           </div>
           <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} />
+        </div>
+        <div className="workbench-status-strip">
+          <StatusChip label="Account" value={planner?.status === "available" ? "signed in" : "sign in needed"} tone={planner?.status === "available" ? "ready" : "warning"} />
+          <StatusChip label="Planner" value={planner?.displayName ?? "unknown"} tone={planner?.status === "available" ? "ready" : "warning"} />
+          <StatusChip label="Codex" value={codex?.status ?? "unknown"} tone={codex?.status === "available" ? "ready" : "warning"} />
+          <StatusChip
+            label="Workspace"
+            value={missionWorkspace ? "selected" : bestWorkspaceCandidate ? "inferred" : "not needed yet"}
+            tone={missionWorkspace ? "ready" : bestWorkspaceCandidate ? "warning" : "muted"}
+          />
         </div>
         <textarea
           className="planner-input intent-input"
@@ -201,13 +218,27 @@ export function WorkbenchPage({
 
       <section className="panel workbench-repo-strip">
         <div>
-          <span className="eyebrow">Repo</span>
-          <h2>{codexTarget ? repoName(codexTarget.repoPath) : "Choose a repo"}</h2>
-          <p>{codexTarget ? codexTarget.repoPath : "Pick the local repository Codex should work in."}</p>
+          <span className="eyebrow">Workspace</span>
+          <h2>{missionWorkspace ? repoName(missionWorkspace.repoPath) : bestWorkspaceCandidate ? "Workspace inferred" : "Workspace not needed yet"}</h2>
+          <p>
+            {missionWorkspace
+              ? missionWorkspace.repoPath
+              : bestWorkspaceCandidate
+                ? `${bestWorkspaceCandidate.repoName ?? repoName(bestWorkspaceCandidate.repoPath ?? "")} · ${bestWorkspaceCandidate.source} · ${bestWorkspaceCandidate.confidence}% confidence`
+                : "Planning can start without repo access. Choose a workspace when creating a new Codex thread or running verification."}
+          </p>
         </div>
-        <button type="button" className="secondary-button" onClick={onChooseRepo}>
-          Choose repo
-        </button>
+        <div className="button-row">
+          {!missionWorkspace && bestWorkspaceCandidate?.repoPath ? (
+            <button type="button" className="primary-button compact" onClick={() => onUseWorkspaceCandidate(bestWorkspaceCandidate)}>
+              Use this
+            </button>
+          ) : null}
+          <button type="button" className="secondary-button" onClick={onChooseRepo}>
+            {missionWorkspace ? "Change" : "Choose workspace"}
+          </button>
+          {!missionWorkspace && bestWorkspaceCandidate ? <span className="muted-inline">Ignore for now</span> : null}
+        </div>
       </section>
 
       {error ? <div className="error-banner">{error}</div> : null}
@@ -219,7 +250,7 @@ export function WorkbenchPage({
           <div className="panel-heading compact-heading">
             <div>
               <span className="eyebrow">Planner</span>
-              <h2>OpenAI Planner</h2>
+              <h2>Planner</h2>
               <p>{plannerCopy(planner)}</p>
             </div>
             <StatusPill status={planner?.status} />
@@ -235,7 +266,7 @@ export function WorkbenchPage({
               <Bot size={16} />
               Ask Planner
             </button>
-            <button type="button" className="secondary-button" onClick={onCreateMission} disabled={!codexTarget}>
+            <button type="button" className="secondary-button" onClick={onCreateMission}>
               New task
             </button>
           </div>
@@ -276,6 +307,9 @@ export function WorkbenchPage({
             <Send size={16} />
             Send TaskSpec to Codex
           </button>
+          {!missionWorkspace && !selectedSession ? (
+            <p className="empty-copy">Choose workspace to create a new Codex thread. Existing Codex sessions with cwd can proceed without manual repo selection.</p>
+          ) : null}
         </section>
       </div>
 
@@ -449,12 +483,21 @@ function StatusPill({ status }: { status?: string | undefined }): JSX.Element {
   return <span className={status === "available" || status === "passed" || status === "delivered" ? "status-pill" : "status-pill muted"}>{status ?? "unknown"}</span>;
 }
 
+function StatusChip({ label, value, tone }: { label: string; value: string; tone: "ready" | "warning" | "muted" }): JSX.Element {
+  return (
+    <span className={`status-chip ${tone}`}>
+      <strong>{label}</strong>
+      {value}
+    </span>
+  );
+}
+
 function plannerCopy(profile?: AgentProviderProfile): string {
   if (!profile) {
     return "Planner provider has not reported status yet.";
   }
   if (profile.status === "needsAuth") {
-    return "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY to enable planning.";
+    return "Sign in to AgentBridge to enable hosted planning. No OpenAI API key is needed here.";
   }
   return "Ask for scoped implementation direction, acceptance criteria, and review feedback.";
 }
@@ -466,7 +509,7 @@ function codexCopy(profile?: AgentProviderProfile, appServer?: CodexAppServerSta
   if (profile?.status === "available") {
     return "Deep-link delivery is available. Existing sessions may be open-only fallback.";
   }
-  return "Choose a repo to enable Codex deep-link delivery.";
+  return "Codex is not connected yet. Planning can still start; execution will wait for Codex.";
 }
 
 function sessionModeCopy(session: AgentSessionRef): string {
@@ -476,7 +519,7 @@ function sessionModeCopy(session: AgentSessionRef): string {
 
 function taskStateCopy(mission: Mission | undefined, card: HandoffCard | undefined): string {
   if (!mission) {
-    return "Choose a repo, create a task, then ask the planner.";
+    return "Create a task, then ask the planner. Workspace can wait.";
   }
   if (!card) {
     return "Ask the planner, then generate a TaskSpec.";

@@ -137,9 +137,7 @@ export class WorkspaceResolverService {
       ...(input.branch ? { branch: input.branch } : {}),
       ...(input.remoteUrl ? { remoteUrl: input.remoteUrl } : {})
     };
-    if (candidate.confidence >= 90) {
-      this.confirmed.set(candidate.id, candidate);
-    }
+    this.confirmed.set(candidate.id, candidate);
     return candidate;
   }
 }

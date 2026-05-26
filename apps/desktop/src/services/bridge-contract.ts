@@ -38,7 +38,7 @@ import type {
 } from "@agentbridge/core";
 import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
-import type { CreateWorkbenchMissionInput } from "./workbench-service.js";
+import type { AttachWorkspaceInput, CreateWorkbenchMissionInput } from "./workbench-service.js";
 import type { AutopilotStatus } from "./autopilot-service.js";
 import type { PlannerModeInfo } from "./provider-registry-service.js";
 export type { AutopilotStatus } from "./autopilot-service.js";
@@ -250,6 +250,7 @@ export interface AgentBridgeApi {
   setAgentBridgeCloudBaseUrl(url: string): Promise<AgentBridgeAuthStatus>;
   inferWorkspaceForMission(missionId: string): Promise<WorkspaceCandidate[]>;
   confirmWorkspaceCandidate(candidateId: string): Promise<WorkspaceCandidate | undefined>;
+  attachWorkspaceToMission(missionId: string, input: AttachWorkspaceInput): Promise<Mission>;
   createWorkbenchMission(input?: CreateWorkbenchMissionInput): Promise<Mission>;
   sendUserMessageToPlanner(missionId: string, text: string): Promise<PlannerResponse>;
   createTaskSpecFromLatestPlannerTurn(missionId: string): Promise<HandoffCard>;

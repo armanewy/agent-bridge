@@ -39,6 +39,7 @@ const api: AgentBridgeApi = {
   setAgentBridgeCloudBaseUrl: (url: string) => ipcRenderer.invoke("agentbridge:setAgentBridgeCloudBaseUrl", url),
   inferWorkspaceForMission: (missionId: string) => ipcRenderer.invoke("agentbridge:inferWorkspaceForMission", missionId),
   confirmWorkspaceCandidate: (candidateId: string) => ipcRenderer.invoke("agentbridge:confirmWorkspaceCandidate", candidateId),
+  attachWorkspaceToMission: (missionId, input) => ipcRenderer.invoke("agentbridge:attachWorkspaceToMission", missionId, input),
   createWorkbenchMission: (input) => ipcRenderer.invoke("agentbridge:createWorkbenchMission", input),
   sendUserMessageToPlanner: (missionId, text) => ipcRenderer.invoke("agentbridge:sendUserMessageToPlanner", missionId, text),
   createTaskSpecFromLatestPlannerTurn: (missionId) => ipcRenderer.invoke("agentbridge:createTaskSpecFromLatestPlannerTurn", missionId),

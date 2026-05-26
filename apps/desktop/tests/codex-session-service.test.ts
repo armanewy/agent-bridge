@@ -43,7 +43,30 @@ describe("CodexSessionService", () => {
     const refs = await new CodexSessionService(store, client).listCodexThreads(tempDir);
 
     expect(refs[0]).toMatchObject({ threadId: "thread_repo", source: "appServer", repoPath: tempDir });
+    expect(refs[0]?.name).toBe("Repo task");
     await expect(store.getCodexThreadRef("thread_repo")).resolves.toMatchObject({ source: "appServer" });
+  });
+
+  it("keeps app-server threads usable even when cwd is missing", async () => {
+    const store = new JsonFileStore(tempDir);
+    const client = new CodexAppServerClient({
+      transport: {
+        async request() {
+          return { threads: [{ threadId: "thread_open", title: "Open thread", status: "idle" }] };
+        }
+      }
+    });
+
+    const refs = await new CodexSessionService(store, client).listCodexThreads();
+
+    expect(refs).toEqual([
+      expect.objectContaining({
+        threadId: "thread_open",
+        name: "Open thread",
+        source: "appServer"
+      })
+    ]);
+    expect(refs[0]?.repoPath).toBeUndefined();
   });
 
   it("falls back to saved refs when app-server is unavailable", async () => {

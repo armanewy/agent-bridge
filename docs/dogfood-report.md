@@ -4,6 +4,7 @@
 
 - Target default workflow: sign in -> connect Codex -> enter intent -> hosted Planner -> TaskSpec -> Codex -> verify -> Planner review.
 - Workbench supports an intent-first Autopilot path: write intent -> pick Manual/Supervised/Autonomous -> start mission. Repo selection should happen only when the next action needs workspace access.
+- Workspace inference uses Codex session cwd, configured Codex targets, prior missions, and GitHub URL hints without reading repo files.
 - Codex delivery uses the Codex Executor provider, backed by the existing deep-link/App Server services.
 - Codex provider events are stored for turn start, progress/tool events where available, completion/failure, errors, and steering.
 - Verification captures git diff and command outputs, stores a VerificationResult, and can be sent back to Planner for review.
@@ -17,7 +18,7 @@
 - Provider profiles, sessions, turns, and events give the Workbench a real adapter/control-plane layer.
 - The default flow no longer depends on Chrome extension setup or ChatGPT session scraping.
 - TaskSpec compilation is the core value layer: goal, background, requirements, constraints, non-goals, acceptance criteria, and verification steps.
-- Repo context is attached before Codex delivery.
+- Repo context is optional for planning and attached before repo-bound work: new Codex thread creation, verification, or file staging/writes.
 - Artifact memory is inspectable in Task detail.
 - Autopilot records durable planning, delivery, verification, review, follow-up, approval, and steering steps.
 - Steering is stored as an artifact and can use Codex App Server `turn/steer` when an active App Server session exists.
@@ -62,6 +63,8 @@
 ## Dogfood Metrics
 
 - Time from intent to first Codex turn.
+- Missions started without manual repo selection.
+- Workspace inference correctness and unnecessary repo prompt count.
 - User interventions per mission.
 - Autonomous iterations before stop.
 - Verification pass/fail rate and false-pass rate.

@@ -373,6 +373,19 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async confirmWorkspaceCandidate(candidateId: string) {
       return mockWorkspaceCandidates.find((candidate) => candidate.id === candidateId);
     },
+    async attachWorkspaceToMission(missionId, input) {
+      const repoContext = {
+        repoPath: input.repoPath,
+        ...(input.repoName ? { repoName: input.repoName } : {}),
+        ...(input.branch ? { currentBranch: input.branch } : {})
+      };
+      updateMockMission(missionId, { repoContext });
+      const mission = mockMissions.find((item) => item.id === missionId) ?? mockMissionDetails.get(missionId)?.mission;
+      if (!mission) {
+        throw new Error("Mission not found.");
+      }
+      return mission;
+    },
     async createWorkbenchMission(input = {}) {
       const mission: Mission = {
         id: `mission_${mockMissions.length + 1}`,

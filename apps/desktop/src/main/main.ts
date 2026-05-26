@@ -143,7 +143,14 @@ app.whenReady().then(async () => {
   providerRegistryService.registerProvider(hostedPlannerProvider);
   providerRegistryService.registerProvider(openAiPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
-  const workbenchService = new WorkbenchService(store, hostedPlannerProvider, codexExecutorProvider, verificationService);
+  const workbenchService = new WorkbenchService(
+    store,
+    hostedPlannerProvider,
+    codexExecutorProvider,
+    verificationService,
+    undefined,
+    workspaceResolverService
+  );
   const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
@@ -190,6 +197,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:setAgentBridgeCloudBaseUrl", (_event, url: string) => authService.setCloudBaseUrl(url));
   ipcMain.handle("agentbridge:inferWorkspaceForMission", (_event, missionId: string) => workspaceResolverService.inferForMission(missionId));
   ipcMain.handle("agentbridge:confirmWorkspaceCandidate", (_event, candidateId: string) => workspaceResolverService.confirmWorkspace(candidateId));
+  ipcMain.handle("agentbridge:attachWorkspaceToMission", (_event, missionId: string, input) =>
+    workbenchService.attachWorkspaceToMission(missionId, input)
+  );
   ipcMain.handle("agentbridge:createWorkbenchMission", (_event, input?: CreateWorkbenchMissionInput) =>
     workbenchService.createWorkbenchMission(input)
   );

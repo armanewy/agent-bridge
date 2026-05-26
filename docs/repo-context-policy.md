@@ -42,6 +42,15 @@ Use evidence in this order:
 6. Window/title hints.
 7. User selection.
 
+## Runtime Behavior
+
+- Mission creation and hosted Planner turns must not require `repoPath`.
+- TaskSpec creation must not require `repoPath`.
+- Existing Codex sessions may be selected without a local repo path, but sending into a new Codex thread requires a workspace.
+- Verification must stop with `Choose workspace to run verification.` when no workspace is attached.
+- Creating a new Codex thread must stop with `Choose workspace to create a new Codex thread.` when no workspace is attached.
+- Choosing a workspace from the UI attaches it to the current mission and records the source as user-selected or inferred.
+
 ## Confidence Policy
 
 ```text

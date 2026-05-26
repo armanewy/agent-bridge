@@ -37,6 +37,10 @@
 - Production Simple Mode does not ask for `OPENAI_API_KEY`/`AGENTBRIDGE_OPENAI_API_KEY`; hosted planner sign-in is the default target.
 - BYOK OpenAI API key setup is visible only in Advanced.
 - With no repo selected, Workbench accepts intent and asks for workspace only when new Codex thread creation, verification, or repo file operations require it.
+- With no repo selected, ask Planner and generate TaskSpec; confirm neither step asks for a workspace.
+- With an existing Codex session that reports cwd, confirm Workbench shows `Workspace inferred from Codex session` and can attach it with one click.
+- With no workspace and no existing Codex session selected, confirm `Send TaskSpec to Codex` asks for a workspace before creating a new Codex thread.
+- With no workspace, confirm `Run verification` asks for a workspace instead of failing generically.
 - User can choose repo, create a Workbench task, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
 - User can enter one intent, choose Supervised mode, click `Start Mission`, and see the mission timeline advance.
 - User can start a hosted-planner mission without Chrome, ChatGPT Desktop, manual copy/paste, or a mandatory repo picker.

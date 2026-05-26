@@ -52,7 +52,16 @@ export class ProviderRegistryService {
   }
 
   async listSessions(providerId?: string): Promise<AgentSessionRef[]> {
-    return this.store.listAgentSessions(providerId);
+    const stored = await this.store.listAgentSessions(providerId);
+    const provider = providerId ? this.providers.get(providerId) : undefined;
+    if (!provider || !hasListSessions(provider)) {
+      return stored;
+    }
+    const discovered = await provider.listSessions();
+    for (const session of discovered) {
+      await this.store.saveAgentSession(session);
+    }
+    return mergeSessions([...stored, ...discovered]);
   }
 
   async createSession(
@@ -278,6 +287,18 @@ function mergeProfiles(profiles: AgentProviderProfile[]): AgentProviderProfile[]
     byId.set(profile.id, profile);
   }
   return [...byId.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+function mergeSessions(sessions: AgentSessionRef[]): AgentSessionRef[] {
+  const byId = new Map<string, AgentSessionRef>();
+  for (const session of sessions) {
+    byId.set(session.id, session);
+  }
+  return [...byId.values()].sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+}
+
+function hasListSessions(provider: ProviderAdapter): provider is ExecutorProvider {
+  return typeof (provider as ExecutorProvider).listSessions === "function";
 }
 
 function plannerModeInfos(): PlannerModeInfo[] {

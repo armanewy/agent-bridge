@@ -20,6 +20,7 @@ import type {
   SourceEndpoint,
   TargetEndpoint,
   Transform,
+  WorkspaceCandidate,
   WorkflowLink
 } from "@agentbridge/core";
 import type { PlannerModeInfo } from "../services/provider-registry-service.js";
@@ -64,6 +65,7 @@ export function App(): JSX.Element {
   const [plannerModes, setPlannerModes] = useState<PlannerModeInfo[]>([]);
   const [plannerMode, setPlannerMode] = useState<PlannerProviderMode>("hostedAgentBridge");
   const [agentSessions, setAgentSessions] = useState<AgentSessionRef[]>([]);
+  const [workspaceCandidates, setWorkspaceCandidates] = useState<WorkspaceCandidate[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
@@ -236,19 +238,29 @@ export function App(): JSX.Element {
     const nextSelectedMissionId = selectedMissionIdRef.current ?? nextMissions[0]?.id;
     selectedMissionIdRef.current = nextSelectedMissionId;
     setSelectedMissionId(nextSelectedMissionId);
-    const [nextMissionDetail, nextAutopilotStatus] = nextSelectedMissionId
-      ? await Promise.all([api.getMissionDetail(nextSelectedMissionId), api.getAutopilotStatus(nextSelectedMissionId)])
-      : [undefined, undefined];
+    const [nextMissionDetail, nextAutopilotStatus, nextWorkspaceCandidates] = nextSelectedMissionId
+      ? await Promise.all([
+          api.getMissionDetail(nextSelectedMissionId),
+          api.getAutopilotStatus(nextSelectedMissionId),
+          api.inferWorkspaceForMission(nextSelectedMissionId)
+        ])
+      : [undefined, undefined, []];
     setMissionDetail(nextMissionDetail);
     setAutopilotStatus(nextAutopilotStatus);
+    setWorkspaceCandidates(nextWorkspaceCandidates);
   }
 
   async function selectMission(id: string): Promise<void> {
     selectedMissionIdRef.current = id;
     setSelectedMissionId(id);
-    const [nextMissionDetail, nextAutopilotStatus] = await Promise.all([api.getMissionDetail(id), api.getAutopilotStatus(id)]);
+    const [nextMissionDetail, nextAutopilotStatus, nextWorkspaceCandidates] = await Promise.all([
+      api.getMissionDetail(id),
+      api.getAutopilotStatus(id),
+      api.inferWorkspaceForMission(id)
+    ]);
     setMissionDetail(nextMissionDetail);
     setAutopilotStatus(nextAutopilotStatus);
+    setWorkspaceCandidates(nextWorkspaceCandidates);
   }
 
   async function bindMockSource(): Promise<void> {
@@ -314,6 +326,13 @@ export function App(): JSX.Element {
       }
       setRepoPath(selectedPath);
       await configureCodexTargetForPath(selectedPath);
+      if (selectedMissionIdRef.current) {
+        await api.attachWorkspaceToMission(selectedMissionIdRef.current, {
+          repoPath: selectedPath,
+          repoName: selectedPath.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? selectedPath,
+          source: "userSelected"
+        });
+      }
     } catch (error) {
       setTargetError(error instanceof Error ? error.message : String(error));
     }
@@ -544,18 +563,18 @@ export function App(): JSX.Element {
   async function startAutopilotMission(intent: string, mode: "manual" | "supervised" | "autonomous"): Promise<void> {
     setWorkbenchError(undefined);
     try {
-      if (!codexTarget) {
-        throw new Error("Choose a repo before starting a mission.");
-      }
+      const repoContext = codexTarget
+        ? {
+            repoPath: codexTarget.repoPath,
+            ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
+            ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
+            ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
+          }
+        : undefined;
       const mission = await api.createWorkbenchMission({
         title: intent.trim().split(/\r?\n/)[0]?.slice(0, 80) || "Workbench mission",
         goal: intent.trim(),
-        repoContext: {
-          repoPath: codexTarget.repoPath,
-          ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
-          ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
-          ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
-        }
+        ...(repoContext ? { repoContext } : {})
       });
       selectedMissionIdRef.current = mission.id;
       setSelectedMissionId(mission.id);
@@ -677,12 +696,33 @@ export function App(): JSX.Element {
     }
   }
 
+  async function useWorkspaceCandidate(candidate: WorkspaceCandidate): Promise<void> {
+    if (!selectedMissionIdRef.current || !candidate.repoPath) {
+      return;
+    }
+    setWorkbenchError(undefined);
+    try {
+      await api.confirmWorkspaceCandidate(candidate.id);
+      await api.attachWorkspaceToMission(selectedMissionIdRef.current, {
+        repoPath: candidate.repoPath,
+        ...(candidate.repoName ? { repoName: candidate.repoName } : {}),
+        ...(candidate.branch ? { branch: candidate.branch } : {}),
+        source: candidate.source
+      });
+      await refreshMission(selectedMissionIdRef.current);
+      setWorkspaceCandidates(await api.inferWorkspaceForMission(selectedMissionIdRef.current));
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function refreshMission(missionId: string): Promise<void> {
-    const [nextMissions, nextMissionDetail, nextSessions, nextAutopilotStatus] = await Promise.all([
+    const [nextMissions, nextMissionDetail, nextSessions, nextAutopilotStatus, nextWorkspaceCandidates] = await Promise.all([
       api.listMissions(),
       api.getMissionDetail(missionId),
       api.listAgentSessions("codex"),
-      api.getAutopilotStatus(missionId)
+      api.getAutopilotStatus(missionId),
+      api.inferWorkspaceForMission(missionId)
     ]);
     setMissions(nextMissions);
     setAgentSessions(nextSessions);
@@ -690,6 +730,7 @@ export function App(): JSX.Element {
     setSelectedMissionId(missionId);
     setMissionDetail(nextMissionDetail);
     setAutopilotStatus(nextAutopilotStatus);
+    setWorkspaceCandidates(nextWorkspaceCandidates);
   }
 
   async function deliverHandoffCard(missionId: string, handoffCardId: string, dryRun: boolean): Promise<void> {
@@ -839,11 +880,13 @@ export function App(): JSX.Element {
             codexTarget={codexTarget}
             codexThreads={codexThreads}
             agentSessions={agentSessions}
+            workspaceCandidates={workspaceCandidates}
             providerProfiles={providerProfiles}
             codexAppServerStatus={codexAppServerStatus}
             autopilotStatus={autopilotStatus}
             error={workbenchError}
             onChooseRepo={() => void chooseRepoFolder()}
+            onUseWorkspaceCandidate={(candidate) => void useWorkspaceCandidate(candidate)}
             onSelectMission={(id) => void selectMission(id)}
             onCreateMission={() => void createWorkbenchMission()}
             onAskPlanner={(text) => void askWorkbenchPlanner(text)}

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
+  CodexThreadRef,
   ExecutorProvider,
   ExecutorTaskRequest,
   ExecutorTaskResult
@@ -14,6 +15,7 @@ import { OpenAIPlannerProvider, type OpenAIPlannerTransport } from "../src/servi
 import type { OpenAIPlannerResponseRequest } from "../src/services/providers/openai-planner-provider.js";
 import { WorkbenchService } from "../src/services/workbench-service.js";
 import { VerificationService } from "../src/services/verification-service.js";
+import { WorkspaceResolverService } from "../src/services/workspace-resolver-service.js";
 
 let tempDir: string;
 
@@ -26,6 +28,88 @@ afterEach(async () => {
 });
 
 describe("WorkbenchService", () => {
+  it("starts planner work without a repo", async () => {
+    const store = new JsonFileStore(tempDir);
+    const planner = new OpenAIPlannerProvider(store, {
+      transport: queuedTransport(["Planner can start without workspace."], []),
+      now: fixedNow
+    });
+    const workbench = new WorkbenchService(
+      store,
+      planner,
+      new MockExecutorProvider(),
+      new VerificationService(store, async () => ({ exitCode: 0, stdout: "", stderr: "", durationMs: 0 })),
+      fixedNow
+    );
+
+    const mission = await workbench.createWorkbenchMission({ goal: "Plan the no-repo bridge flow." });
+    const response = await workbench.sendUserMessageToPlanner(mission.id, "Plan this first.");
+
+    expect(mission.repoContext).toBeUndefined();
+    expect(response.content).toContain("Planner can start");
+  });
+
+  it("attaches a high-confidence Codex workspace candidate", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveCodexThreadRef(codexThreadRef(tempDir));
+    const planner = new OpenAIPlannerProvider(store, {
+      transport: queuedTransport(["Planner response."], []),
+      now: fixedNow
+    });
+    const workbench = new WorkbenchService(
+      store,
+      planner,
+      new MockExecutorProvider(),
+      new VerificationService(store, async () => ({ exitCode: 0, stdout: "", stderr: "", durationMs: 0 })),
+      fixedNow,
+      new WorkspaceResolverService(store, fixedNow)
+    );
+
+    const mission = await workbench.createWorkbenchMission({ goal: "Use the inferred workspace." });
+
+    expect(mission.repoContext).toMatchObject({ repoPath: tempDir });
+  });
+
+  it("asks for a workspace only when verification needs one", async () => {
+    const store = new JsonFileStore(tempDir);
+    const planner = new OpenAIPlannerProvider(store, {
+      transport: queuedTransport(["Planner response."], []),
+      now: fixedNow
+    });
+    const workbench = new WorkbenchService(
+      store,
+      planner,
+      new MockExecutorProvider(),
+      new VerificationService(store, async () => ({ exitCode: 0, stdout: "ok", stderr: "", durationMs: 0 })),
+      fixedNow
+    );
+
+    const mission = await workbench.createWorkbenchMission({ goal: "Verify later." });
+
+    await expect(workbench.runMissionVerification(mission.id)).rejects.toThrow("Choose workspace to run verification.");
+  });
+
+  it("asks for a workspace before creating a new Codex thread", async () => {
+    const store = new JsonFileStore(tempDir);
+    const planner = new OpenAIPlannerProvider(store, {
+      transport: queuedTransport([JSON.stringify(sampleTaskSpec())], []),
+      now: fixedNow
+    });
+    const workbench = new WorkbenchService(
+      store,
+      planner,
+      new MockExecutorProvider(),
+      new VerificationService(store, async () => ({ exitCode: 0, stdout: "ok", stderr: "", durationMs: 0 })),
+      fixedNow
+    );
+    const mission = await workbench.createWorkbenchMission({ goal: "Create a Codex task later." });
+
+    await workbench.sendUserMessageToPlanner(mission.id, "Plan a task.");
+    await workbench.createTaskSpecFromLatestPlannerTurn(mission.id);
+
+    await expect(workbench.sendTaskSpecToExecutor(mission.id)).rejects.toThrow("Choose workspace to create a new Codex thread.");
+  });
+
   it("coordinates planner, task spec, executor, verification, and planner review", async () => {
     const store = new JsonFileStore(tempDir);
     const plannerRequests: OpenAIPlannerResponseRequest[] = [];
@@ -151,6 +235,19 @@ function sampleTaskSpec() {
     suggestedFiles: ["apps/desktop/src/services/workbench-service.ts"],
     verificationSteps: ["pnpm test"],
     expectedSummaryFormat: "Summary and verification"
+  };
+}
+
+function codexThreadRef(repoPath: string): CodexThreadRef {
+  return {
+    id: "codex_thread_repo",
+    threadId: "thread_repo",
+    name: "Repo task",
+    repoPath,
+    status: "idle",
+    source: "appServer",
+    lastSeenAt: fixedNow(),
+    metadata: {}
   };
 }
 
