@@ -4,6 +4,7 @@ import type {
   CodexDeliveryRequest,
   PreviewRequest
 } from "../services/bridge-contract.js";
+import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
 
 const api: AgentBridgeApi = {
@@ -11,11 +12,14 @@ const api: AgentBridgeApi = {
   listTargets: () => ipcRenderer.invoke("agentbridge:listTargets"),
   listLinks: () => ipcRenderer.invoke("agentbridge:listLinks"),
   listCaptures: () => ipcRenderer.invoke("agentbridge:listCaptures"),
+  listMissions: () => ipcRenderer.invoke("agentbridge:listMissions"),
+  getMissionDetail: (id: string) => ipcRenderer.invoke("agentbridge:getMissionDetail", id),
   createLink: (input: Omit<Link, "id" | "createdAt" | "updatedAt" | "enabled"> & { name: string }) =>
     ipcRenderer.invoke("agentbridge:createLink", input),
   previewHandoff: (input: PreviewRequest) => ipcRenderer.invoke("agentbridge:previewHandoff", input),
   revalidateTarget: (target: WindowsDesktopWindowTarget) => ipcRenderer.invoke("agentbridge:revalidateTarget", target),
-  configureCodexTarget: (repoPath: string, commands) => ipcRenderer.invoke("agentbridge:configureCodexTarget", repoPath, commands),
+  configureCodexTarget: (repoPath: string, commands?: RepoCommandConfig) =>
+    ipcRenderer.invoke("agentbridge:configureCodexTarget", repoPath, commands),
   deliverToCodex: (input: CodexDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverToCodex", input),
   bindMockBrowserSource: () => ipcRenderer.invoke("agentbridge:bindMockBrowserSource"),
   listAuditEvents: () => ipcRenderer.invoke("agentbridge:listAuditEvents"),

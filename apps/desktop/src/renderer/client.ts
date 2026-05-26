@@ -3,6 +3,7 @@ import type {
   CodexDeliveryRequest,
   CodexDeliveryResult,
   DeliveryPreview,
+  MissionDetail,
   PreviewRequest,
   WindowRevalidation
 } from "../services/bridge-contract.js";
@@ -12,6 +13,7 @@ import type {
   CodexDeepLinkTarget,
   Link,
   AuditEvent,
+  Mission,
   SourceEndpoint,
   TargetEndpoint,
   WindowsDesktopWindowTarget
@@ -43,6 +45,8 @@ let mockTargets: TargetEndpoint[] = [];
 let mockLinks: Link[] = [];
 let mockCaptures: Capture[] = [mockCapture];
 let mockAuditEvents: AuditEvent[] = [];
+let mockMissions: Mission[] = [];
+let mockMissionDetails = new Map<string, MissionDetail>();
 
 export function getAgentBridgeApi(): AgentBridgeApi {
   return window.agentBridge ?? createMockAgentBridgeApi();
@@ -61,6 +65,12 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     },
     async listCaptures() {
       return mockCaptures;
+    },
+    async listMissions() {
+      return mockMissions;
+    },
+    async getMissionDetail(id: string) {
+      return mockMissionDetails.get(id);
     },
     async bindMockBrowserSource() {
       mockSources = [mockSource];
@@ -143,6 +153,27 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         createdAt: now(),
         updatedAt: now()
       };
+      const artifacts = [
+        {
+          id: "artifact_prompt_mock",
+          missionId: mission.id,
+          handoffCardId: handoffCard.id,
+          kind: "generatedPrompt" as const,
+          title: "Generated prompt",
+          content: prompt,
+          metadata: {},
+          createdAt: now()
+        }
+      ];
+      mockMissions = [mission, ...mockMissions.filter((item) => item.id !== mission.id)];
+      mockMissionDetails.set(mission.id, {
+        mission,
+        handoffCards: [handoffCard],
+        artifacts,
+        deliveryAttempts: [],
+        runs: [],
+        verificationResults: []
+      });
       const source = mockSources.find((item) => item.id === capture.sourceId);
       return {
         handoff: {
@@ -169,18 +200,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         mission,
         handoffCard,
         taskSpec,
-        artifacts: [
-          {
-            id: "artifact_prompt_mock",
-            missionId: mission.id,
-            handoffCardId: handoffCard.id,
-            kind: "generatedPrompt",
-            title: "Generated prompt",
-            content: prompt,
-            metadata: {},
-            createdAt: now()
-          }
-        ],
+        artifacts,
         ...(source ? { source } : {}),
         ...(target ? { target } : {}),
         originalCaptureExcerpt: capture.text.slice(0, 320),

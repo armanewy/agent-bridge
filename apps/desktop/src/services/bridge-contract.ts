@@ -2,16 +2,19 @@ import type {
   BrowserTabSource,
   Capture,
   CodexDeepLinkTarget,
+  DeliveryAttempt,
   Artifact,
   HandoffCard,
   Handoff,
   Link,
   Mission,
+  Run,
   SourceEndpoint,
   TaskSpec,
   TargetEndpoint,
   WindowsDesktopWindowTarget,
-  AuditEvent
+  AuditEvent,
+  VerificationResult
 } from "@agentbridge/core";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 
@@ -56,11 +59,22 @@ export interface CodexDeliveryResult {
   error?: string;
 }
 
+export interface MissionDetail {
+  mission: Mission;
+  handoffCards: HandoffCard[];
+  artifacts: Artifact[];
+  deliveryAttempts: DeliveryAttempt[];
+  runs: Run[];
+  verificationResults: VerificationResult[];
+}
+
 export interface AgentBridgeApi {
   listSources(): Promise<SourceEndpoint[]>;
   listTargets(): Promise<TargetEndpoint[]>;
   listLinks(): Promise<Link[]>;
   listCaptures(): Promise<Capture[]>;
+  listMissions(): Promise<Mission[]>;
+  getMissionDetail(id: string): Promise<MissionDetail | undefined>;
   createLink(input: Omit<Link, "id" | "createdAt" | "updatedAt" | "enabled"> & { name: string }): Promise<Link>;
   previewHandoff(input: PreviewRequest): Promise<DeliveryPreview>;
   revalidateTarget(target: WindowsDesktopWindowTarget): Promise<WindowRevalidation>;

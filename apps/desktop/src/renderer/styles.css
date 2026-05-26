@@ -452,7 +452,7 @@ pre {
   }
 
   nav {
-    grid-template-columns: repeat(5, minmax(0, 1fr));
+    grid-template-columns: repeat(6, minmax(0, 1fr));
   }
 
   .nav-button {
@@ -473,4 +473,79 @@ pre {
   .metrics-panel {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
+}
+
+.mission-layout {
+  display: grid;
+  grid-template-columns: minmax(280px, 0.42fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.mission-row {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+  text-align: left;
+  color: #25313a;
+}
+
+.mission-row.selected {
+  border-color: #205f4b;
+  background: #f1faf6;
+}
+
+.mission-row span,
+.mission-row small {
+  color: #64737f;
+}
+
+.status-pill {
+  border-radius: 999px;
+  padding: 6px 10px;
+  background: #d8eee6;
+  color: #205f4b;
+  font-weight: 700;
+}
+
+.mission-detail-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
+  gap: 12px;
+  margin-bottom: 14px;
+}
+
+.detail-block {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 6px;
+  min-width: 0;
+}
+
+.detail-block strong {
+  overflow-wrap: anywhere;
+}
+
+.mission-task {
+  border-top: 1px solid #dce3e9;
+  padding-top: 14px;
+}
+
+.mission-task h3 {
+  margin: 6px 0;
+}
+
+.artifact-list {
+  margin-top: 16px;
+}
+
+.artifact-list .list-card strong {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
 }

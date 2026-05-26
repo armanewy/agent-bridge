@@ -7,7 +7,9 @@ import { LinkService } from "../services/link-service.js";
 import { TransformService } from "../services/transform-service.js";
 import { CodexTargetService } from "../services/codex-target-service.js";
 import { WindowsTargetService } from "../services/windows-target-service.js";
+import { MissionService } from "../services/mission-service.js";
 import type { CodexDeliveryRequest, PreviewRequest } from "../services/bridge-contract.js";
+import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -38,6 +40,7 @@ app.whenReady().then(async () => {
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);
   const transformService = new TransformService(store);
+  const missionService = new MissionService(store);
   const windowsTargetService = new WindowsTargetService();
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
 
@@ -49,6 +52,8 @@ app.whenReady().then(async () => {
     return stored.length > 0 ? stored : [];
   });
   ipcMain.handle("agentbridge:listLinks", () => linkService.listLinks());
+  ipcMain.handle("agentbridge:listMissions", () => missionService.listMissions());
+  ipcMain.handle("agentbridge:getMissionDetail", (_event, id: string) => missionService.getMissionDetail(id));
   ipcMain.handle("agentbridge:createLink", (_event, input: Omit<Link, "id" | "createdAt" | "updatedAt" | "enabled">) =>
     linkService.createLink(input)
   );
@@ -56,7 +61,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:revalidateTarget", (_event, target: WindowsDesktopWindowTarget) =>
     windowsTargetService.revalidate(target)
   );
-  ipcMain.handle("agentbridge:configureCodexTarget", (_event, repoPath: string, commands) =>
+  ipcMain.handle("agentbridge:configureCodexTarget", (_event, repoPath: string, commands?: RepoCommandConfig) =>
     codexTargetService.configureTarget(repoPath, commands)
   );
   ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));

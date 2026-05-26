@@ -3,6 +3,7 @@ import {
   CheckCircle,
   Chrome,
   ClipboardCheck,
+  ClipboardList,
   History,
   Link2,
   Monitor,
@@ -14,17 +15,20 @@ import type {
   CodexDeepLinkTarget,
   Link,
   AuditEvent,
+  Mission,
   SourceEndpoint,
   TargetEndpoint,
   Transform
 } from "@agentbridge/core";
 import type { CodexDeliveryResult, DeliveryPreview } from "../services/bridge-contract.js";
+import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
 import { HandoffPreview } from "../components/handoff-preview/HandoffPreview.js";
 import { LinkManager } from "../components/link-manager/LinkManager.js";
+import { MissionPanel } from "../components/mission/MissionPanel.js";
 
-type View = "home" | "sources" | "targets" | "links" | "audit";
+type View = "home" | "missions" | "sources" | "targets" | "links" | "audit";
 
 const api = getAgentBridgeApi();
 
@@ -35,6 +39,9 @@ export function App(): JSX.Element {
   const [links, setLinks] = useState<Link[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
+  const [missions, setMissions] = useState<Mission[]>([]);
+  const [selectedMissionId, setSelectedMissionId] = useState<string | undefined>();
+  const [missionDetail, setMissionDetail] = useState<MissionDetail | undefined>();
   const [recipe, setRecipe] = useState<Transform["recipe"]>("implementationBrief");
   const [repoPath, setRepoPath] = useState("");
   const [testCommand, setTestCommand] = useState("");
@@ -54,18 +61,28 @@ export function App(): JSX.Element {
   }, []);
 
   async function refresh(): Promise<void> {
-    const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents] = await Promise.all([
+    const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents, nextMissions] = await Promise.all([
       api.listSources(),
       api.listTargets(),
       api.listLinks(),
       api.listCaptures(),
-      api.listAuditEvents()
+      api.listAuditEvents(),
+      api.listMissions()
     ]);
     setSources(nextSources);
     setTargets(nextTargets);
     setLinks(nextLinks);
     setCaptures(nextCaptures);
     setAuditEvents(nextAuditEvents);
+    setMissions(nextMissions);
+    const nextSelectedMissionId = selectedMissionId ?? nextMissions[0]?.id;
+    setSelectedMissionId(nextSelectedMissionId);
+    setMissionDetail(nextSelectedMissionId ? await api.getMissionDetail(nextSelectedMissionId) : undefined);
+  }
+
+  async function selectMission(id: string): Promise<void> {
+    setSelectedMissionId(id);
+    setMissionDetail(await api.getMissionDetail(id));
   }
 
   async function bindMockSource(): Promise<void> {
@@ -112,7 +129,15 @@ export function App(): JSX.Element {
     }
 
     setDeliveryResult(undefined);
-    setPreview(await api.previewHandoff({ captureId: capture.id, targetId: target.id, recipe }));
+    const nextPreview = await api.previewHandoff({ captureId: capture.id, targetId: target.id, recipe });
+    const [nextMissions, nextMissionDetail] = await Promise.all([
+      api.listMissions(),
+      api.getMissionDetail(nextPreview.mission.id)
+    ]);
+    setPreview(nextPreview);
+    setMissions(nextMissions);
+    setSelectedMissionId(nextPreview.mission.id);
+    setMissionDetail(nextMissionDetail);
   }
 
   async function dryRunCodex(): Promise<void> {
@@ -164,6 +189,12 @@ export function App(): JSX.Element {
         </div>
         <nav aria-label="Main navigation">
           <NavButton icon={<ClipboardCheck size={18} />} label="Home" active={view === "home"} onClick={() => setView("home")} />
+          <NavButton
+            icon={<ClipboardList size={18} />}
+            label="Missions"
+            active={view === "missions"}
+            onClick={() => setView("missions")}
+          />
           <NavButton icon={<Chrome size={18} />} label="Sources" active={view === "sources"} onClick={() => setView("sources")} />
           <NavButton icon={<Monitor size={18} />} label="Targets" active={view === "targets"} onClick={() => setView("targets")} />
           <NavButton icon={<Link2 size={18} />} label="Links" active={view === "links"} onClick={() => setView("links")} />
@@ -237,6 +268,15 @@ export function App(): JSX.Element {
 
         {view === "sources" ? (
           <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
+        ) : null}
+
+        {view === "missions" ? (
+          <MissionPanel
+            missions={missions}
+            selectedMissionId={selectedMissionId}
+            detail={missionDetail}
+            onSelectMission={(id) => void selectMission(id)}
+          />
         ) : null}
 
         {view === "targets" ? (
@@ -383,6 +423,7 @@ function describeTarget(target: TargetEndpoint): { title: string; subtitle: stri
 function titleForView(view: View): string {
   return {
     home: "Dashboard",
+    missions: "Missions",
     sources: "Sources",
     targets: "Targets",
     links: "Links",
@@ -393,6 +434,7 @@ function titleForView(view: View): string {
 function subtitleForView(view: View): string {
   return {
     home: "Bind, transform, preview, and deliver local handoffs.",
+    missions: "Durable task cards, artifacts, repo context, and verification state.",
     sources: "Browser tab sources captured through explicit user actions.",
     targets: "Codex deep links and Windows desktop windows.",
     links: "Saved source-to-target routing definitions.",
