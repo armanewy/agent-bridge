@@ -10,6 +10,7 @@ import type {
   VerificationRunRequest,
   VerificationRunResponse,
   SetupStatus,
+  CodexAppServerStatus,
   WindowRevalidation
 } from "../services/bridge-contract.js";
 import type {
@@ -61,6 +62,13 @@ let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
 let mockExtensionId = "";
 let mockExtensionConnected = false;
+let mockCodexAppServerStatus: CodexAppServerStatus = {
+  configured: false,
+  available: false,
+  canSendIntoExistingThreads: false,
+  message: "Codex App Server endpoint is not configured.",
+  checkedAt: now()
+};
 
 export function getAgentBridgeApi(): AgentBridgeApi {
   return window.agentBridge ?? createMockAgentBridgeApi();
@@ -470,6 +478,10 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async getSetupStatus(): Promise<SetupStatus> {
       return mockSetupStatus(mockExtensionConnected);
     },
+    async getCodexAppServerStatus(): Promise<CodexAppServerStatus> {
+      mockCodexAppServerStatus = { ...mockCodexAppServerStatus, checkedAt: now() };
+      return mockCodexAppServerStatus;
+    },
     async configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus> {
       mockExtensionId = input.extensionId?.trim() || mockExtensionId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
       return mockSetupStatus(mockExtensionConnected);
@@ -503,6 +515,13 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockMissions = [];
       mockMissionDetails = new Map<string, MissionDetail>();
       mockExtensionConnected = false;
+      mockCodexAppServerStatus = {
+        configured: false,
+        available: false,
+        canSendIntoExistingThreads: false,
+        message: "Codex App Server endpoint is not configured.",
+        checkedAt: now()
+      };
     },
     async listAuditEvents() {
       return mockAuditEvents;

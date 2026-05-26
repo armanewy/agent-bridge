@@ -19,7 +19,7 @@ import type {
   Transform,
   WorkflowLink
 } from "@agentbridge/core";
-import type { CodexDeliveryResult, DeliveryPreview, SetupStatus } from "../services/bridge-contract.js";
+import type { CodexAppServerStatus, CodexDeliveryResult, DeliveryPreview, SetupStatus } from "../services/bridge-contract.js";
 import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
@@ -60,6 +60,7 @@ export function App(): JSX.Element {
   const [targetError, setTargetError] = useState<string | undefined>();
   const [setupError, setSetupError] = useState<string | undefined>();
   const [setupStatus, setSetupStatus] = useState<SetupStatus | undefined>();
+  const [codexAppServerStatus, setCodexAppServerStatus] = useState<CodexAppServerStatus | undefined>();
   const [extensionId, setExtensionId] = useState("");
   const [selectedCaptureId, setSelectedCaptureId] = useState<string | undefined>();
   const [selectedSourceId, setSelectedSourceId] = useState<string | undefined>();
@@ -138,7 +139,8 @@ export function App(): JSX.Element {
       nextCaptures,
       nextAuditEvents,
       nextMissions,
-      nextSetupStatus
+      nextSetupStatus,
+      nextCodexAppServerStatus
     ] = await Promise.all([
       api.listSources(),
       api.listTargets(),
@@ -148,7 +150,8 @@ export function App(): JSX.Element {
       api.listCaptures(),
       api.listAuditEvents(),
       api.listMissions(),
-      api.getSetupStatus()
+      api.getSetupStatus(),
+      api.getCodexAppServerStatus()
     ]);
     const nextCodexTarget = nextTargets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
     const nextCodexThreads = await api.listCodexThreads(nextCodexTarget?.repoPath);
@@ -162,6 +165,7 @@ export function App(): JSX.Element {
     setAuditEvents(nextAuditEvents);
     setMissions(nextMissions);
     setSetupStatus(nextSetupStatus);
+    setCodexAppServerStatus(nextCodexAppServerStatus);
     setExtensionId((current) => current || nextSetupStatus.extensionId || "");
     setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
     setSelectedSourceId((current) => current ?? nextSources[0]?.id);
@@ -651,6 +655,7 @@ export function App(): JSX.Element {
               onRefresh={() => void refresh()}
               onGoToConnect={() => setView("start")}
             />
+            <CodexAppServerPanel status={codexAppServerStatus} onRefresh={() => void refresh()} />
             <CodexTargetPanel
               repoPath={repoPath}
               onRepoPathChange={setRepoPath}
@@ -854,6 +859,49 @@ function EntityPanel({
             </article>
           ))
         )}
+      </div>
+    </section>
+  );
+}
+
+function CodexAppServerPanel({
+  status,
+  onRefresh
+}: {
+  status?: CodexAppServerStatus | undefined;
+  onRefresh(): void;
+}): JSX.Element {
+  const label = status?.available
+    ? "Connected"
+    : status?.configured
+      ? "Not connected"
+      : "Not configured";
+  const detail = status?.available
+    ? "AgentBridge can send prompts into selected existing Codex threads."
+    : status?.configured
+      ? status.message ?? "Endpoint configured, but the server did not respond."
+      : "Set CODEX_APP_SERVER_URL before launching AgentBridge to enable existing-thread continuation.";
+
+  return (
+    <section className="panel">
+      <div className="panel-heading compact">
+        <div>
+          <h2>Codex App Server</h2>
+          <p>{detail}</p>
+        </div>
+        <span className={status?.available ? "status-pill" : "status-pill muted"}>{label}</span>
+      </div>
+      <div className="setup-checks">
+        <article className={status?.available ? "setup-check ready" : "setup-check warning"}>
+          <strong>Existing Codex sessions</strong>
+          <span>{status?.canSendIntoExistingThreads ? "Can send" : "Open-only fallback"}</span>
+          <small>{status?.endpoint ?? "No endpoint configured"}</small>
+        </article>
+      </div>
+      <div className="setup-actions">
+        <button type="button" className="secondary-button" onClick={onRefresh}>
+          Check App Server
+        </button>
       </div>
     </section>
   );

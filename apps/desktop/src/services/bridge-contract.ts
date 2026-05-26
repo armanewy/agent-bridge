@@ -90,6 +90,15 @@ export interface CodexDeliveryResult {
   error?: string;
 }
 
+export interface CodexAppServerStatus {
+  configured: boolean;
+  endpoint?: string;
+  available: boolean;
+  canSendIntoExistingThreads: boolean;
+  message?: string;
+  checkedAt: string;
+}
+
 export interface MissionDetail {
   mission: Mission;
   handoffCards: HandoffCard[];
@@ -180,6 +189,7 @@ export interface AgentBridgeApi {
   deliverHandoffCardToCodex(input: HandoffCardDeliveryRequest): Promise<CodexDeliveryResult>;
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   getSetupStatus(): Promise<SetupStatus>;
+  getCodexAppServerStatus(): Promise<CodexAppServerStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
   connectChrome(): Promise<SetupStatus>;
   openChromeExtensionInstall(): Promise<void>;

@@ -36,7 +36,7 @@ export class WorkflowLinkService {
     const target = await this.store.getLinkableComponent(input.targetComponentId);
     const workspace = input.workspaceComponentId ? await this.store.getLinkableComponent(input.workspaceComponentId) : undefined;
 
-    if (!source?.roleCapabilities.canBeSource) {
+    if (!source?.roleCapabilities.canBeSource || !source.roleCapabilities.canCapture || source.status !== "available") {
       throw new Error("Choose a source component that can capture work.");
     }
     if (!target?.roleCapabilities.canBeTarget) {

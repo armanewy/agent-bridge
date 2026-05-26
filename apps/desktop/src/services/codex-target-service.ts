@@ -62,7 +62,7 @@ export class CodexTargetService {
         entityId: input.handoffId,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        details: { targetId: input.target.id, strategy: "codexDeepLink", deliveryMode: route.deliveryMode, dryRun: input.dryRun },
+        details: { targetId: input.target.id, strategy: strategyForRoute(route.deliveryMode), deliveryMode: route.deliveryMode, dryRun: input.dryRun },
         createdAt: attemptedAt
       });
 
@@ -71,6 +71,7 @@ export class CodexTargetService {
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
         targetId: input.target.id,
+        strategy: strategyForRoute(route.deliveryMode),
         success: true,
         attemptedAt,
         warnings: delivery.warnings,
@@ -91,7 +92,7 @@ export class CodexTargetService {
         entityId: input.handoffId,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        details: { targetId: input.target.id, strategy: "codexDeepLink", deliveryMode: route.deliveryMode, dryRun: input.dryRun },
+        details: { targetId: input.target.id, strategy: strategyForRoute(route.deliveryMode), deliveryMode: route.deliveryMode, dryRun: input.dryRun },
         createdAt: new Date().toISOString()
       });
 
@@ -113,6 +114,7 @@ export class CodexTargetService {
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
         targetId: input.target.id,
+        strategy: strategyForRoute(route.deliveryMode),
         success: false,
         attemptedAt,
         error: message,
@@ -131,7 +133,7 @@ export class CodexTargetService {
         entityId: input.handoffId,
         missionId: input.missionId,
         handoffCardId: input.handoffCardId,
-        details: { targetId: input.target.id, strategy: "codexDeepLink", deliveryMode: route.deliveryMode, error: message },
+        details: { targetId: input.target.id, strategy: strategyForRoute(route.deliveryMode), deliveryMode: route.deliveryMode, error: message },
         createdAt: new Date().toISOString()
       });
       throw error;
@@ -220,6 +222,7 @@ function createAttempt(input: {
   missionId: string;
   handoffCardId: string;
   targetId: string;
+  strategy: DeliveryAttempt["strategy"];
   success: boolean;
   attemptedAt: string;
   targetMetadata: Record<string, unknown>;
@@ -232,13 +235,23 @@ function createAttempt(input: {
     missionId: input.missionId,
     handoffCardId: input.handoffCardId,
     targetId: input.targetId,
-    strategy: "codexDeepLink",
+    strategy: input.strategy,
     success: input.success,
     warnings: input.warnings ?? [],
     ...(input.error ? { error: input.error } : {}),
     targetMetadata: input.targetMetadata,
     attemptedAt: input.attemptedAt
   };
+}
+
+function strategyForRoute(deliveryMode: CodexDeliveryMode): DeliveryAttempt["strategy"] {
+  const strategies: Record<CodexDeliveryMode, DeliveryAttempt["strategy"]> = {
+    newDeepLink: "newCodexDeepLink",
+    existingDeepLinkOpen: "existingCodexDeepLinkOpen",
+    appServerTurnStart: "codexAppServerTurnStart",
+    sdkRun: "codexSdkRun"
+  };
+  return strategies[deliveryMode];
 }
 
 function unique(values: string[]): string[] {

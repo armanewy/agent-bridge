@@ -692,6 +692,11 @@ button:disabled {
   color: #205f4b;
 }
 
+.result-line.warning {
+  background: #fff3d6;
+  color: #6f4a00;
+}
+
 .preview-empty {
   min-height: 220px;
   display: grid;
@@ -879,19 +884,31 @@ pre {
 
 @media (max-width: 980px) {
   .app-shell {
-    grid-template-columns: 1fr;
+    grid-template-columns: 76px minmax(0, 1fr);
   }
 
   .sidebar {
     position: static;
+    padding: 14px 8px;
+    gap: 18px;
+  }
+
+  .brand {
+    justify-content: center;
+    padding: 0;
+  }
+
+  .brand > div {
+    display: none;
   }
 
   nav {
-    grid-template-columns: repeat(4, minmax(0, 1fr));
+    grid-template-columns: 1fr;
   }
 
   .nav-button {
     justify-content: center;
+    padding: 10px;
   }
 
   .nav-button span {

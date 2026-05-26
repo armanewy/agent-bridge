@@ -34,6 +34,7 @@ const api: AgentBridgeApi = {
   deliverHandoffCardToCodex: (input: HandoffCardDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverHandoffCardToCodex", input),
   runVerification: (input: VerificationRunRequest) => ipcRenderer.invoke("agentbridge:runVerification", input),
   getSetupStatus: () => ipcRenderer.invoke("agentbridge:getSetupStatus"),
+  getCodexAppServerStatus: () => ipcRenderer.invoke("agentbridge:getCodexAppServerStatus"),
   configureNativeHost: (input: ConfigureNativeHostRequest) => ipcRenderer.invoke("agentbridge:configureNativeHost", input),
   connectChrome: () => ipcRenderer.invoke("agentbridge:connectChrome"),
   openChromeExtensionInstall: () => ipcRenderer.invoke("agentbridge:openChromeExtensionInstall"),

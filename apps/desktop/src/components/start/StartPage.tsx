@@ -89,12 +89,21 @@ export function StartPage({
   const codexTarget = targets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
   const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
   const realCaptures = captures.filter((capture) => capture.metadata["mode"] !== "mock");
-  const latestCapture = matchingSourceComponent ? realCaptures.find((capture) => captureBelongsToComponent(capture, matchingSourceComponent)) : undefined;
-  const latestTask = missions[0];
-  const canCreateLink = Boolean(
+  const sourceReady = Boolean(
     matchingSourceComponent?.roleCapabilities.canBeSource &&
-    (workspaceComponent?.roleCapabilities.canBeWorkspace || codexTarget) &&
-    (targetComponent?.roleCapabilities.canBeTarget || codexTarget)
+    matchingSourceComponent.roleCapabilities.canCapture &&
+    matchingSourceComponent.status === "available"
+  );
+  const repoReady = Boolean(workspaceComponent?.roleCapabilities.canBeWorkspace || codexTarget);
+  const codexReady = Boolean(codexTarget && (targetComponent?.roleCapabilities.canBeTarget || codexTarget));
+  const latestCapture = sourceReady && matchingSourceComponent
+    ? realCaptures.find((capture) => captureBelongsToComponent(capture, matchingSourceComponent))
+    : undefined;
+  const latestTask = activeLink ? missions[0] : undefined;
+  const canCreateLink = Boolean(
+    sourceReady &&
+    repoReady &&
+    codexReady
   );
   const canCreateTask = Boolean(activeLink && latestCapture);
 
@@ -124,40 +133,54 @@ export function StartPage({
             label="ChatGPT source"
             title={matchingSourceComponent?.label ?? missingSourceTitle(chatGptSourceMode)}
             detail={matchingSourceComponent ? sourceDetail(matchingSourceComponent) : missingSourceDetail(chatGptSourceMode, setupStatus)}
-            status={matchingSourceComponent ? "ready" : "missing"}
-            actionLabel={matchingSourceComponent ? (chatGptSourceMode === "desktop" ? "Probe again" : "Change tab") : missingSourceAction(chatGptSourceMode)}
-            onAction={chatGptSourceMode === "desktop" ? onProbeDesktopApps : matchingSourceComponent ? onOpenAdvanced : onConnectChrome}
+            status={sourceReady ? "ready" : "missing"}
+            actionLabel={sourceActionLabel(chatGptSourceMode, setupStatus, matchingSourceComponent)}
+            onAction={sourceAction(chatGptSourceMode, setupStatus, matchingSourceComponent, {
+              onProbeDesktopApps,
+              onOpenAdvanced,
+              onConnectChrome,
+              onCheckChromeConnection
+            })}
           />
-          <StartStep
-            icon={<FolderOpen size={20} />}
-            label="Repo"
-            title={workspaceComponent?.label ?? repoLabel(codexTarget) ?? "Choose repo"}
-            detail={repoDetail(workspaceComponent, codexTarget)}
-            status={workspaceComponent || codexTarget ? "ready" : "missing"}
-            actionLabel={workspaceComponent || codexTarget ? "Change repo" : "Choose repo"}
-            onAction={onChooseRepo}
-          />
-          <StartStep
-            icon={<Bot size={20} />}
-            label="Codex"
-            title={codexTarget ? (selectedCodexThread ? "Existing session selected" : "New thread selected") : "Ready after repo selection"}
-            detail={codexTarget ? codexSessionDetail(selectedCodexThread) : "Choose a repo to create the Codex target."}
-            status={codexTarget ? "ready" : "missing"}
-            actionLabel={codexTarget ? "Check Codex" : "Choose repo"}
-            onAction={codexTarget ? onOpenSettings : onChooseRepo}
-          />
+          {sourceReady ? (
+            <StartStep
+              icon={<FolderOpen size={20} />}
+              label="Repo"
+              title={workspaceComponent?.label ?? repoLabel(codexTarget) ?? "Choose repo"}
+              detail={repoDetail(workspaceComponent, codexTarget)}
+              status={repoReady ? "ready" : "missing"}
+              actionLabel={repoReady ? "Change repo" : "Choose repo"}
+              onAction={onChooseRepo}
+            />
+          ) : null}
+          {sourceReady && repoReady ? (
+            <StartStep
+              icon={<Bot size={20} />}
+              label="Codex"
+              title={codexTarget ? (selectedCodexThread ? "Existing session selected" : "New thread selected") : "Ready after repo selection"}
+              detail={codexTarget ? codexSessionDetail(selectedCodexThread) : "Choose a repo to create the Codex target."}
+              status={codexTarget ? "ready" : "missing"}
+              actionLabel={codexTarget ? "Check Codex" : "Choose repo"}
+              onAction={codexTarget ? onOpenSettings : onChooseRepo}
+            />
+          ) : null}
         </div>
 
-        {!matchingSourceComponent ? (
+        {!sourceReady ? (
           <div className="warning-band">
-            <span>{chatGptSourceMode === "desktop" ? "Open ChatGPT Desktop, then probe desktop apps. AgentBridge uses Windows UI Automation only when ChatGPT exposes a readable conversation candidate." : "Install/connect Chrome, open ChatGPT, then use the AgentBridge extension to sync this tab. Ctrl+Shift+Y captures selected text."}</span>
-            <button type="button" className="secondary-button" onClick={chatGptSourceMode === "desktop" ? onProbeDesktopApps : onCheckChromeConnection}>
-              {chatGptSourceMode === "desktop" ? "Probe desktop apps" : "Check connection"}
+            <span>{sourceBlockedCopy(chatGptSourceMode, setupStatus, matchingSourceComponent)}</span>
+            <button type="button" className="secondary-button" onClick={sourceAction(chatGptSourceMode, setupStatus, matchingSourceComponent, {
+              onProbeDesktopApps,
+              onOpenAdvanced,
+              onConnectChrome,
+              onCheckChromeConnection
+            })}>
+              {sourceActionLabel(chatGptSourceMode, setupStatus, matchingSourceComponent)}
             </button>
           </div>
         ) : null}
 
-        {codexTarget ? (
+        {sourceReady && repoReady && codexTarget ? (
           <CodexSessionChooser
             threads={codexThreads}
             selectedThreadId={selectedCodexThreadId}
@@ -196,24 +219,22 @@ export function StartPage({
         {targetError ? <p className="inline-error">{targetError}</p> : null}
       </section>
 
-      <section className="panel recent-panel">
-        <div className="panel-heading compact">
-          <div>
-            <h2>Latest Task</h2>
-            <p>{latestTask ? "Most recent Task Card" : "No task cards yet"}</p>
+      {activeLink && latestTask ? (
+        <section className="panel recent-panel">
+          <div className="panel-heading compact">
+            <div>
+              <h2>Latest Task</h2>
+              <p>Most recent Task Card</p>
+            </div>
+            <ClipboardList size={20} />
           </div>
-          <ClipboardList size={20} />
-        </div>
-        {latestTask ? (
           <article className="list-card">
             <strong>{latestTask.title}</strong>
             <span>{latestTask.status}</span>
             <small>{latestTask.updatedAt}</small>
           </article>
-        ) : (
-          <p className="empty-copy">Create the ChatGPT → Codex link, capture text, then create your first Task Card.</p>
-        )}
-      </section>
+        </section>
+      ) : null}
     </div>
   );
 }
@@ -411,6 +432,9 @@ function sourceMatchesMode(component: LinkableComponent, mode: "chrome" | "deskt
 function sourceDetail(component: LinkableComponent): string {
   if (component.provider === "chatgptDesktop") {
     const confidence = typeof component.metadata["confidence"] === "string" ? component.metadata["confidence"] : "unknown";
+    if (!component.roleCapabilities.canCapture || component.status !== "available") {
+      return `${component.subtitle} · detected, but selected text/latest messages are not exposed through UIA`;
+    }
     return `${component.subtitle} · UIA confidence ${confidence}`;
   }
   return component.subtitle;
@@ -429,6 +453,49 @@ function missingSourceDetail(mode: "chrome" | "desktop", status?: SetupStatus): 
 
 function missingSourceAction(mode: "chrome" | "desktop"): string {
   return mode === "desktop" ? "Probe ChatGPT Desktop" : "Connect Chrome";
+}
+
+function sourceBlockedCopy(mode: "chrome" | "desktop", status?: SetupStatus, component?: LinkableComponent): string {
+  if (mode === "desktop") {
+    if (component && (!component.roleCapabilities.canCapture || component.status !== "available")) {
+      return "ChatGPT Desktop was detected, but this window does not expose selected text or visible messages through Windows UI Automation. Linking is disabled for this source.";
+    }
+    return "Open ChatGPT Desktop, then probe desktop apps. AgentBridge uses Windows UI Automation only when ChatGPT exposes a readable conversation candidate.";
+  }
+  if (status?.extensionConnected) {
+    return "Chrome is connected, but no ChatGPT tab has been synced yet. In your existing ChatGPT tab, open the AgentBridge extension and click Sync this ChatGPT tab.";
+  }
+  return "Connect Chrome, install/open the AgentBridge extension, then sync your existing ChatGPT tab. Ctrl+Shift+Y captures selected text after the tab is synced.";
+}
+
+function sourceActionLabel(mode: "chrome" | "desktop", status?: SetupStatus, component?: LinkableComponent): string {
+  if (mode === "desktop") {
+    return component ? "Probe again" : "Probe ChatGPT Desktop";
+  }
+  if (component) {
+    return "Change tab";
+  }
+  return status?.extensionConnected ? "Refresh after sync" : "Connect Chrome";
+}
+
+function sourceAction(
+  mode: "chrome" | "desktop",
+  status: SetupStatus | undefined,
+  component: LinkableComponent | undefined,
+  actions: {
+    onProbeDesktopApps(): void;
+    onOpenAdvanced(): void;
+    onConnectChrome(): void;
+    onCheckChromeConnection(): void;
+  }
+): () => void {
+  if (mode === "desktop") {
+    return actions.onProbeDesktopApps;
+  }
+  if (component) {
+    return actions.onOpenAdvanced;
+  }
+  return status?.extensionConnected ? actions.onCheckChromeConnection : actions.onConnectChrome;
 }
 
 function repoLabel(target?: CodexDeepLinkTarget): string | undefined {

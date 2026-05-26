@@ -89,8 +89,9 @@ app.whenReady().then(async () => {
     ...(process.env.VITE_DEV_SERVER_URL ? { devServerUrl: process.env.VITE_DEV_SERVER_URL } : {})
   });
   const windowsTargetService = new WindowsTargetService();
+  const codexAppServerEndpoint = process.env.CODEX_APP_SERVER_URL;
   const codexAppServerClient = new CodexAppServerClient(
-    process.env.CODEX_APP_SERVER_URL ? { endpoint: process.env.CODEX_APP_SERVER_URL } : {}
+    codexAppServerEndpoint ? { endpoint: codexAppServerEndpoint } : {}
   );
   const codexSessionService = new CodexSessionService(store, codexAppServerClient);
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url), codexAppServerClient);
@@ -139,6 +140,17 @@ app.whenReady().then(async () => {
     verificationService.runVerification(input)
   );
   ipcMain.handle("agentbridge:getSetupStatus", () => setupService.getStatus());
+  ipcMain.handle("agentbridge:getCodexAppServerStatus", async () => {
+    const health = await codexAppServerClient.healthCheck();
+    return {
+      configured: Boolean(codexAppServerEndpoint),
+      ...(codexAppServerEndpoint ? { endpoint: codexAppServerEndpoint } : {}),
+      available: health.available,
+      canSendIntoExistingThreads: health.available,
+      ...(health.message ? { message: health.message } : {}),
+      checkedAt: new Date().toISOString()
+    };
+  });
   ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
     setupService.configureNativeHost(input ?? {})
   );

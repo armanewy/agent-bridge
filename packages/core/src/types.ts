@@ -511,7 +511,17 @@ export const DeliveryAttemptSchema = z.object({
   handoffCardId: z.string().optional(),
   runId: z.string().optional(),
   targetId: z.string().min(1),
-  strategy: z.enum(["codexDeepLink", "autoUiaOnly", "valuePattern", "clipboardPasteApproved", "dryRun"]),
+  strategy: z.enum([
+    "codexDeepLink",
+    "newCodexDeepLink",
+    "existingCodexDeepLinkOpen",
+    "codexAppServerTurnStart",
+    "codexSdkRun",
+    "autoUiaOnly",
+    "valuePattern",
+    "clipboardPasteApproved",
+    "dryRun"
+  ]),
   success: z.boolean(),
   warnings: z.array(z.string()),
   error: z.string().optional(),
