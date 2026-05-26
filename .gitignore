@@ -1,7 +1,10 @@
 node_modules/
 dist/
+dist-electron/
+dist-renderer/
 coverage/
 .vite/
+*.log
 *.tsbuildinfo
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map

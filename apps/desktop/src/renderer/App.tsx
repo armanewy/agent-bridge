@@ -1,0 +1,339 @@
+import { useEffect, useMemo, useState } from "react";
+import {
+  CheckCircle,
+  Chrome,
+  ClipboardCheck,
+  History,
+  Link2,
+  Monitor,
+  RefreshCw,
+  ShieldAlert
+} from "lucide-react";
+import type {
+  Capture,
+  CodexDeepLinkTarget,
+  Link,
+  SourceEndpoint,
+  TargetEndpoint,
+  Transform
+} from "@agentbridge/core";
+import type { CodexDeliveryResult, DeliveryPreview } from "../services/bridge-contract.js";
+import { getAgentBridgeApi } from "./client.js";
+import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
+import { HandoffPreview } from "../components/handoff-preview/HandoffPreview.js";
+import { LinkManager } from "../components/link-manager/LinkManager.js";
+
+type View = "home" | "sources" | "targets" | "links" | "audit";
+
+const api = getAgentBridgeApi();
+
+export function App(): JSX.Element {
+  const [view, setView] = useState<View>("home");
+  const [sources, setSources] = useState<SourceEndpoint[]>([]);
+  const [targets, setTargets] = useState<TargetEndpoint[]>([]);
+  const [links, setLinks] = useState<Link[]>([]);
+  const [captures, setCaptures] = useState<Capture[]>([]);
+  const [recipe, setRecipe] = useState<Transform["recipe"]>("implementationBrief");
+  const [repoPath, setRepoPath] = useState("");
+  const [targetError, setTargetError] = useState<string | undefined>();
+  const [preview, setPreview] = useState<DeliveryPreview | undefined>();
+  const [deliveryResult, setDeliveryResult] = useState<CodexDeliveryResult | undefined>();
+
+  const codexTarget = useMemo(
+    () => targets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink"),
+    [targets]
+  );
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  async function refresh(): Promise<void> {
+    const [nextSources, nextTargets, nextLinks, nextCaptures] = await Promise.all([
+      api.listSources(),
+      api.listTargets(),
+      api.listLinks(),
+      api.listCaptures()
+    ]);
+    setSources(nextSources);
+    setTargets(nextTargets);
+    setLinks(nextLinks);
+    setCaptures(nextCaptures);
+  }
+
+  async function bindMockSource(): Promise<void> {
+    await api.bindMockBrowserSource();
+    await refresh();
+  }
+
+  async function createCodexTarget(): Promise<void> {
+    setTargetError(undefined);
+    try {
+      await api.configureCodexTarget(repoPath.trim());
+      await refresh();
+    } catch (error) {
+      setTargetError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function createLink(): Promise<void> {
+    const source = sources[0];
+    const target = targets[0];
+    if (!source || !target) {
+      return;
+    }
+
+    await api.createLink({
+      name: `${source.kind} to ${target.kind}`,
+      sourceId: source.id,
+      targetId: target.id,
+      transformId: recipe,
+      deliveryMode: target.kind === "codexDeepLink" ? "codexDeepLink" : "dryRun"
+    });
+    await refresh();
+  }
+
+  async function createPreview(): Promise<void> {
+    const capture = captures[0];
+    const target = targets[0];
+    if (!capture || !target) {
+      return;
+    }
+
+    setDeliveryResult(undefined);
+    setPreview(await api.previewHandoff({ captureId: capture.id, targetId: target.id, recipe }));
+  }
+
+  async function dryRunCodex(): Promise<void> {
+    if (!preview || preview.target?.kind !== "codexDeepLink") {
+      return;
+    }
+
+    setDeliveryResult(
+      await api.deliverToCodex({
+        target: preview.target,
+        prompt: preview.handoff.prompt,
+        dryRun: true
+      })
+    );
+  }
+
+  return (
+    <div className="app-shell">
+      <aside className="sidebar">
+        <div className="brand">
+          <span className="brand-mark">AB</span>
+          <div>
+            <strong>AgentBridge</strong>
+            <small>Local handoff router</small>
+          </div>
+        </div>
+        <nav aria-label="Main navigation">
+          <NavButton icon={<ClipboardCheck size={18} />} label="Home" active={view === "home"} onClick={() => setView("home")} />
+          <NavButton icon={<Chrome size={18} />} label="Sources" active={view === "sources"} onClick={() => setView("sources")} />
+          <NavButton icon={<Monitor size={18} />} label="Targets" active={view === "targets"} onClick={() => setView("targets")} />
+          <NavButton icon={<Link2 size={18} />} label="Links" active={view === "links"} onClick={() => setView("links")} />
+          <NavButton icon={<History size={18} />} label="Audit" active={view === "audit"} onClick={() => setView("audit")} />
+        </nav>
+      </aside>
+
+      <main className="workspace">
+        <header className="topbar">
+          <div>
+            <h1>{titleForView(view)}</h1>
+            <p>{subtitleForView(view)}</p>
+          </div>
+          <button type="button" className="secondary-button" onClick={() => void refresh()}>
+            <RefreshCw size={16} />
+            Refresh
+          </button>
+        </header>
+
+        {view === "home" ? (
+          <div className="home-grid">
+            <section className="panel metrics-panel">
+              <Metric icon={<Chrome size={20} />} label="Sources" value={sources.length} />
+              <Metric icon={<Monitor size={20} />} label="Targets" value={targets.length} />
+              <Metric icon={<Link2 size={20} />} label="Links" value={links.length} />
+              <Metric icon={<ShieldAlert size={20} />} label="Warnings" value={preview?.handoff.redactionFindings.length ?? 0} />
+            </section>
+            <section className="panel workflow-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Handoff Workflow</h2>
+                  <p>Use the mock source until the extension/native-host flow is connected.</p>
+                </div>
+              </div>
+              <div className="button-row">
+                <button type="button" className="primary-button" onClick={() => void bindMockSource()}>
+                  <Chrome size={16} />
+                  Bind Mock Source
+                </button>
+                <button type="button" className="secondary-button" onClick={() => void createPreview()} disabled={!captures[0] || !targets[0]}>
+                  <ClipboardCheck size={16} />
+                  Preview Handoff
+                </button>
+              </div>
+            </section>
+            <CodexTargetPanel
+              repoPath={repoPath}
+              onRepoPathChange={setRepoPath}
+              onCreate={() => void createCodexTarget()}
+              latestTarget={codexTarget}
+              error={targetError}
+            />
+            <HandoffPreview
+              preview={preview}
+              deliveryResult={deliveryResult}
+              onApproveDryRun={() => void dryRunCodex()}
+              onCancel={() => {
+                setPreview(undefined);
+                setDeliveryResult(undefined);
+              }}
+            />
+          </div>
+        ) : null}
+
+        {view === "sources" ? (
+          <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
+        ) : null}
+
+        {view === "targets" ? (
+          <div className="two-column">
+            <CodexTargetPanel
+              repoPath={repoPath}
+              onRepoPathChange={setRepoPath}
+              onCreate={() => void createCodexTarget()}
+              latestTarget={codexTarget}
+              error={targetError}
+            />
+            <EntityPanel title="Saved Targets" items={targets.map((target) => describeTarget(target))} empty="No targets saved yet." />
+          </div>
+        ) : null}
+
+        {view === "links" ? (
+          <LinkManager
+            sources={sources}
+            targets={targets}
+            links={links}
+            recipe={recipe}
+            onRecipeChange={setRecipe}
+            onCreateLink={() => void createLink()}
+          />
+        ) : null}
+
+        {view === "audit" ? (
+          <EntityPanel
+            title="Recent Handoffs"
+            items={(preview ? [preview.handoff] : []).map((handoff) => ({
+              title: handoff.transformId,
+              subtitle: `${handoff.prompt.length} characters`,
+              detail: handoff.createdAt
+            }))}
+            empty="No handoffs previewed in this session."
+          />
+        ) : null}
+      </main>
+    </div>
+  );
+}
+
+function NavButton({
+  icon,
+  label,
+  active,
+  onClick
+}: {
+  icon: JSX.Element;
+  label: string;
+  active: boolean;
+  onClick(): void;
+}): JSX.Element {
+  return (
+    <button type="button" className={active ? "nav-button active" : "nav-button"} onClick={onClick}>
+      {icon}
+      <span>{label}</span>
+    </button>
+  );
+}
+
+function Metric({ icon, label, value }: { icon: JSX.Element; label: string; value: number }): JSX.Element {
+  return (
+    <div className="metric">
+      {icon}
+      <span>{label}</span>
+      <strong>{value}</strong>
+    </div>
+  );
+}
+
+function EntityPanel({
+  title,
+  items,
+  empty
+}: {
+  title: string;
+  items: Array<{ title: string; subtitle: string; detail?: string }>;
+  empty: string;
+}): JSX.Element {
+  return (
+    <section className="panel">
+      <div className="panel-heading">
+        <div>
+          <h2>{title}</h2>
+          <p>{items.length} saved item(s)</p>
+        </div>
+      </div>
+      <div className="item-list">
+        {items.length === 0 ? (
+          <p className="empty-copy">{empty}</p>
+        ) : (
+          items.map((item) => (
+            <article className="list-card" key={`${item.title}-${item.subtitle}`}>
+              <strong>{item.title}</strong>
+              <span>{item.subtitle}</span>
+              {item.detail ? <small>{item.detail}</small> : null}
+            </article>
+          ))
+        )}
+      </div>
+    </section>
+  );
+}
+
+function describeSource(source: SourceEndpoint): { title: string; subtitle: string; detail?: string } {
+  if (source.kind === "browserTab") {
+    return { title: source.title || "Browser tab", subtitle: source.url, detail: source.boundAt };
+  }
+  return { title: source.kind, subtitle: source.id };
+}
+
+function describeTarget(target: TargetEndpoint): { title: string; subtitle: string; detail?: string } {
+  if (target.kind === "codexDeepLink") {
+    return { title: "Codex", subtitle: target.repoPath, detail: target.boundAt };
+  }
+  if (target.kind === "windowsDesktopWindow") {
+    return { title: target.title, subtitle: target.executablePath ?? target.hwnd, detail: target.boundAt };
+  }
+  return { title: "Clipboard fallback", subtitle: target.parentTargetId };
+}
+
+function titleForView(view: View): string {
+  return {
+    home: "Dashboard",
+    sources: "Sources",
+    targets: "Targets",
+    links: "Links",
+    audit: "Audit"
+  }[view];
+}
+
+function subtitleForView(view: View): string {
+  return {
+    home: "Bind, transform, preview, and deliver local handoffs.",
+    sources: "Browser tab sources captured through explicit user actions.",
+    targets: "Codex deep links and Windows desktop windows.",
+    links: "Saved source-to-target routing definitions.",
+    audit: "Local provenance for previewed handoffs."
+  }[view];
+}
