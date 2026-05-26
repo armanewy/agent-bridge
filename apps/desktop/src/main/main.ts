@@ -1,4 +1,5 @@
-import { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, shell } from "electron";
+import { app, BrowserWindow, Menu, Tray, dialog, globalShortcut, nativeImage, ipcMain, shell } from "electron";
+import { access, mkdir, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDesktopStore } from "../services/store.js";
@@ -20,10 +21,13 @@ import type {
 } from "../services/bridge-contract.js";
 import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
+import { defaultAgentBridgeDataDir } from "@agentbridge/local-store";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
-const TRAY_ICON =
-  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+const TRAY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
+  <rect width="32" height="32" rx="7" fill="#11181d"/>
+  <path d="M8 22.5 14.5 7h3L24 22.5h-3.3l-1.2-3.2h-7l-1.2 3.2H8Zm5.5-6h5L16 9.8l-2.5 6.7Z" fill="#9ee493"/>
+</svg>`;
 
 let mainWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
@@ -51,12 +55,19 @@ async function createWindow(): Promise<void> {
 
 app.whenReady().then(async () => {
   const store = createDesktopStore();
+  const dataDir = defaultAgentBridgeDataDir();
+  const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);
   const transformService = new TransformService(store);
   const missionService = new MissionService(store);
   const verificationService = new VerificationService(store);
-  const setupService = new SetupService(store);
+  const setupService = new SetupService(store, undefined, undefined, process.cwd(), {
+    isPackaged: app.isPackaged,
+    resourcesPath: process.resourcesPath,
+    appPath: app.getAppPath(),
+    ...(process.env.VITE_DEV_SERVER_URL ? { devServerUrl: process.env.VITE_DEV_SERVER_URL } : {})
+  });
   const windowsTargetService = new WindowsTargetService();
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
   const handoffCardDeliveryService = new HandoffCardDeliveryService(store, codexTargetService);
@@ -92,9 +103,13 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
     setupService.configureNativeHost(input)
   );
+  ipcMain.handle("agentbridge:openDataFolder", () => openDataFolder(dataDir));
+  ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(dataDir, nativeHostLogPath));
+  ipcMain.handle("agentbridge:clearLocalData", () => clearLocalData(dataDir));
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());
 
+  registerAppMenu(dataDir, nativeHostLogPath);
   await createWindow();
   registerQuickActions();
 });
@@ -119,7 +134,7 @@ app.on("will-quit", () => {
 
 function registerQuickActions(): void {
   globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openInbox"));
-  const icon = nativeImage.createFromDataURL(TRAY_ICON);
+  const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(TRAY_ICON_SVG).toString("base64")}`);
   tray = new Tray(icon);
   tray.setToolTip("AgentBridge");
   tray.setContextMenu(
@@ -131,6 +146,67 @@ function registerQuickActions(): void {
       { label: "Quit", click: () => app.quit() }
     ])
   );
+}
+
+function registerAppMenu(dataDir: string, nativeHostLogPath: string): void {
+  Menu.setApplicationMenu(
+    Menu.buildFromTemplate([
+      {
+        label: "AgentBridge",
+        submenu: [
+          { label: "About AgentBridge", click: () => showAboutDialog(dataDir) },
+          { type: "separator" },
+          { label: "Quit", accelerator: "CommandOrControl+Q", click: () => app.quit() }
+        ]
+      },
+      {
+        label: "File",
+        submenu: [
+          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openInbox") },
+          { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
+          { label: "Open Data Folder", click: () => void openDataFolder(dataDir) },
+          { label: "Open Native Host Log", click: () => void openNativeHostLog(dataDir, nativeHostLogPath) }
+        ]
+      },
+      {
+        label: "View",
+        submenu: [
+          { role: "reload" },
+          { role: "toggleDevTools" },
+          { type: "separator" },
+          { role: "resetZoom" },
+          { role: "zoomIn" },
+          { role: "zoomOut" }
+        ]
+      },
+      {
+        label: "Help",
+        submenu: [
+          { label: "About", click: () => showAboutDialog(dataDir) }
+        ]
+      }
+    ])
+  );
+}
+
+function showAboutDialog(dataDir: string): void {
+  const owner = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  const options = {
+    type: "info",
+    title: "About AgentBridge",
+    message: "AgentBridge",
+    detail: [
+      `Version: ${app.getVersion()}`,
+      "Capture tasks, send to agents, verify results.",
+      "Local-first: task cards, artifacts, and settings stay on this machine by default.",
+      `Data directory: ${dataDir}`
+    ].join("\n")
+  } as const;
+  if (owner) {
+    void dialog.showMessageBox(owner, options);
+    return;
+  }
+  void dialog.showMessageBox(options);
 }
 
 function showMainWindow(action?: "openInbox" | "openTasks" | "createTaskFromLatestCapture"): void {
@@ -151,4 +227,22 @@ function showMainWindow(action?: "openInbox" | "openTasks" | "createTaskFromLate
   if (action) {
     window.webContents.send("agentbridge:quickAction", { type: action });
   }
+}
+
+async function openDataFolder(dataDir: string): Promise<void> {
+  await mkdir(dataDir, { recursive: true });
+  await shell.openPath(dataDir);
+}
+
+async function openNativeHostLog(dataDir: string, nativeHostLogPath: string): Promise<void> {
+  try {
+    await access(nativeHostLogPath);
+    await shell.openPath(nativeHostLogPath);
+  } catch {
+    await openDataFolder(dataDir);
+  }
+}
+
+async function clearLocalData(dataDir: string): Promise<void> {
+  await rm(join(dataDir, "agentbridge-store.json"), { force: true });
 }

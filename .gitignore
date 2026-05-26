@@ -1,8 +1,10 @@
 node_modules/
 dist/
+dist-bundle/
 dist-electron/
 dist-renderer/
 coverage/
+release/
 .vite/
 *.log
 *.tsbuildinfo

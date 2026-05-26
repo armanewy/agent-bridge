@@ -372,6 +372,21 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockExtensionId = input.extensionId.trim();
       return mockSetupStatus();
     },
+    async openDataFolder() {
+      return undefined;
+    },
+    async openNativeHostLog() {
+      return undefined;
+    },
+    async clearLocalData() {
+      mockSources = [mockSource];
+      mockTargets = [];
+      mockLinks = [];
+      mockCaptures = [mockCapture];
+      mockAuditEvents = [];
+      mockMissions = [];
+      mockMissionDetails = new Map<string, MissionDetail>();
+    },
     async listAuditEvents() {
       return mockAuditEvents;
     },
@@ -386,6 +401,10 @@ function mockSetupStatus(): SetupStatus {
     ...(mockExtensionId ? { extensionId: mockExtensionId } : {}),
     ...(mockExtensionId ? { nativeHostManifestPath: "mock://com.agentbridge.native_host.json" } : {}),
     ...(mockExtensionId ? { nativeHostLauncherPath: "mock://agentbridge-native-host.cmd" } : {}),
+    nativeHostScriptPath: "mock://native-host/native-host.mjs",
+    winUiaHelperPath: "mock://win-uia-helper/AgentBridge.WinUiaHelper.exe",
+    mode: "development",
+    devServerUrl: "http://127.0.0.1:5173/",
     storePath: "mock://AgentBridge",
     checks: [
       { id: "storeWritable", label: "Local store writable", status: "ready", details: "mock://AgentBridge" },

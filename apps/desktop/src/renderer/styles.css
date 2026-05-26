@@ -194,6 +194,11 @@ nav {
   border-color: #c8d2db;
 }
 
+.secondary-button.danger {
+  color: #9f2f24;
+  border-color: #efb1aa;
+}
+
 .icon-button {
   width: 36px;
   padding: 0;
@@ -727,6 +732,21 @@ pre {
   grid-template-columns: minmax(300px, 0.45fr) minmax(0, 1fr);
   gap: 16px;
   align-items: start;
+}
+
+.desktop-action-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.dev-mode-banner {
+  border: 1px solid #f0d099;
+  border-radius: 8px;
+  background: #fff8eb;
+  color: #6d4a09;
+  padding: 10px;
+  margin-bottom: 14px;
 }
 
 .setup-step-list {

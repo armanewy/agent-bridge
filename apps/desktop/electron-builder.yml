@@ -1,0 +1,38 @@
+appId: com.agentbridge.desktop
+productName: AgentBridge
+copyright: Copyright © 2026 AgentBridge
+directories:
+  output: release
+artifactName: AgentBridge-${version}-${os}-${arch}.${ext}
+asar: true
+files:
+  - package.json
+  - dist-renderer/**
+  - dist-electron/**
+  - "!**/*.map"
+extraResources:
+  - from: ../native-host/dist-bundle/native-host.mjs
+    to: native-host/native-host.mjs
+  - from: ../win-uia-helper/dist/win-x64
+    to: win-uia-helper
+    filter:
+      - "**/*"
+win:
+  icon: build/icon.ico
+  target:
+    - target: nsis
+      arch:
+        - x64
+    - target: dir
+      arch:
+        - x64
+  executableName: AgentBridge
+  signtoolOptions:
+    publisherName: AgentBridge
+nsis:
+  oneClick: false
+  perMachine: false
+  allowToChangeInstallationDirectory: true
+  createDesktopShortcut: true
+  createStartMenuShortcut: true
+  shortcutName: AgentBridge

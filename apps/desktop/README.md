@@ -1,21 +1,36 @@
 # AgentBridge Desktop
 
-Electron + React local companion shell for AgentBridge.
+Electron + React desktop app for AgentBridge.
 
 ## Development
 
 ```powershell
-pnpm --filter @agentbridge/desktop dev
+pnpm dev:desktop
+pnpm desktop:dev
 ```
 
-The Vite renderer runs in browser mode for quick UI development. The Electron main process and preload are type-checked and emitted during `pnpm --filter @agentbridge/desktop build`.
+The Vite renderer runs in browser mode for quick UI development. `pnpm desktop:dev` opens the Electron shell against the Vite renderer and shows a development-mode banner.
+
+## Packaging
+
+```powershell
+pnpm desktop:package
+```
+
+This builds:
+
+- the renderer and Electron main/preload files
+- a bundled native host script
+- the Windows UIA helper publish output
+- an unpacked Windows app at `apps/desktop/release/win-unpacked/AgentBridge.exe`
+
+`pnpm desktop:dist` creates the first-pass NSIS target. Code signing and auto-update are intentionally deferred.
 
 ## Current Flow
 
-- Mock browser source for development before native-host integration is complete.
-- Codex target configuration by local repository path.
-- Link manager for source/target/transform binding.
-- Deterministic transform preview.
-- Dry-run Codex deep-link delivery.
+- Inbox creates Task Cards from explicit browser captures.
+- Settings connects Chrome and configures the repo/Codex target.
+- Tasks shows task history, artifacts, verification, and follow-up drafts.
+- Advanced contains raw source/target/link/audit diagnostics.
 
 No cloud auth is required.

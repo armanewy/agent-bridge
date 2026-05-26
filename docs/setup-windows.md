@@ -26,7 +26,37 @@ dotnet build apps/win-uia-helper/AgentBridge.WinUiaHelper.csproj
 pnpm dev:desktop
 ```
 
-Open `http://127.0.0.1:5173`.
+This is for development only. The Vite URL is not the product surface.
+
+## Run Desktop App
+
+```powershell
+pnpm desktop:dev
+```
+
+This opens the Electron app and uses the Vite renderer in development mode.
+
+## Package Desktop App
+
+```powershell
+pnpm desktop:package
+```
+
+The unpacked Windows app is written to:
+
+```text
+apps/desktop/release/win-unpacked/AgentBridge.exe
+```
+
+Production app launches load built renderer files inside Electron, not `127.0.0.1`.
+
+For an installer target:
+
+```powershell
+pnpm desktop:dist
+```
+
+Code signing and auto-update are future production requirements.
 
 ## Load Extension
 
@@ -39,17 +69,17 @@ Open `http://127.0.0.1:5173`.
 
 Open Settings in the desktop app. The guided setup walks through:
 
-1. Local storage ready.
+1. Choose repo.
 2. Connect Chrome extension.
-3. Choose repo.
-4. Configure Codex target.
+3. Capture a test selection.
+4. Send a dry-run task to Codex.
 5. Optional verification commands.
 
-The setup screen hides registry and native-host details behind diagnostics. After setup is ready, go back to Inbox and create Task Cards from captured browser text.
+The setup screen presents this as desktop-app onboarding. Registry, native-host, local bridge, and helper paths stay behind diagnostics. After setup is ready, go back to Inbox and create Task Cards from captured browser text.
 
 ## Register Native Host
 
-The desktop Settings view can generate and register the development native-host manifest after you paste the unpacked Chrome extension ID.
+The desktop Settings view can generate and register the development Chrome connection after you paste the unpacked Chrome extension ID.
 
 Manual setup is also available:
 
@@ -85,6 +115,8 @@ Set `AGENTBRIDGE_STORE_DIR` to override it.
 ## Known Limitations
 
 - Native host registration requires the unpacked extension ID.
+- Chrome Web Store publishing is needed for a stable production extension ID.
+- Packaged native-host launch currently assumes Node is available on the machine.
 - The extension popup Health check is still the source of truth for extension-to-native-host connectivity.
 - Electron packaging is not signed.
 - Codex deep links create new threads only.

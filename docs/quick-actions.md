@@ -11,6 +11,7 @@ AgentBridge should be usable from normal developer flow without living in the da
   - Create Task from latest capture
   - Open latest task
   - Quit
+- Packaged app entry point: `apps/desktop/release/win-unpacked/AgentBridge.exe` after `pnpm desktop:package`.
 
 ## Behavior
 

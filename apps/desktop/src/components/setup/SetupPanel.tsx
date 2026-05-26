@@ -29,10 +29,16 @@ export function SetupPanel({
         <div className="panel-heading">
           <div>
             <h2>Connect AgentBridge</h2>
-            <p>Connect capture, repo, and Codex once. Daily use starts from the Inbox.</p>
+            <p>Choose a repo, connect Chrome, and send a dry-run task before daily use.</p>
           </div>
           <Settings size={20} />
         </div>
+
+        {status?.mode === "development" ? (
+          <div className="dev-mode-banner">
+            Development mode: using Vite at {status.devServerUrl ?? "127.0.0.1"}.
+          </div>
+        ) : null}
 
         <div className="setup-step-list">
           {steps.map((step, index) => (
@@ -85,7 +91,7 @@ export function SetupPanel({
           <div className="setup-checks">
             {(status?.checks ?? []).map((check) => (
               <article className={`setup-check ${check.status}`} key={check.id}>
-                <strong>{check.label}</strong>
+                <strong>{friendlyCheckLabel(check.id, check.label)}</strong>
                 <span>{check.status}</span>
                 <small>{check.details}</small>
               </article>
@@ -110,30 +116,32 @@ function setupSteps(status?: SetupStatus): SetupStep[] {
   const get = (id: string) => checks.get(id)?.status ?? "missing";
   return [
     {
-      id: "storeWritable",
-      title: "Local storage ready",
-      description: "Task Cards, artifacts, and verification results stay on this machine.",
-      status: get("storeWritable")
+      id: "repo",
+      title: "Choose a repo",
+      description: "Add the local repository Codex should work in using the repo panel beside this guide.",
+      status: get("codexTarget")
     },
     {
       id: "extension",
       title: "Connect Chrome extension",
-      description: "Paste the unpacked extension ID, then register the local bridge.",
+      description: "Install or load the AgentBridge Chrome extension, then connect it to this desktop app.",
       status: ["extensionId", "nativeHostManifest", "nativeHostPath", "allowedOrigin"].every((id) => get(id) === "ready")
         ? "ready"
         : "missing"
     },
     {
-      id: "repo",
-      title: "Choose repo",
-      description: "Add your main local repository in the Codex panel beside this setup guide.",
-      status: get("codexTarget")
+      id: "testCapture",
+      title: "Capture a test selection",
+      description: "Select text in Chrome, click AgentBridge capture or press Ctrl+Shift+Y, then confirm it appears in Inbox.",
+      status: get("extensionHealth") === "ready" ? "ready" : "warning",
+      optional: true
     },
     {
-      id: "agent",
-      title: "Configure Codex target",
-      description: "AgentBridge will open Codex with a repo-aware prompt through a deep link.",
-      status: get("codexTarget")
+      id: "dryRun",
+      title: "Send a dry-run task to Codex",
+      description: "Create a Task Card and use Dry run to inspect the Codex deep link before opening Codex.",
+      status: get("codexTarget") === "ready" ? "warning" : "missing",
+      optional: true
     },
     {
       id: "verification",
@@ -143,4 +151,17 @@ function setupSteps(status?: SetupStatus): SetupStep[] {
       optional: true
     }
   ];
+}
+
+function friendlyCheckLabel(id: string, fallback: string): string {
+  const labels: Record<string, string> = {
+    storeWritable: "Local storage ready",
+    extensionId: "Chrome extension selected",
+    nativeHostManifest: "Chrome connection installed",
+    nativeHostPath: "Local bridge installed",
+    allowedOrigin: "Chrome extension is authorized",
+    extensionHealth: "Chrome health check",
+    codexTarget: "Codex ready"
+  };
+  return labels[id] ?? fallback;
 }

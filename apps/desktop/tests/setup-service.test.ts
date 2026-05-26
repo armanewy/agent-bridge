@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonFileStore } from "@agentbridge/local-store";
-import { SetupService, type NativeHostRegistry } from "../src/services/setup-service.js";
+import { SetupService, resolveHelperPaths, type NativeHostRegistry } from "../src/services/setup-service.js";
 
 let tempDir: string;
 
@@ -35,6 +35,27 @@ describe("SetupService", () => {
     expect(status.extensionId).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
     expect(status.checks).toEqual(expect.arrayContaining([expect.objectContaining({ id: "allowedOrigin", status: "ready" })]));
     expect(manifest.allowed_origins).toContain("chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/");
+  });
+
+  it("resolves development helper paths from the repo root", () => {
+    const paths = resolveHelperPaths({ repoRoot: "C:\\repo\\agentbridge", devServerUrl: "http://127.0.0.1:5173/" });
+
+    expect(paths.mode).toBe("development");
+    expect(paths.nativeHostScriptPath).toContain("apps\\native-host\\dist\\src\\index.js");
+    expect(paths.winUiaHelperPath).toContain("apps\\win-uia-helper\\bin\\Debug");
+    expect(paths.devServerUrl).toBe("http://127.0.0.1:5173/");
+  });
+
+  it("resolves packaged helper paths from Electron resources", () => {
+    const paths = resolveHelperPaths({
+      isPackaged: true,
+      appPath: "C:\\Program Files\\AgentBridge\\resources\\app.asar",
+      resourcesPath: "C:\\Program Files\\AgentBridge\\resources"
+    });
+
+    expect(paths.mode).toBe("packaged");
+    expect(paths.nativeHostScriptPath).toBe("C:\\Program Files\\AgentBridge\\resources\\native-host\\native-host.mjs");
+    expect(paths.winUiaHelperPath).toBe("C:\\Program Files\\AgentBridge\\resources\\win-uia-helper\\AgentBridge.WinUiaHelper.exe");
   });
 });
 

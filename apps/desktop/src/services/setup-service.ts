@@ -15,13 +15,35 @@ export interface NativeHostRegistry {
   writeManifestPath(path: string): Promise<void>;
 }
 
+export interface HelperPathOptions {
+  isPackaged?: boolean;
+  resourcesPath?: string;
+  appPath?: string;
+  repoRoot?: string;
+  devServerUrl?: string;
+}
+
+export interface HelperPaths {
+  mode: "development" | "packaged";
+  appPath: string;
+  resourcesPath?: string;
+  nativeHostScriptPath: string;
+  winUiaHelperPath: string;
+  devServerUrl?: string;
+}
+
 export class SetupService {
+  private readonly helperPaths: HelperPaths;
+
   constructor(
     private readonly store: LocalStore,
     private readonly registry: NativeHostRegistry = new WindowsNativeHostRegistry(),
     private readonly dataDir = defaultAgentBridgeDataDir(),
-    private readonly repoRoot = process.cwd()
-  ) {}
+    private readonly repoRoot = process.cwd(),
+    helperPathOptions: HelperPathOptions = {}
+  ) {
+    this.helperPaths = resolveHelperPaths({ ...helperPathOptions, repoRoot });
+  }
 
   async getStatus(): Promise<SetupStatus> {
     const extensionId = await this.store.getSetting<string>(EXTENSION_ID_SETTING);
@@ -68,6 +90,10 @@ export class SetupService {
       ...(extensionId ? { extensionId } : {}),
       ...(manifestPath ? { nativeHostManifestPath: manifestPath } : {}),
       ...(manifestInfo?.hostPath ? { nativeHostLauncherPath: manifestInfo.hostPath } : {}),
+      nativeHostScriptPath: this.helperPaths.nativeHostScriptPath,
+      winUiaHelperPath: this.helperPaths.winUiaHelperPath,
+      mode: this.helperPaths.mode,
+      ...(this.helperPaths.devServerUrl ? { devServerUrl: this.helperPaths.devServerUrl } : {}),
       storePath: this.dataDir
     };
   }
@@ -81,13 +107,36 @@ export class SetupService {
     await mkdir(this.dataDir, { recursive: true });
     const launcherPath = join(this.dataDir, "agentbridge-native-host.cmd");
     const manifestPath = join(this.dataDir, `${HOST_NAME}.json`);
-    const hostScriptPath = resolve(this.repoRoot, "apps/native-host/dist/src/index.js");
-    await writeFile(launcherPath, renderLauncher(hostScriptPath), "utf8");
+    await writeFile(launcherPath, renderLauncher(this.helperPaths.nativeHostScriptPath), "utf8");
     await writeFile(manifestPath, renderManifest(launcherPath, extensionId), "utf8");
     await this.registry.writeManifestPath(manifestPath);
     await this.store.saveSetting(EXTENSION_ID_SETTING, extensionId);
     return this.getStatus();
   }
+}
+
+export function resolveHelperPaths(options: HelperPathOptions = {}): HelperPaths {
+  const isPackaged = options.isPackaged ?? false;
+  const repoRoot = resolve(options.repoRoot ?? process.cwd());
+
+  if (isPackaged) {
+    const resourcesPath = options.resourcesPath ?? resolve(options.appPath ?? repoRoot, "..");
+    return {
+      mode: "packaged",
+      appPath: options.appPath ?? repoRoot,
+      resourcesPath,
+      nativeHostScriptPath: join(resourcesPath, "native-host", "native-host.mjs"),
+      winUiaHelperPath: join(resourcesPath, "win-uia-helper", "AgentBridge.WinUiaHelper.exe")
+    };
+  }
+
+  return {
+    mode: "development",
+    appPath: repoRoot,
+    nativeHostScriptPath: resolve(repoRoot, "apps/native-host/dist/src/index.js"),
+    winUiaHelperPath: resolve(repoRoot, "apps/win-uia-helper/bin/Debug/net8.0-windows/AgentBridge.WinUiaHelper.exe"),
+    ...(options.devServerUrl ? { devServerUrl: options.devServerUrl } : {})
+  };
 }
 
 class WindowsNativeHostRegistry implements NativeHostRegistry {

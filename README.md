@@ -2,6 +2,8 @@
 
 AgentBridge is a local-first AI BuildOps assistant for developer tasks. It turns explicitly captured browser context into a durable Task Card with a structured TaskSpec, repo context, Codex delivery provenance, local artifacts, verification results, and follow-up drafts.
 
+AgentBridge is intended to run as a desktop application. `http://127.0.0.1:5173` is a development-only Vite preview; production users launch `AgentBridge.exe`.
+
 ## MVP Principles
 
 - Capture is user-triggered.
@@ -56,6 +58,9 @@ pnpm install
 pnpm build
 pnpm test
 pnpm dev:desktop
+pnpm desktop:dev
+pnpm desktop:package
+pnpm desktop:dist
 pnpm dev:extension
 pnpm dev:native-host
 dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj
@@ -63,7 +68,7 @@ dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj
 
 ## Current Status
 
-Waves 1-11 are implemented through zero-friction UX hardening:
+Waves 1-12 are implemented through desktop packaging and service masking:
 
 - Mission-first core schemas and v2 local persistence.
 - Deterministic TaskSpec compiler and Codex prompt renderer.
@@ -75,6 +80,8 @@ Waves 1-11 are implemented through zero-friction UX hardening:
 - Extension capture uses `activeTab`, `scripting`, and `nativeMessaging` without broad content scripts.
 - Extension keyboard command and desktop quick actions open the task-card flow without navigating the dashboard.
 - Default desktop navigation is Inbox, Tasks, Settings, and Advanced instead of exposing internals first.
+- Electron packaging produces a Windows unpacked app target with bundled native-host and Windows UIA helper resources.
+- Settings presents Chrome/repo/Codex onboarding with diagnostics behind Advanced details.
 
 ## Known Limitations
 
@@ -82,3 +89,5 @@ Waves 1-11 are implemented through zero-friction UX hardening:
 - Chrome native messaging still requires developer-mode extension setup.
 - Generic Windows app delivery exists at helper/service level but is not the primary polished UI path.
 - ChatGPT latest-message capture is best-effort and secondary to selected-text capture.
+- Packaged builds are not signed and do not auto-update yet.
+- The packaged native host still assumes Node is available; a standalone native-host binary is a future hardening item.

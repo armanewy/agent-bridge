@@ -1,6 +1,6 @@
 # Backlog
 
-## Done In Waves 7-11
+## Done In Waves 7-12
 
 - Mission / HandoffCard / TaskSpec core model.
 - Local-store v2 for missions, artifacts, runs, and verification results.
@@ -20,12 +20,16 @@
 - Guided setup wizard presentation.
 - Task detail timeline, next action, and readable work record.
 - Chrome keyboard capture command and desktop quick actions.
+- Electron packaging for an unpacked Windows app target.
+- Packaged helper resource layout for native host and Windows UIA helper.
+- Desktop app menu, About dialog, data folder/log actions, and clear local data action.
 
 ## P0 Dogfood Hardening
 
-- Add Codex repo directory picker.
 - Add a visible end-to-end demo script result after real extension capture.
-- Improve setup path resolution for packaged Electron vs development repo root.
+- Add Codex repo directory picker.
+- Replace packaged native-host Node dependency with a standalone native-host binary.
+- Add production Chrome Web Store extension ID/install path.
 - Polish quick-action routing in packaged Electron with a real tray icon.
 - Show target verification diff before Windows delivery.
 - Block terminal-like Windows targets unless the user confirms command-execution risk.

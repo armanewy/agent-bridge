@@ -270,6 +270,18 @@ export function App(): JSX.Element {
     await refresh();
   }
 
+  async function clearLocalData(): Promise<void> {
+    const confirmed = window.confirm("Clear local AgentBridge data on this machine? This removes saved task cards, captures, targets, artifacts, and settings.");
+    if (!confirmed) {
+      return;
+    }
+    await api.clearLocalData();
+    setPreview(undefined);
+    setDeliveryResult(undefined);
+    selectedMissionIdRef.current = undefined;
+    await refresh();
+  }
+
   return (
     <div className="app-shell">
       <aside className="sidebar">
@@ -412,6 +424,25 @@ export function App(): JSX.Element {
 
         {view === "settings" ? (
           <div className="settings-layout">
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Desktop app</h2>
+                  <p>AgentBridge runs as a local desktop app. Development mode uses Vite; packaged mode loads built files inside Electron.</p>
+                </div>
+              </div>
+              <div className="desktop-action-grid">
+                <button type="button" className="secondary-button" onClick={() => void api.openDataFolder()}>
+                  Open data folder
+                </button>
+                <button type="button" className="secondary-button" onClick={() => void api.openNativeHostLog()}>
+                  Open logs
+                </button>
+                <button type="button" className="secondary-button danger" onClick={() => void clearLocalData()}>
+                  Clear local data
+                </button>
+              </div>
+            </section>
             <SetupPanel
               status={setupStatus}
               extensionId={extensionId}

@@ -103,6 +103,10 @@ export interface SetupStatus {
   extensionId?: string;
   nativeHostManifestPath?: string;
   nativeHostLauncherPath?: string;
+  nativeHostScriptPath?: string;
+  winUiaHelperPath?: string;
+  mode: "development" | "packaged";
+  devServerUrl?: string;
   storePath: string;
 }
 
@@ -126,6 +130,9 @@ export interface AgentBridgeApi {
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   getSetupStatus(): Promise<SetupStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
+  openDataFolder(): Promise<void>;
+  openNativeHostLog(): Promise<void>;
+  clearLocalData(): Promise<void>;
   bindMockBrowserSource(): Promise<BrowserTabSource>;
   listAuditEvents(): Promise<AuditEvent[]>;
   clearAuditEvents(): Promise<void>;
