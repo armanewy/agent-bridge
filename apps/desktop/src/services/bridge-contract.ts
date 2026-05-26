@@ -9,6 +9,7 @@ import type {
   Link,
   Mission,
   Run,
+  VerificationCommand,
   SourceEndpoint,
   TaskSpec,
   TargetEndpoint,
@@ -68,6 +69,17 @@ export interface MissionDetail {
   verificationResults: VerificationResult[];
 }
 
+export interface VerificationRunRequest {
+  missionId: string;
+  commands?: VerificationCommand[];
+}
+
+export interface VerificationRunResponse {
+  run: Run;
+  result: VerificationResult;
+  artifacts: Artifact[];
+}
+
 export interface AgentBridgeApi {
   listSources(): Promise<SourceEndpoint[]>;
   listTargets(): Promise<TargetEndpoint[]>;
@@ -80,6 +92,7 @@ export interface AgentBridgeApi {
   revalidateTarget(target: WindowsDesktopWindowTarget): Promise<WindowRevalidation>;
   configureCodexTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget>;
   deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult>;
+  runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   bindMockBrowserSource(): Promise<BrowserTabSource>;
   listAuditEvents(): Promise<AuditEvent[]>;
   clearAuditEvents(): Promise<void>;

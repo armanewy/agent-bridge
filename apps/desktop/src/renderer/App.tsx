@@ -172,6 +172,17 @@ export function App(): JSX.Element {
     await refresh();
   }
 
+  async function runVerification(missionId: string): Promise<void> {
+    await api.runVerification({ missionId });
+    const [nextMissions, nextMissionDetail] = await Promise.all([
+      api.listMissions(),
+      api.getMissionDetail(missionId)
+    ]);
+    setMissions(nextMissions);
+    setSelectedMissionId(missionId);
+    setMissionDetail(nextMissionDetail);
+  }
+
   async function clearAudit(): Promise<void> {
     await api.clearAuditEvents();
     await refresh();
@@ -276,6 +287,7 @@ export function App(): JSX.Element {
             selectedMissionId={selectedMissionId}
             detail={missionDetail}
             onSelectMission={(id) => void selectMission(id)}
+            onRunVerification={(id) => void runVerification(id)}
           />
         ) : null}
 

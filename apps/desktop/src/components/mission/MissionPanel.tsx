@@ -1,19 +1,22 @@
 import { ClipboardList, FileText } from "lucide-react";
 import type { Mission } from "@agentbridge/core";
 import type { MissionDetail } from "../../services/bridge-contract.js";
+import { VerificationPanel } from "../verification/VerificationPanel.js";
 
 interface MissionPanelProps {
   missions: Mission[];
   selectedMissionId?: string | undefined;
   detail?: MissionDetail | undefined;
   onSelectMission(id: string): void;
+  onRunVerification(id: string): void;
 }
 
 export function MissionPanel({
   missions,
   selectedMissionId,
   detail,
-  onSelectMission
+  onSelectMission,
+  onRunVerification
 }: MissionPanelProps): JSX.Element {
   return (
     <div className="mission-layout">
@@ -76,6 +79,8 @@ export function MissionPanel({
                 </div>
               </div>
             ) : null}
+
+            <VerificationPanel detail={detail} onRunVerification={onRunVerification} />
 
             <div className="artifact-list">
               <span className="eyebrow">Artifacts</span>

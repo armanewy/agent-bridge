@@ -8,7 +8,8 @@ import { TransformService } from "../services/transform-service.js";
 import { CodexTargetService } from "../services/codex-target-service.js";
 import { WindowsTargetService } from "../services/windows-target-service.js";
 import { MissionService } from "../services/mission-service.js";
-import type { CodexDeliveryRequest, PreviewRequest } from "../services/bridge-contract.js";
+import { VerificationService } from "../services/verification-service.js";
+import type { CodexDeliveryRequest, PreviewRequest, VerificationRunRequest } from "../services/bridge-contract.js";
 import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
 
@@ -41,6 +42,7 @@ app.whenReady().then(async () => {
   const linkService = new LinkService(store);
   const transformService = new TransformService(store);
   const missionService = new MissionService(store);
+  const verificationService = new VerificationService(store);
   const windowsTargetService = new WindowsTargetService();
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
 
@@ -65,6 +67,9 @@ app.whenReady().then(async () => {
     codexTargetService.configureTarget(repoPath, commands)
   );
   ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));
+  ipcMain.handle("agentbridge:runVerification", (_event, input: VerificationRunRequest) =>
+    verificationService.runVerification(input)
+  );
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());
 

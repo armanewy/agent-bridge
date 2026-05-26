@@ -18,6 +18,7 @@ Mission detail shows:
 - mission title, goal, and status
 - repo path and branch when available
 - verification status placeholder
+- user-triggered verification panel with repo path, commands, and local execution warning
 - TaskSpec sections
 - artifacts attached to the mission
 - delivery attempts associated with the mission or its handoff cards

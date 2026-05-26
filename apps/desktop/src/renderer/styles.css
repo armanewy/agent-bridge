@@ -549,3 +549,54 @@ pre {
   align-items: center;
   gap: 6px;
 }
+
+.verification-panel {
+  border-top: 1px solid #dce3e9;
+  margin-top: 16px;
+  padding-top: 14px;
+}
+
+.panel-heading.compact {
+  margin-bottom: 10px;
+}
+
+.verification-warning {
+  border: 1px solid #f0d099;
+  border-radius: 8px;
+  background: #fff8eb;
+  color: #6d4a09;
+  padding: 10px;
+  margin-bottom: 10px;
+}
+
+.verification-meta {
+  display: grid;
+  gap: 4px;
+  color: #64737f;
+  overflow-wrap: anywhere;
+}
+
+.command-list {
+  display: grid;
+  gap: 8px;
+  padding: 0;
+  margin: 12px 0;
+  list-style: none;
+}
+
+.command-list li {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 10px;
+  display: grid;
+  gap: 6px;
+}
+
+.command-list code {
+  overflow-wrap: anywhere;
+}
+
+.verification-summary {
+  margin: 10px 0 0;
+  color: #25313a;
+}

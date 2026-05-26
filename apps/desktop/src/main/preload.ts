@@ -2,7 +2,8 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AgentBridgeApi,
   CodexDeliveryRequest,
-  PreviewRequest
+  PreviewRequest,
+  VerificationRunRequest
 } from "../services/bridge-contract.js";
 import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
@@ -21,6 +22,7 @@ const api: AgentBridgeApi = {
   configureCodexTarget: (repoPath: string, commands?: RepoCommandConfig) =>
     ipcRenderer.invoke("agentbridge:configureCodexTarget", repoPath, commands),
   deliverToCodex: (input: CodexDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverToCodex", input),
+  runVerification: (input: VerificationRunRequest) => ipcRenderer.invoke("agentbridge:runVerification", input),
   bindMockBrowserSource: () => ipcRenderer.invoke("agentbridge:bindMockBrowserSource"),
   listAuditEvents: () => ipcRenderer.invoke("agentbridge:listAuditEvents"),
   clearAuditEvents: () => ipcRenderer.invoke("agentbridge:clearAuditEvents")

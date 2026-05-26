@@ -5,6 +5,8 @@ import type {
   DeliveryPreview,
   MissionDetail,
   PreviewRequest,
+  VerificationRunRequest,
+  VerificationRunResponse,
   WindowRevalidation
 } from "../services/bridge-contract.js";
 import type {
@@ -252,6 +254,59 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         repoPath: input.target.repoPath,
         ...(input.dryRun ? {} : { openedAt: now() })
       };
+    },
+    async runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse> {
+      const detail = mockMissionDetails.get(input.missionId);
+      if (!detail) {
+        throw new Error("Mission not found.");
+      }
+      const artifact = {
+        id: `artifact_verification_${Date.now()}`,
+        missionId: input.missionId,
+        kind: "gitDiff" as const,
+        title: "Git diff summary",
+        content: "Mock verification captured a git diff summary.",
+        metadata: {},
+        createdAt: now()
+      };
+      const run = {
+        id: `run_${Date.now()}`,
+        missionId: input.missionId,
+        status: "needs_review" as const,
+        stepIds: [],
+        artifactIds: [artifact.id],
+        startedAt: now(),
+        completedAt: now(),
+        createdAt: now(),
+        updatedAt: now()
+      };
+      const result = {
+        id: `verification_${Date.now()}`,
+        missionId: input.missionId,
+        runId: run.id,
+        status: "needs_review" as const,
+        commandResults: [],
+        summary: "Mock verification needs review.",
+        artifactIds: [artifact.id],
+        createdAt: now()
+      };
+      mockMissionDetails.set(input.missionId, {
+        ...detail,
+        mission: {
+          ...detail.mission,
+          status: "needs_review",
+          runIds: [...detail.mission.runIds, run.id],
+          artifactIds: [...detail.mission.artifactIds, artifact.id],
+          updatedAt: now()
+        },
+        artifacts: [artifact, ...detail.artifacts],
+        runs: [run, ...detail.runs],
+        verificationResults: [result, ...detail.verificationResults]
+      });
+      mockMissions = mockMissions.map((mission) =>
+        mission.id === input.missionId ? mockMissionDetails.get(input.missionId)?.mission ?? mission : mission
+      );
+      return { run, result, artifacts: [artifact] };
     },
     async listAuditEvents() {
       return mockAuditEvents;
