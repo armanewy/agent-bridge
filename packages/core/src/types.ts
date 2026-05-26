@@ -423,6 +423,197 @@ export const VerificationResultSchema = z.object({
 });
 export type VerificationResult = z.infer<typeof VerificationResultSchema>;
 
+export const AgentProviderKindSchema = z.enum(["planner", "executor", "reviewer", "verifier", "browser", "repository", "unknown"]);
+export type AgentProviderKind = z.infer<typeof AgentProviderKindSchema>;
+
+export const AgentProviderCapabilitySchema = z.enum([
+  "canPlan",
+  "canReview",
+  "canExecuteCode",
+  "canUseRepo",
+  "canListSessions",
+  "canCreateSession",
+  "canResumeSession",
+  "canSendMessage",
+  "canStreamEvents",
+  "canReadResult",
+  "canReturnArtifacts",
+  "canRunTools",
+  "canVerify"
+]);
+export type AgentProviderCapability = z.infer<typeof AgentProviderCapabilitySchema>;
+
+export const AgentProviderAuthModeSchema = z.enum(["apiKey", "localApp", "appServer", "cli", "none", "unknown"]);
+export type AgentProviderAuthMode = z.infer<typeof AgentProviderAuthModeSchema>;
+
+export const AgentProviderStatusSchema = z.enum(["available", "needsAuth", "unavailable", "unsupported"]);
+export type AgentProviderStatus = z.infer<typeof AgentProviderStatusSchema>;
+
+export const AgentProviderProfileSchema = z.object({
+  id: z.string().min(1),
+  kind: AgentProviderKindSchema,
+  displayName: z.string().min(1),
+  capabilities: z.array(AgentProviderCapabilitySchema),
+  authMode: AgentProviderAuthModeSchema,
+  status: AgentProviderStatusSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type AgentProviderProfile = z.infer<typeof AgentProviderProfileSchema>;
+
+export const AgentSessionStatusSchema = z.enum(["unknown", "active", "idle", "notLoaded", "unavailable", "archived"]);
+export type AgentSessionStatus = z.infer<typeof AgentSessionStatusSchema>;
+
+export const AgentSessionRefSchema = z.object({
+  id: z.string().min(1),
+  providerId: z.string().min(1),
+  providerKind: AgentProviderKindSchema,
+  externalSessionId: z.string().min(1),
+  title: z.string().optional(),
+  repoPath: z.string().optional(),
+  status: AgentSessionStatusSchema,
+  createdAt: TimestampSchema.optional(),
+  lastSeenAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type AgentSessionRef = z.infer<typeof AgentSessionRefSchema>;
+
+export const AgentTurnSchema = z.object({
+  id: z.string().min(1),
+  providerId: z.string().min(1),
+  sessionRefId: z.string().min(1),
+  externalTurnId: z.string().optional(),
+  role: z.enum(["user", "assistant", "system", "tool"]),
+  content: z.string(),
+  status: z.enum(["pending", "running", "completed", "failed", "cancelled"]),
+  artifactIds: z.array(z.string()),
+  createdAt: TimestampSchema,
+  completedAt: TimestampSchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type AgentTurn = z.infer<typeof AgentTurnSchema>;
+
+export const AgentEventSchema = z.object({
+  id: z.string().min(1),
+  providerId: z.string().min(1),
+  sessionRefId: z.string().optional(),
+  turnId: z.string().optional(),
+  type: z.string().min(1),
+  payload: z.record(z.unknown()),
+  createdAt: TimestampSchema
+});
+export type AgentEvent = z.infer<typeof AgentEventSchema>;
+
+export const PlannerRequestSchema = z.object({
+  id: z.string().optional(),
+  missionId: z.string().optional(),
+  sessionRefId: z.string().optional(),
+  prompt: z.string().min(1),
+  repoContext: RepoContextPackSchema.optional(),
+  contextArtifactIds: z.array(z.string()).default([]),
+  createdAt: TimestampSchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type PlannerRequest = z.infer<typeof PlannerRequestSchema>;
+
+export const PlannerResponseSchema = z.object({
+  id: z.string().optional(),
+  providerId: z.string().min(1),
+  sessionRefId: z.string().optional(),
+  turnId: z.string().optional(),
+  content: z.string().min(1),
+  taskSpec: TaskSpecSchema.optional(),
+  artifactIds: z.array(z.string()).default([]),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type PlannerResponse = z.infer<typeof PlannerResponseSchema>;
+
+export const ExecutorTaskRequestSchema = z.object({
+  id: z.string().optional(),
+  missionId: z.string().min(1),
+  handoffCardId: z.string().optional(),
+  sessionRefId: z.string().optional(),
+  taskSpec: TaskSpecSchema,
+  generatedPrompt: z.string().optional(),
+  repoContext: RepoContextPackSchema.optional(),
+  dryRun: z.boolean().default(false),
+  metadata: z.record(z.unknown()).default({})
+});
+export type ExecutorTaskRequest = z.infer<typeof ExecutorTaskRequestSchema>;
+
+export const ExecutorTaskResultSchema = z.object({
+  id: z.string().optional(),
+  providerId: z.string().min(1),
+  sessionRef: AgentSessionRefSchema.optional(),
+  turnId: z.string().optional(),
+  deliveryMode: z.enum(["newSession", "existingSession", "openOnlyFallback", "dryRun"]),
+  success: z.boolean(),
+  warnings: z.array(z.string()).default([]),
+  artifactIds: z.array(z.string()).default([]),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type ExecutorTaskResult = z.infer<typeof ExecutorTaskResultSchema>;
+
+export const ReviewRequestSchema = z.object({
+  id: z.string().optional(),
+  missionId: z.string().min(1),
+  sessionRefId: z.string().optional(),
+  taskSpec: TaskSpecSchema,
+  verificationResult: VerificationResultSchema.optional(),
+  verificationSummary: z.string().optional(),
+  artifactIds: z.array(z.string()).default([]),
+  createdAt: TimestampSchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type ReviewRequest = z.infer<typeof ReviewRequestSchema>;
+
+export const ReviewResultSchema = z.object({
+  id: z.string().optional(),
+  providerId: z.string().min(1),
+  sessionRefId: z.string().optional(),
+  turnId: z.string().optional(),
+  content: z.string().min(1),
+  statusSuggestion: z.enum(["passed", "needs_review", "follow_up_needed"]),
+  followUpTaskSpec: TaskSpecSchema.optional(),
+  artifactIds: z.array(z.string()).default([]),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type ReviewResult = z.infer<typeof ReviewResultSchema>;
+
+export interface PlannerProvider {
+  profile(): AgentProviderProfile;
+  status(): Promise<AgentProviderProfile>;
+  createSession(input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }): Promise<AgentSessionRef>;
+  resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef>;
+  sendMessage(sessionRef: AgentSessionRef, message: string, context?: PlannerRequest): Promise<AgentTurn>;
+  plan(input: PlannerRequest): Promise<PlannerResponse>;
+  review(input: ReviewRequest): Promise<ReviewResult>;
+}
+
+export interface ExecutorProvider {
+  profile(): AgentProviderProfile;
+  status(): Promise<AgentProviderProfile>;
+  listSessions(filter?: { repoPath?: string; searchTerm?: string }): Promise<AgentSessionRef[]>;
+  createSession(input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }): Promise<AgentSessionRef>;
+  resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef>;
+  sendTask(input: ExecutorTaskRequest): Promise<ExecutorTaskResult>;
+}
+
+export interface ReviewerProvider {
+  profile(): AgentProviderProfile;
+  status(): Promise<AgentProviderProfile>;
+  review(input: ReviewRequest): Promise<ReviewResult>;
+}
+
+export interface ProviderRegistry {
+  registerProvider(provider: PlannerProvider | ExecutorProvider | ReviewerProvider): void;
+  listProviderProfiles(): Promise<AgentProviderProfile[]>;
+  getProviderProfile(providerId: string): Promise<AgentProviderProfile | undefined>;
+  listSessions(providerId?: string): Promise<AgentSessionRef[]>;
+}
+
 export const RunStepSchema = z.object({
   id: z.string().min(1),
   runId: z.string().min(1),

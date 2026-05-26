@@ -4,6 +4,10 @@ import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonFileStore } from "../src/index.js";
 import type {
+  AgentEvent,
+  AgentProviderProfile,
+  AgentSessionRef,
+  AgentTurn,
   Artifact,
   AuditEvent,
   CodexThreadRef,
@@ -166,6 +170,66 @@ describe("JsonFileStore", () => {
     expect(await store.getExtensionHeartbeat()).toEqual(heartbeat);
   });
 
+  it("roundtrips provider profiles, sessions, turns, and events", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    const profile: AgentProviderProfile = {
+      id: "openai-planner",
+      kind: "planner",
+      displayName: "OpenAI Planner",
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canSendMessage"],
+      authMode: "apiKey",
+      status: "needsAuth",
+      metadata: { model: "gpt-4.1" }
+    };
+    const session: AgentSessionRef = {
+      id: "session_1",
+      providerId: profile.id,
+      providerKind: "planner",
+      externalSessionId: "response_conversation_1",
+      title: "Workbench planning",
+      status: "active",
+      createdAt: now,
+      lastSeenAt: now,
+      metadata: {}
+    };
+    const turn: AgentTurn = {
+      id: "turn_1",
+      providerId: profile.id,
+      sessionRefId: session.id,
+      role: "user",
+      content: "Plan the workbench.",
+      status: "completed",
+      artifactIds: ["artifact_1"],
+      createdAt: now,
+      completedAt: now,
+      metadata: {}
+    };
+    const event: AgentEvent = {
+      id: "event_1",
+      providerId: profile.id,
+      sessionRefId: session.id,
+      turnId: turn.id,
+      type: "turn.completed",
+      payload: { ok: true },
+      createdAt: now
+    };
+
+    await store.saveProviderProfile(profile);
+    await store.saveAgentSession(session);
+    await store.saveAgentTurn(turn);
+    await store.appendAgentEvent(event);
+
+    expect(await store.getProviderProfile(profile.id)).toEqual(profile);
+    expect(await store.listProviderProfiles()).toEqual([profile]);
+    expect(await store.getAgentSession(session.id)).toEqual(session);
+    expect(await store.listAgentSessions(profile.id)).toEqual([session]);
+    expect(await store.getAgentTurn(turn.id)).toEqual(turn);
+    expect(await store.listAgentTurns(session.id)).toEqual([turn]);
+    expect(await store.listAgentEvents({ providerId: profile.id })).toEqual([event]);
+    expect(await store.listAgentEvents({ sessionRefId: session.id, type: "turn.completed" })).toEqual([event]);
+  });
+
   it("saves handoffs and audit events", async () => {
     const store = new JsonFileStore(tempDir);
     const now = new Date().toISOString();
@@ -271,6 +335,54 @@ describe("JsonFileStore", () => {
 
     expect(await store.getHandoff("handoff_legacy")).toEqual(handoff);
     expect(await store.listMissions()).toEqual([]);
+  });
+
+  it("loads a v4-shaped store with empty provider sections", async () => {
+    const mission: Mission = {
+      id: "mission_v4",
+      title: "Existing mission",
+      goal: "Remain readable after migration.",
+      status: "draft",
+      sourceIds: [],
+      captureIds: [],
+      handoffCardIds: [],
+      artifactIds: [],
+      runIds: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    };
+    await writeFile(
+      join(tempDir, "agentbridge-store.json"),
+      JSON.stringify({
+        version: 4,
+        links: {},
+        linkableComponents: {},
+        workflowLinks: {},
+        codexThreadRefs: {},
+        sources: {},
+        targets: {},
+        captures: {},
+        handoffs: {},
+        deliveryAttempts: {},
+        missions: { [mission.id]: mission },
+        handoffCards: {},
+        artifacts: {},
+        runs: {},
+        runSteps: {},
+        verificationResults: {},
+        approvals: {},
+        auditEvents: [],
+        settings: {}
+      }),
+      "utf8"
+    );
+
+    const store = new JsonFileStore(tempDir);
+
+    expect(await store.getMission(mission.id)).toEqual(mission);
+    expect(await store.listProviderProfiles()).toEqual([]);
+    expect(await store.listAgentSessions()).toEqual([]);
+    expect(await store.listAgentEvents()).toEqual([]);
   });
 
   it("roundtrips mission, handoff card, and artifact", async () => {

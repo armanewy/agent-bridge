@@ -4,6 +4,10 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import {
   AuditEventSchema,
+  AgentEventSchema,
+  AgentProviderProfileSchema,
+  AgentSessionRefSchema,
+  AgentTurnSchema,
   ArtifactSchema,
   CaptureSchema,
   CodexThreadRefSchema,
@@ -19,6 +23,10 @@ import {
   VerificationResultSchema,
   WorkflowLinkSchema,
   type Approval,
+  type AgentEvent,
+  type AgentProviderProfile,
+  type AgentSessionRef,
+  type AgentTurn,
   type Artifact,
   type AuditEvent,
   type Capture,
@@ -42,7 +50,7 @@ import {
   type WorkflowLink
 } from "@agentbridge/core";
 
-export const CURRENT_STORE_VERSION = 4;
+export const CURRENT_STORE_VERSION = 5;
 
 export interface LocalStore {
   saveLink(link: Link): Promise<void>;
@@ -61,6 +69,17 @@ export interface LocalStore {
   listCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]>;
   saveExtensionHeartbeat(heartbeat: ExtensionHeartbeat): Promise<void>;
   getExtensionHeartbeat(): Promise<ExtensionHeartbeat | undefined>;
+  saveProviderProfile(profile: AgentProviderProfile): Promise<void>;
+  getProviderProfile(id: string): Promise<AgentProviderProfile | undefined>;
+  listProviderProfiles(): Promise<AgentProviderProfile[]>;
+  saveAgentSession(session: AgentSessionRef): Promise<void>;
+  getAgentSession(id: string): Promise<AgentSessionRef | undefined>;
+  listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
+  saveAgentTurn(turn: AgentTurn): Promise<void>;
+  getAgentTurn(id: string): Promise<AgentTurn | undefined>;
+  listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
+  appendAgentEvent(event: AgentEvent): Promise<void>;
+  listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
   saveSource(source: SourceEndpoint): Promise<void>;
   getSource(id: string): Promise<SourceEndpoint | undefined>;
   listSources(): Promise<SourceEndpoint[]>;
@@ -104,12 +123,23 @@ export interface LocalStore {
   getSetting<T = unknown>(key: string): Promise<T | undefined>;
 }
 
+export interface AgentEventFilter {
+  providerId?: string;
+  sessionRefId?: string;
+  turnId?: string;
+  type?: string;
+}
+
 interface StoreData {
   version: number;
   links: Record<string, Link>;
   linkableComponents: Record<string, LinkableComponent>;
   workflowLinks: Record<string, WorkflowLink>;
   codexThreadRefs: Record<string, CodexThreadRef>;
+  providerProfiles: Record<string, AgentProviderProfile>;
+  agentSessions: Record<string, AgentSessionRef>;
+  agentTurns: Record<string, AgentTurn>;
+  agentEvents: Record<string, AgentEvent>;
   sources: Record<string, SourceEndpoint>;
   targets: Record<string, TargetEndpoint>;
   captures: Record<string, Capture>;
@@ -223,6 +253,71 @@ export class JsonFileStore implements LocalStore {
 
   async getExtensionHeartbeat(): Promise<ExtensionHeartbeat | undefined> {
     return (await this.read()).extensionHeartbeat;
+  }
+
+  async saveProviderProfile(profile: AgentProviderProfile): Promise<void> {
+    AgentProviderProfileSchema.parse(profile);
+    await this.update((data) => {
+      data.providerProfiles[profile.id] = profile;
+    });
+  }
+
+  async getProviderProfile(id: string): Promise<AgentProviderProfile | undefined> {
+    return (await this.read()).providerProfiles[id];
+  }
+
+  async listProviderProfiles(): Promise<AgentProviderProfile[]> {
+    return Object.values((await this.read()).providerProfiles).sort((a, b) => a.displayName.localeCompare(b.displayName));
+  }
+
+  async saveAgentSession(session: AgentSessionRef): Promise<void> {
+    AgentSessionRefSchema.parse(session);
+    await this.update((data) => {
+      data.agentSessions[session.id] = session;
+    });
+  }
+
+  async getAgentSession(id: string): Promise<AgentSessionRef | undefined> {
+    return (await this.read()).agentSessions[id];
+  }
+
+  async listAgentSessions(providerId?: string): Promise<AgentSessionRef[]> {
+    return Object.values((await this.read()).agentSessions)
+      .filter((session) => !providerId || session.providerId === providerId)
+      .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+  }
+
+  async saveAgentTurn(turn: AgentTurn): Promise<void> {
+    AgentTurnSchema.parse(turn);
+    await this.update((data) => {
+      data.agentTurns[turn.id] = turn;
+    });
+  }
+
+  async getAgentTurn(id: string): Promise<AgentTurn | undefined> {
+    return (await this.read()).agentTurns[id];
+  }
+
+  async listAgentTurns(sessionRefId: string): Promise<AgentTurn[]> {
+    return Object.values((await this.read()).agentTurns)
+      .filter((turn) => turn.sessionRefId === sessionRefId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async appendAgentEvent(event: AgentEvent): Promise<void> {
+    AgentEventSchema.parse(event);
+    await this.update((data) => {
+      data.agentEvents[event.id] = event;
+    });
+  }
+
+  async listAgentEvents(filter: AgentEventFilter = {}): Promise<AgentEvent[]> {
+    return Object.values((await this.read()).agentEvents)
+      .filter((event) => !filter.providerId || event.providerId === filter.providerId)
+      .filter((event) => !filter.sessionRefId || event.sessionRefId === filter.sessionRefId)
+      .filter((event) => !filter.turnId || event.turnId === filter.turnId)
+      .filter((event) => !filter.type || event.type === filter.type)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
   async saveSource(source: SourceEndpoint): Promise<void> {
@@ -508,6 +603,10 @@ export function createEmptyStore(): StoreData {
     linkableComponents: {},
     workflowLinks: {},
     codexThreadRefs: {},
+    providerProfiles: {},
+    agentSessions: {},
+    agentTurns: {},
+    agentEvents: {},
     sources: {},
     targets: {},
     captures: {},

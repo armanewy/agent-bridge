@@ -19,7 +19,14 @@ Tests use temporary directories.
 - links
 - linkable components
 - workflow links
+- provider profiles
+- agent sessions
+- agent turns
+- agent events
+- Codex thread references
+- extension heartbeat
 - source and target endpoint records through links and handoffs
+- captures
 - handoffs
 - delivery attempts
 - missions
@@ -33,9 +40,20 @@ Tests use temporary directories.
 
 ## Deletion
 
-The store exposes record-level deletion for links and handoffs, and a clear-audit operation for audit logs. Users should also be able to delete the local data directory when the desktop UI is implemented.
+The store exposes record-level deletion for links, workflow links, handoffs, missions, and a clear-audit operation for audit logs. Users can also clear the local data directory from the desktop app.
 
-Store version 3 is non-destructive. Older JSON stores without mission-first or link-center sections load with empty records for missing sections.
+Store version 5 is non-destructive. Older JSON stores without mission-first, link-center, extension heartbeat, Codex session, or provider sections load with empty records for missing sections.
+
+## Provider Records
+
+Provider data is intentionally split from Mission data:
+
+- `providerProfiles` are safe-to-store provider status/capability records.
+- `agentSessions` are external provider session/thread references.
+- `agentTurns` are provider message/turn records linked to artifacts.
+- `agentEvents` are provider lifecycle/status events for future streaming and observation.
+
+Provider records must not contain raw API keys or session secrets.
 
 ## Secret Storage Policy
 

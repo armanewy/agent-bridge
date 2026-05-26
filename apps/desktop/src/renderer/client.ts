@@ -26,7 +26,11 @@ import type {
   SourceEndpoint,
   TargetEndpoint,
   WorkflowLink,
-  WindowsDesktopWindowTarget
+  WindowsDesktopWindowTarget,
+  AgentEvent,
+  AgentProviderProfile,
+  AgentSessionRef,
+  AgentTurn
 } from "@agentbridge/core";
 
 const now = () => new Date().toISOString();
@@ -60,6 +64,29 @@ let mockCaptures: Capture[] = [mockCapture];
 let mockAuditEvents: AuditEvent[] = [];
 let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
+let mockProviderProfiles: AgentProviderProfile[] = [
+  {
+    id: "openai-planner",
+    kind: "planner",
+    displayName: "OpenAI Planner",
+    capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+    authMode: "apiKey",
+    status: "needsAuth",
+    metadata: { adapter: "mock", reason: "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY." }
+  },
+  {
+    id: "codex",
+    kind: "executor",
+    displayName: "Codex",
+    capabilities: ["canExecuteCode", "canUseRepo", "canListSessions", "canCreateSession", "canResumeSession", "canSendMessage"],
+    authMode: "appServer",
+    status: "unavailable",
+    metadata: { adapter: "mock", reason: "Codex provider wrapper is not active in renderer mock." }
+  }
+];
+let mockAgentSessions: AgentSessionRef[] = [];
+let mockAgentTurns: AgentTurn[] = [];
+let mockAgentEvents: AgentEvent[] = [];
 let mockExtensionId = "";
 let mockExtensionConnected = false;
 let mockCodexAppServerStatus: CodexAppServerStatus = {
@@ -121,6 +148,25 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       };
       mockCodexThreads = [ref, ...mockCodexThreads.filter((thread) => thread.threadId !== ref.threadId)];
       return ref;
+    },
+    async listProviders() {
+      return mockProviderProfiles;
+    },
+    async getProviderStatus(providerId: string) {
+      return mockProviderProfiles.find((profile) => profile.id === providerId);
+    },
+    async listAgentSessions(providerId?: string) {
+      return mockAgentSessions.filter((session) => !providerId || session.providerId === providerId);
+    },
+    async listAgentTurns(sessionRefId: string) {
+      return mockAgentTurns.filter((turn) => turn.sessionRefId === sessionRefId);
+    },
+    async listAgentEvents(filter = {}) {
+      return mockAgentEvents
+        .filter((event) => !filter.providerId || event.providerId === filter.providerId)
+        .filter((event) => !filter.sessionRefId || event.sessionRefId === filter.sessionRefId)
+        .filter((event) => !filter.turnId || event.turnId === filter.turnId)
+        .filter((event) => !filter.type || event.type === filter.type);
     },
     async createWorkflowLink(input) {
       const link: WorkflowLink = {
@@ -541,6 +587,9 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockAuditEvents = [];
       mockMissions = [];
       mockMissionDetails = new Map<string, MissionDetail>();
+      mockAgentSessions = [];
+      mockAgentTurns = [];
+      mockAgentEvents = [];
       mockExtensionConnected = false;
       mockCodexAppServerStatus = {
         configured: false,

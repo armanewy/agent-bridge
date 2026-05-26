@@ -19,9 +19,14 @@ import type {
   TargetEndpoint,
   WindowsDesktopWindowTarget,
   AuditEvent,
+  AgentEvent,
+  AgentProviderProfile,
+  AgentSessionRef,
+  AgentTurn,
   VerificationResult,
   WorkflowLink
 } from "@agentbridge/core";
+import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 
 export interface WindowRevalidation {
@@ -178,6 +183,11 @@ export interface AgentBridgeApi {
   createTaskFromWorkflowLink(input: { workflowLinkId: string }): Promise<DeliveryPreview>;
   listCodexThreads(repoPath?: string): Promise<CodexThreadRef[]>;
   saveManualCodexThreadRef(input: { threadId: string; name?: string; repoPath?: string }): Promise<CodexThreadRef>;
+  listProviders(): Promise<AgentProviderProfile[]>;
+  getProviderStatus(providerId: string): Promise<AgentProviderProfile | undefined>;
+  listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
+  listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
+  listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
   listCaptures(): Promise<Capture[]>;
   listMissions(): Promise<Mission[]>;
   getMissionDetail(id: string): Promise<MissionDetail | undefined>;
