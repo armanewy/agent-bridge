@@ -31,16 +31,22 @@
 - `pnpm desktop:package` creates `apps/desktop/release/win-unpacked/AgentBridge.exe`.
 - `AgentBridge.exe` launches without requiring a browser pointed at localhost.
 - Packaged app opens at 760x940 with minimum size 680x760.
-- Start screen fits in the compact window without horizontal scrolling.
-- Simple Mode uses progressive disclosure: show ChatGPT source first, show repo only after the source is readable/synced, and show Codex only after a repo target exists.
-- With no extension configured, Start shows `Open ChatGPT here`.
-- Clicking `Open ChatGPT here` opens ChatGPT in an AgentBridge-owned window and binds it as the source.
-- Pasting an existing ChatGPT conversation URL and clicking `Open existing conversation` opens that conversation in the AgentBridge-owned window and binds that URL as the source.
-- After selecting text in that AgentBridge-owned ChatGPT window, `Capture selection` saves a real local capture without installing a browser extension.
+- Workbench screen fits in the compact window without horizontal scrolling.
+- Simple Mode shows the Workbench only: repo, Planner, Codex, task state, verification, and review.
+- Simple Mode does not require Chrome, ChatGPT Desktop, clipboard capture, manual capture, or demo data.
+- With no `OPENAI_API_KEY`/`AGENTBRIDGE_OPENAI_API_KEY`, Workbench shows OpenAI Planner as `needsAuth`.
+- With no repo selected, Workbench asks the user to choose a repo before Codex delivery.
+- User can choose repo, create a Workbench task, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
 - Demo capture tools are only under Advanced.
 - Simple Mode does not show clipboard/manual/mock capture as a production path.
+- Advanced -> Legacy Link Center contains the old external ChatGPT/browser/capture/link flow.
+- Advanced -> Components/Captures/Links/Sources/Targets/Audit expose raw records.
+- Advanced legacy adapter: with no extension configured, Start shows `Open ChatGPT here`.
+- Advanced legacy adapter: clicking `Open ChatGPT here` opens ChatGPT in an AgentBridge-owned window and binds it as the source.
+- Advanced legacy adapter: pasting an existing ChatGPT conversation URL and clicking `Open existing conversation` opens that conversation in the AgentBridge-owned window and binds that URL as the source.
+- Advanced legacy adapter: after selecting text in that AgentBridge-owned ChatGPT window, `Capture selection` saves a real local capture without installing a browser extension.
 - If no ChatGPT tabs are synced and an extension is configured, Start shows `No ChatGPT tabs found` and `Connect Chrome`.
 - If Chrome is connected but no ChatGPT tab is synced, Start says to sync the existing ChatGPT tab from the extension and does not show repo/Codex steps yet.
 - Switch Start source mode to `ChatGPT Desktop`, open ChatGPT Desktop, and run `Probe ChatGPT Desktop`.

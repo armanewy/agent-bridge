@@ -2,27 +2,32 @@
 
 ## Pass Criteria
 
-- Simple Mode's lowest-friction production path is the AgentBridge-owned ChatGPT web window; no browser extension is required for that path.
-- Browser extensions are optional adapters for users who want to bind existing Chrome/Firefox/other browser tabs later.
-- The desktop Start page offers `Open ChatGPT here` when no ChatGPT source is configured.
+- Simple Mode's lowest-friction production path is the built-in Workbench: OpenAI Planner -> Codex Executor -> Verification -> Planner Review.
+- Browser extensions, ChatGPT Desktop probes, and external browser-tab imports are Advanced adapters, not default requirements.
+- The desktop default navigation item is `Workbench`.
 - The packaged desktop app opens at 760x940, has minimum size 680x760, and the Start screen has no horizontal scrolling at that size.
-- Simple Mode is progressively disclosed: source first, repo second, Codex/session third, then Create Link/Create Task Card.
-- If Chrome is connected but no ChatGPT tab has been synced, Simple Mode tells the user to sync the existing ChatGPT tab through the extension instead of repeating setup jargon.
+- Simple Mode shows repo, Planner, Codex, task state, verification, and review actions without exposing source/link/capture concepts.
+- Workbench shows OpenAI Planner status and `needsAuth` when no API key is configured.
+- Workbench shows Codex delivery status and whether existing-thread continuation is App Server capable or open-only fallback.
+- User can choose a repo, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
+- WorkflowLink, LinkableComponent, browser captures, ChatGPT Desktop, extension setup, and demo tools are hidden under Advanced.
+- If Chrome is connected but no ChatGPT tab has been synced, only the Advanced legacy link center discusses syncing external ChatGPT tabs.
 - The desktop app registers or repairs the native messaging host for the configured production extension ID.
 - Extension heartbeat shows whether Chrome is connected and when it last contacted the desktop app.
 - A Chrome extension can sync an existing ChatGPT tab as a source.
 - A Chrome extension can explicitly capture selected text.
-- AgentBridge can open ChatGPT in its own browser window, bind that window as a source, and capture selected text from it after a user click.
-- AgentBridge can open either a new ChatGPT session or a pasted existing ChatGPT conversation URL in its own browser window.
+- Advanced legacy adapters can open ChatGPT in an AgentBridge-owned browser window and capture selected text from it after a user click.
+- Advanced legacy adapters can open either a new ChatGPT session or a pasted existing ChatGPT conversation URL in the AgentBridge-owned window.
 - The native host persists browser sources and captures locally.
 - The desktop app lists real native-host captures by default; mock capture remains an explicit development action.
-- The desktop app offers `Create Task Card` after the user selects a capture and repo/agent target.
+- The desktop app offers `Generate TaskSpec` after a Planner response exists.
 - The desktop app can list source/capture state from the local store.
 - A user can configure a Codex deep-link target by repository path.
 - A deterministic transform creates a structured handoff.
 - A deterministic transform creates a Mission, TaskSpec, HandoffCard, and generated prompt artifact.
 - Repo context is attached when a Codex target has a configured repository path.
-- The Task Card Preview shows task title, goal, repo, target agent, acceptance criteria, verification commands, warnings, and expandable raw prompt/source details.
+- The Workbench Task panel shows task title, goal, acceptance criteria, verification status, and next actions.
+- The legacy Task Card Preview shows task title, goal, repo, target agent, acceptance criteria, verification commands, warnings, and expandable raw prompt/source details.
 - The Task Card Preview shows whether delivery will create a new Codex thread, send into an existing thread via App Server, or only open an existing thread with the prompt staged.
 - Dry-run Codex delivery generates the exact deep link without opening Codex.
 - Approved Codex delivery opens `codex://threads/new?prompt=...&path=...` in Electron mode.
@@ -42,7 +47,7 @@
 
 - Capture happens without a user gesture.
 - Extension requests broad host permissions or registers all-page content scripts by default.
-- Simple Mode recommends clipboard/manual/mock capture.
+- Simple Mode recommends clipboard/manual/mock capture or requires a browser extension.
 - ChatGPT Desktop support falls back to clipboard capture in Simple Mode.
 - Delivery happens without an approval preview.
 - Clipboard fallback runs without explicit approval.
@@ -51,6 +56,7 @@
 
 ## Known Limitations
 
+- Default Workbench planning requires an OpenAI API key supplied through environment variables.
 - Production builds need a stable Chrome extension ID and Web Store listing URL.
 - Development builds can still use manual extension ID entry in Settings for optional unpacked-extension testing.
 - The Tasks detail view shows source capture excerpt, TaskSpec, artifacts, delivery attempts, timeline, next action, and verification status.

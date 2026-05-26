@@ -2,34 +2,34 @@
 
 AgentBridge is a local-first desktop app for turning AI guidance into durable, repo-aware work for coding agents.
 
-The narrow product loop is:
+The narrow product loop is now:
 
 ```text
-ChatGPT context
--> Task Card
--> repo-aware TaskSpec
--> Codex delivery
+OpenAI Planner
+-> TaskSpec
+-> Codex executor
 -> verification artifacts
--> optional follow-up
+-> Planner review
+-> optional Codex follow-up
 ```
 
-The default path does not require a browser extension. AgentBridge can open ChatGPT in its own app-owned window, bind either a new ChatGPT session or a pasted existing ChatGPT conversation URL, capture selected text after a user click, and turn that capture into a scoped Codex Task Card.
+The default path does not require a browser extension, external ChatGPT tab, clipboard capture, or ChatGPT Desktop probing. The built-in Planner creates scoped coding direction inside AgentBridge; Codex executes through deep links or Codex App Server.
 
 `http://127.0.0.1:5173` is development-only. The product surface is the packaged desktop app, `AgentBridge.exe`.
 
-## Default Flow
+## Default Workbench Flow
 
 1. Launch AgentBridge.
-2. Click `Open ChatGPT here`.
-3. Use the AgentBridge-owned ChatGPT window, or paste an existing `https://chatgpt.com/...` conversation URL and open it there.
-4. Select text in that ChatGPT window.
-5. Click `Capture selection` in AgentBridge.
-6. Choose the local repo Codex should work in.
-7. Create the ChatGPT -> repo -> Codex link.
-8. Create a Task Card, review it, then dry-run or send to Codex.
-9. Run verification when Codex changes the repo.
+2. Choose the local repo Codex should work in.
+3. Ask the OpenAI Planner what Codex should do.
+4. Generate a TaskSpec from the Planner response.
+5. Select a Codex target: new thread or existing thread/session.
+6. Send the TaskSpec to Codex.
+7. Run verification when Codex changes the repo.
+8. Ask the Planner to review the verification result.
+9. Send a follow-up TaskSpec to Codex when needed.
 
-Optional adapters remain available for connecting an existing external browser tab, ChatGPT Desktop, or Windows desktop targets, but those are not the first-run requirement.
+Optional adapters remain under Advanced for importing external ChatGPT/browser/Desktop context, but they are not the first-run requirement.
 
 ## What AgentBridge Stores
 
@@ -56,7 +56,7 @@ The Task Card Preview shows the selected delivery mode before sending.
 
 ## Optional Browser Extension
 
-The Chrome extension is now an optional adapter for users who want to bind an existing external browser tab instead of using AgentBridge's built-in ChatGPT window.
+The Chrome extension is an optional Advanced adapter for users who want to bind an existing external browser tab. It is not required for the default Workbench.
 
 For local development:
 
@@ -121,9 +121,11 @@ A local desktop shortcut can point directly to that executable.
 Implemented:
 
 - Packaged Electron desktop app with compact `760x940` default window.
-- Start-first UI focused on one ChatGPT -> repo -> Codex flow.
-- No-extension ChatGPT Web source window owned by AgentBridge.
-- Existing ChatGPT conversation URL support for the app-owned window.
+- Workbench-first UI focused on Planner -> Codex -> verification -> Planner review.
+- Provider model for OpenAI Planner and Codex Executor profiles, sessions, turns, and events.
+- OpenAI Planner provider using the Responses API through the official SDK, with API-key-from-environment setup.
+- Codex Executor provider wrapping new-thread deep links, existing-thread open-only fallback, and App Server turn start.
+- Workbench orchestration service for mission creation, Planner turns, TaskSpec creation, Codex send, verification, Planner review, and follow-up send.
 - Optional Chrome extension/native-host path for external existing browser tabs.
 - ChatGPT Desktop source probe through Windows UI Automation, gated by capability.
 - Mission, TaskSpec, HandoffCard, RepoContextPack, Artifact, Run, and VerificationResult schemas.
@@ -139,8 +141,10 @@ Implemented:
 
 ## Known Limitations
 
+- OpenAI Planner requires `OPENAI_API_KEY` or `AGENTBRIDGE_OPENAI_API_KEY` in the environment.
 - Codex result observation is not implemented yet.
 - Existing Codex thread continuation requires Codex App Server; deep links can only open an existing thread.
+- Legacy ChatGPT/browser/Desktop capture is Advanced-only and still experimental.
 - The optional Chrome extension still requires local unpacked-extension setup until there is a published extension ID.
 - Firefox/external-browser support should be added as another optional adapter, not as the default flow.
 - ChatGPT Desktop support depends on what the app exposes through Windows UI Automation.
@@ -152,7 +156,7 @@ Implemented:
 
 - Capture is user-triggered.
 - No silent scraping or background harvesting.
-- Clipboard/manual/mock capture is not the production Simple Mode path.
+- Clipboard/manual/mock capture is not the production Workbench path.
 - Official/programmatic target integrations are preferred over UI automation.
 - UI automation is capability-gated and visibly risky when applicable.
 - Verification commands are user-configured and user-confirmed before local execution.
