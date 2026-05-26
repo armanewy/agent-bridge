@@ -107,4 +107,60 @@ describe("WorkflowLinkService", () => {
 
     await expect(service.createTaskFromWorkflowLink({ workflowLinkId: link.id })).rejects.toThrow("Capture selected text first");
   });
+
+  it("creates a task from a discovered tab component matched by tab metadata", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    const discoveredSource = browserTabComponent({
+      id: "src_discovered",
+      kind: "browserTab",
+      browser: "chrome",
+      tabId: 9,
+      windowId: 1,
+      title: "ChatGPT - Notes",
+      url: "https://chatgpt.com/",
+      boundAt: now
+    });
+    const sourceComponent = {
+      ...discoveredSource,
+      id: "component_browser_chrome_1_9",
+      backingRef: { tabId: 9, windowId: 1 }
+    };
+    const target = {
+      id: "target_1",
+      kind: "codexDeepLink" as const,
+      repoPath: tempDir,
+      openMode: "newThread" as const,
+      boundAt: now
+    };
+    const targetComponent = codexTargetComponent(target);
+    const workspaceComponent = repoComponent({ repoPath: tempDir, repoName: "repo" }, "repo_1");
+
+    await store.saveTarget(target);
+    await store.saveLinkableComponent(sourceComponent);
+    await store.saveLinkableComponent(targetComponent);
+    await store.saveLinkableComponent(workspaceComponent);
+    await store.saveCapture({
+      id: "cap_1",
+      sourceId: "src_runtime_capture",
+      captureType: "selectedText",
+      text: "Create the Link Center task flow.",
+      metadata: { source: { tabId: 9, url: "https://chatgpt.com/" } },
+      createdAt: now,
+      userTriggered: true
+    });
+
+    const service = new WorkflowLinkService(store, new TransformService(store));
+    const link = await service.createWorkflowLink({
+      name: "Discovered ChatGPT to Codex",
+      sourceComponentId: sourceComponent.id,
+      workspaceComponentId: workspaceComponent.id,
+      targetComponentId: targetComponent.id,
+      recipe: "implementationBrief"
+    });
+    const preview = await service.createTaskFromWorkflowLink({ workflowLinkId: link.id });
+
+    expect(preview.handoffCard.captureId).toBe("cap_1");
+    expect(preview.handoffCard.targetId).toBe(target.id);
+  });
 });

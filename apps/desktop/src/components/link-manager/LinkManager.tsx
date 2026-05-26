@@ -6,7 +6,11 @@ interface LinkManagerProps {
   targets: TargetEndpoint[];
   links: Link[];
   recipe: Transform["recipe"];
+  selectedSourceId?: string | undefined;
+  selectedTargetId?: string | undefined;
   onRecipeChange(recipe: Transform["recipe"]): void;
+  onSourceChange(id: string): void;
+  onTargetChange(id: string): void;
   onCreateLink(): void;
 }
 
@@ -15,9 +19,16 @@ export function LinkManager({
   targets,
   links,
   recipe,
+  selectedSourceId,
+  selectedTargetId,
   onRecipeChange,
+  onSourceChange,
+  onTargetChange,
   onCreateLink
 }: LinkManagerProps): JSX.Element {
+  const selectedSource = sources.find((source) => source.id === selectedSourceId);
+  const selectedTarget = targets.find((target) => target.id === selectedTargetId);
+
   return (
     <section className="panel">
       <div className="panel-heading">
@@ -43,15 +54,52 @@ export function LinkManager({
         ))}
       </div>
 
+      <div className="link-picker-grid">
+        <label className="field-label" htmlFor="legacy-source">
+          Source
+          <select
+            id="legacy-source"
+            value={selectedSourceId ?? ""}
+            onChange={(event) => onSourceChange(event.currentTarget.value)}
+          >
+            <option value="" disabled>
+              Select a source
+            </option>
+            {sources.map((source) => (
+              <option key={source.id} value={source.id}>
+                {source.kind === "browserTab" ? source.title : source.id}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="field-label" htmlFor="legacy-target">
+          Target
+          <select
+            id="legacy-target"
+            value={selectedTargetId ?? ""}
+            onChange={(event) => onTargetChange(event.currentTarget.value)}
+          >
+            <option value="" disabled>
+              Select a target
+            </option>
+            {targets.map((target) => (
+              <option key={target.id} value={target.id}>
+                {formatTarget(target)}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+
       <div className="link-canvas">
         <div className="link-node">
           <span>Source</span>
-          <strong>{sources[0]?.kind === "browserTab" ? sources[0].title : "No browser source"}</strong>
+          <strong>{selectedSource?.kind === "browserTab" ? selectedSource.title : "No browser source"}</strong>
         </div>
         <Link2 size={20} />
         <div className="link-node">
           <span>Target</span>
-          <strong>{formatTarget(targets[0])}</strong>
+          <strong>{formatTarget(selectedTarget)}</strong>
         </div>
       </div>
 

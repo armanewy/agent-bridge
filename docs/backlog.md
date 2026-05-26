@@ -1,6 +1,6 @@
 # Backlog
 
-## Done In Waves 7-12
+## Done In Waves 7-13
 
 - Mission / HandoffCard / TaskSpec core model.
 - Local-store v2 for missions, artifacts, runs, and verification results.
@@ -11,11 +11,11 @@
 - First-run setup status and native-host manifest generation.
 - Real capture-to-Mission default flow.
 - Mission-aware delivery provenance.
-- Capture Inbox and explicit Target Selector.
+- Connect-first Link Center with explicit source, workspace, and target selection.
 - Verification preflight and artifact viewer.
 - Follow-up HandoffCard dry-run/send path.
 - Extension broad content-script removal.
-- Simple Mode navigation: Inbox, Tasks, Settings, Advanced.
+- Simple Mode navigation: Connect, Tasks, Settings, Advanced.
 - Task Card Preview copy and layout.
 - Guided setup wizard presentation.
 - Task detail timeline, next action, and readable work record.
@@ -23,6 +23,11 @@
 - Electron packaging for an unpacked Windows app target.
 - Packaged helper resource layout for native host and Windows UIA helper.
 - Desktop app menu, About dialog, data folder/log actions, and clear local data action.
+- LinkableComponent and WorkflowLink models with v3 local-store persistence.
+- Browser-tab discovery protocol through the extension/native host, with optional `tabs` permission.
+- Desktop-window discovery as detected components with compatibility and risk badges.
+- Capability badges for Capture, Send, Verify, Observe, Official route, Risky, and Unsupported.
+- Workflow Link to Task Card creation using the latest matching capture.
 
 ## P0 Dogfood Hardening
 
@@ -31,8 +36,9 @@
 - Replace packaged native-host Node dependency with a standalone native-host binary.
 - Add production Chrome Web Store extension ID/install path.
 - Polish quick-action routing in packaged Electron with a real tray icon.
-- Show target verification diff before Windows delivery.
-- Block terminal-like Windows targets unless the user confirms command-execution risk.
+- Promote real browser-tab discovery state from the extension into the desktop app automatically when Chrome connects.
+- Add a no-capture helper action from Link cards that tells the user exactly how to capture from the linked tab.
+- Show target verification diff before any future Windows delivery UI.
 
 ## P1 MVP Improvements
 

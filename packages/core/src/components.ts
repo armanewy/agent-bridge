@@ -177,7 +177,6 @@ export function codexTargetComponent(target: CodexDeepLinkTarget, discoveredAt =
 
 export function desktopWindowComponent(target: WindowsDesktopWindowTarget, discoveredAt = target.boundAt): LinkableComponent {
   const classification = classifyDesktopApp(target);
-  const canDeliver = classification.provider === "codex";
   const isTerminal = classification.provider === "terminal";
 
   return {
@@ -188,8 +187,8 @@ export function desktopWindowComponent(target: WindowsDesktopWindowTarget, disco
     provider: classification.provider,
     roleCapabilities: {
       ...emptyCapabilities,
-      canBeTarget: canDeliver || !isTerminal,
-      canDeliver
+      canBeTarget: false,
+      canDeliver: false
     },
     riskLevel: classification.riskLevel,
     status: isTerminal ? "permission_needed" : classification.provider === "unknown" ? "unsupported" : "available",

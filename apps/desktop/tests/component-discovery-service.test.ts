@@ -58,4 +58,39 @@ describe("ComponentDiscoveryService", () => {
     expect(result.components.some((component) => component.kind === "repo")).toBe(true);
     expect(result.components.some((component) => component.provider === "terminal" && component.riskLevel === "high")).toBe(true);
   });
+
+  it("persists derived source, target, and repo components during listing", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    await store.saveSource({
+      id: "src_1",
+      kind: "browserTab",
+      browser: "chrome",
+      title: "ChatGPT - Notes",
+      url: "https://chatgpt.com/",
+      boundAt: now
+    });
+    await store.saveTarget({
+      id: "target_1",
+      kind: "codexDeepLink",
+      repoPath: tempDir,
+      openMode: "newThread",
+      boundAt: now
+    });
+
+    const windows = {
+      async listTopLevelWindows() {
+        return [];
+      }
+    } as Pick<WindowsTargetService, "listTopLevelWindows"> as WindowsTargetService;
+
+    const service = new ComponentDiscoveryService(store, windows);
+    const components = await service.listComponents();
+    const stored = await store.listLinkableComponents();
+
+    expect(components.some((component) => component.provider === "chatgpt")).toBe(true);
+    expect(components.some((component) => component.provider === "codex")).toBe(true);
+    expect(stored.some((component) => component.provider === "chatgpt")).toBe(true);
+    expect(stored.some((component) => component.provider === "codex")).toBe(true);
+  });
 });

@@ -59,9 +59,12 @@ describe("native host protocol", () => {
 
     expect(response.ok).toBe(true);
     expect(response.components?.[0]).toMatchObject({
+      id: "component_browser_chrome_1_9",
       kind: "browserTab",
       provider: "chatgpt",
       roleCapabilities: { canBeSource: true, canCapture: true }
     });
+    expect(response.components?.[0]?.backingRef).toMatchObject({ tabId: 9, windowId: 1 });
+    expect(response.components?.[0]?.backingRef).not.toHaveProperty("sourceId");
   });
 });

@@ -3,8 +3,9 @@
 ## Current Workflow
 
 - Browser selected text can be captured explicitly through the Chrome extension and native host.
-- Desktop shows captures in Capture Inbox and requires visible target selection.
-- Preview creates a Task Card, TaskSpec, HandoffCard, prompt artifacts, and legacy Handoff.
+- Desktop defaults to Connect: detected browser tabs, repos/workspaces, desktop windows/agents, and reusable Workflow Links.
+- A Workflow Link creates a Task Card from the latest matching capture for the linked source.
+- Preview creates a TaskSpec, HandoffCard, prompt artifacts, and legacy Handoff.
 - Codex delivery records mission/card-aware DeliveryAttempts and audit events.
 - Verification is user-confirmed, captures git diff and command outputs, and stores a VerificationResult.
 - Failed verification creates a visible follow-up HandoffCard that can be dry-run or sent manually.
@@ -16,6 +17,7 @@
 - Repo context is attached before Codex delivery.
 - Artifact memory is inspectable in Task detail.
 - The extension no longer registers broad all-page content scripts.
+- The Link Center makes routes visible as source -> workspace -> target before Task Card creation.
 
 ## What Still Feels Annoying
 
@@ -23,6 +25,7 @@
 - The repo path field needs a directory picker.
 - Running the renderer in browser mode cannot open Codex deep links like Electron can.
 - Codex delivery observation stops at "opened deep link."
+- Browser-tab discovery is opt-in because all-tab metadata needs the optional Chrome `tabs` permission.
 
 ## What Is Unsafe Or Thin
 
@@ -34,6 +37,7 @@
 ## Useful Tomorrow
 
 - Dogfood the full path with a real ChatGPT answer and a real Codex repo target.
+- Create one reusable ChatGPT -> AgentBridge repo -> Codex Workflow Link and use it for a full work session.
 - Add Codex SDK/app-server observation after the Task Card state proves stable.
 - Add artifact filtering and better run grouping.
 

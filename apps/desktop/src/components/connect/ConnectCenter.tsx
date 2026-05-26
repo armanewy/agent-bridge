@@ -83,12 +83,22 @@ export function ConnectCenter({
 }: ConnectCenterProps): JSX.Element {
   const browserTabs = components.filter((component) => component.kind === "browserTab");
   const workspaces = components.filter((component) => component.roleCapabilities.canBeWorkspace);
-  const targets = components.filter((component) => component.roleCapabilities.canBeTarget);
+  const targets = components.filter((component) =>
+    component.roleCapabilities.canBeTarget || ["agentTarget", "desktopWindow", "terminal", "ide"].includes(component.kind)
+  );
   const selectedSource = components.find((component) => component.id === selectedSourceComponentId);
   const selectedWorkspace = components.find((component) => component.id === selectedWorkspaceComponentId);
   const selectedTarget = components.find((component) => component.id === selectedTargetComponentId);
   const needsWorkspace = selectedTarget?.provider === "codex";
-  const canCreateLink = Boolean(selectedSource && selectedTarget && (!needsWorkspace || selectedWorkspace));
+  const canCreateLink = Boolean(
+    selectedSource?.roleCapabilities.canBeSource &&
+    selectedTarget?.roleCapabilities.canBeTarget &&
+    selectedTarget.status === "available" &&
+    (!needsWorkspace || selectedWorkspace?.roleCapabilities.canBeWorkspace)
+  );
+  const selectedSourceCaptures = selectedSource
+    ? captures.filter((capture) => captureBelongsToComponent(capture, selectedSource))
+    : captures;
 
   return (
     <div className="connect-layout">
@@ -189,7 +199,7 @@ export function ConnectCenter({
 
       {selectedSource ? (
         <CaptureInbox
-          captures={captures}
+          captures={selectedSourceCaptures}
           sources={sources}
           selectedCaptureId={selectedCaptureId}
           onSelectCapture={onSelectCapture}
@@ -237,13 +247,34 @@ function ComponentSection({
               <span className="component-title">{component.label}</span>
               <span className="component-subtitle">{component.subtitle}</span>
               <CapabilityBadges component={component} />
-              <span className="component-action">{actionLabel}</span>
+              <span className={component.roleCapabilities.canBeTarget || component.roleCapabilities.canBeSource || component.roleCapabilities.canBeWorkspace ? "component-action" : "component-action muted"}>
+                {component.roleCapabilities.canBeTarget || component.roleCapabilities.canBeSource || component.roleCapabilities.canBeWorkspace ? actionLabel : "Detected only"}
+              </span>
             </button>
           ))
         )}
       </div>
     </section>
   );
+}
+
+function captureBelongsToComponent(capture: Capture, component: LinkableComponent): boolean {
+  if (component.backingRef.sourceId && capture.sourceId === component.backingRef.sourceId) {
+    return true;
+  }
+  const source = capture.metadata["source"];
+  if (!isRecord(source)) {
+    return false;
+  }
+  const url = typeof component.metadata["url"] === "string" ? component.metadata["url"] : undefined;
+  return (
+    (typeof component.backingRef.tabId === "number" && source.tabId === component.backingRef.tabId) ||
+    (typeof url === "string" && source.url === url)
+  );
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
 function WorkflowLinkCard({

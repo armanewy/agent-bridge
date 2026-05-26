@@ -30,6 +30,12 @@ export class ComponentDiscoveryService {
       this.store.listLinkableComponents(),
       this.deriveStoredComponents()
     ]);
+    const storedIds = new Set(stored.map((component) => component.id));
+    for (const component of derived) {
+      if (!storedIds.has(component.id)) {
+        await this.store.saveLinkableComponent(component);
+      }
+    }
     return mergeComponents([...stored, ...derived]);
   }
 
@@ -62,12 +68,13 @@ export class ComponentDiscoveryService {
       .map((source) => browserTabComponent(source));
 
     for (const target of targets) {
-      components.push(targetComponent(target));
+      const targetDiscoveredAt = "boundAt" in target ? target.boundAt : new Date().toISOString();
+      components.push(targetComponent(target, targetDiscoveredAt));
 
       if (target.kind === "codexDeepLink") {
         try {
           const repoContext = await this.repoContextService.build(target.repoPath);
-          components.push(repoComponent(repoContext, hashId(target.repoPath)));
+          components.push(repoComponent(repoContext, hashId(target.repoPath), target.boundAt));
         } catch {
           components.push({
             id: `component_repo_${hashId(target.repoPath)}`,

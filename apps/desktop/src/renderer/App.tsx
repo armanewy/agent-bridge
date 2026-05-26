@@ -57,6 +57,7 @@ export function App(): JSX.Element {
   const [setupStatus, setSetupStatus] = useState<SetupStatus | undefined>();
   const [extensionId, setExtensionId] = useState("");
   const [selectedCaptureId, setSelectedCaptureId] = useState<string | undefined>();
+  const [selectedSourceId, setSelectedSourceId] = useState<string | undefined>();
   const [selectedTargetId, setSelectedTargetId] = useState<string | undefined>();
   const [selectedSourceComponentId, setSelectedSourceComponentId] = useState<string | undefined>();
   const [selectedWorkspaceComponentId, setSelectedWorkspaceComponentId] = useState<string | undefined>();
@@ -91,24 +92,23 @@ export function App(): JSX.Element {
       }
       if (action?.type === "createTaskFromLatestCapture") {
         const capture = captures[0];
-        const target = targets.find((item) => item.kind === "codexDeepLink") ?? targets[0];
         setView("connect");
         if (capture?.id) {
           setSelectedCaptureId(capture.id);
         }
-        if (target?.id) {
-          setSelectedTargetId(target.id);
+        const workflowLink = workflowLinks.find((item) => item.enabled);
+        if (workflowLink) {
+          void createTaskFromWorkflowLink(workflowLink.id);
+          return;
         }
-        if (capture?.id && target?.id) {
-          void createPreview(capture.id, target.id);
-        }
+        setLinkError("Create a Workflow Link before using the tray shortcut to create a task.");
         return;
       }
       setView("connect");
     };
     window.addEventListener("agentbridge:quickAction", handleQuickAction);
     return () => window.removeEventListener("agentbridge:quickAction", handleQuickAction);
-  }, [captures, targets, recipe]);
+  }, [captures, workflowLinks, recipe]);
 
   async function refresh(): Promise<void> {
     const [
@@ -143,6 +143,7 @@ export function App(): JSX.Element {
     setSetupStatus(nextSetupStatus);
     setExtensionId((current) => current || nextSetupStatus.extensionId || "");
     setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
+    setSelectedSourceId((current) => current ?? nextSources[0]?.id);
     setSelectedTargetId((current) => current ?? nextTargets.find((target) => target.kind === "codexDeepLink")?.id ?? nextTargets[0]?.id);
     setSelectedSourceComponentId((current) => current ?? nextComponents.find((component) => component.roleCapabilities.canBeSource)?.id);
     setSelectedWorkspaceComponentId((current) => current ?? nextComponents.find((component) => component.roleCapabilities.canBeWorkspace)?.id);
@@ -194,8 +195,8 @@ export function App(): JSX.Element {
   }
 
   async function createLink(): Promise<void> {
-    const source = sources[0];
-    const target = targets[0];
+    const source = sources.find((item) => item.id === selectedSourceId);
+    const target = targets.find((item) => item.id === selectedTargetId);
     if (!source || !target) {
       return;
     }
@@ -474,7 +475,7 @@ export function App(): JSX.Element {
               onExtensionIdChange={setExtensionId}
               onConfigureNativeHost={() => void configureNativeHost()}
               onRefresh={() => void refresh()}
-              onGoToInbox={() => setView("connect")}
+              onGoToConnect={() => setView("connect")}
             />
             <CodexTargetPanel
               repoPath={repoPath}
@@ -539,7 +540,11 @@ export function App(): JSX.Element {
                 targets={targets}
                 links={links}
                 recipe={recipe}
+                selectedSourceId={selectedSourceId}
+                selectedTargetId={selectedTargetId}
                 onRecipeChange={setRecipe}
+                onSourceChange={setSelectedSourceId}
+                onTargetChange={setSelectedTargetId}
                 onCreateLink={() => void createLink()}
               />
             ) : null}

@@ -12,7 +12,7 @@ import {
   type TaskSpec,
   type WorkflowLink
 } from "../src/types.js";
-import { browserTabComponent, componentStatusLabel } from "../src/components.js";
+import { browserTabComponent, componentStatusLabel, desktopWindowComponent } from "../src/components.js";
 
 const now = "2026-01-01T00:00:00.000Z";
 
@@ -127,5 +127,21 @@ describe("mission-first schemas", () => {
     };
 
     expect(WorkflowLinkSchema.parse(link).verificationCommandDefaults).toHaveLength(1);
+  });
+
+  it("marks detected desktop windows as inspectable until a safe target route exists", () => {
+    const terminal = desktopWindowComponent({
+      id: "target_windows_1",
+      kind: "windowsDesktopWindow",
+      hwnd: "123",
+      title: "Windows Terminal",
+      executablePath: "C:/Windows/System32/WindowsTerminal.exe",
+      boundAt: now
+    });
+
+    expect(terminal.provider).toBe("terminal");
+    expect(terminal.riskLevel).toBe("high");
+    expect(terminal.roleCapabilities.canBeTarget).toBe(false);
+    expect(componentStatusLabel(terminal)).toBe("High risk");
   });
 });

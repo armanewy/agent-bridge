@@ -8,7 +8,7 @@ interface SetupPanelProps {
   onExtensionIdChange(value: string): void;
   onConfigureNativeHost(): void;
   onRefresh(): void;
-  onGoToInbox(): void;
+  onGoToConnect(): void;
 }
 
 export function SetupPanel({
@@ -18,7 +18,7 @@ export function SetupPanel({
   onExtensionIdChange,
   onConfigureNativeHost,
   onRefresh,
-  onGoToInbox
+  onGoToConnect
 }: SetupPanelProps): JSX.Element {
   const steps = setupSteps(status);
   const isReady = steps.every((step) => step.status === "ready" || step.optional);
@@ -70,7 +70,7 @@ export function SetupPanel({
             Refresh status
           </button>
           {isReady ? (
-            <button type="button" className="secondary-button" onClick={onGoToInbox}>
+            <button type="button" className="secondary-button" onClick={onGoToConnect}>
               Go to Connect
             </button>
           ) : null}

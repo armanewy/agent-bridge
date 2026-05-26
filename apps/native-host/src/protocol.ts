@@ -1,4 +1,4 @@
-import { randomUUID } from "node:crypto";
+import { createHash, randomUUID } from "node:crypto";
 import { browserTabComponent } from "@agentbridge/core";
 import type { BrowserTabSource, Capture, LinkableComponent } from "@agentbridge/core";
 
@@ -100,14 +100,27 @@ function createBrowserTabComponents(message: Record<string, unknown>, discovered
     .map((tab) => createBrowserTabSource({ source: tab }, discoveredAt))
     .map((source) => {
       const component = browserTabComponent(source, discoveredAt);
+      const { sourceId: _sourceId, ...backingRef } = component.backingRef;
       return {
         ...component,
+        id: stableBrowserTabComponentId(source),
+        backingRef,
         metadata: {
           ...component.metadata,
           permissionMode: message.permissionMode === "allTabs" ? "allTabs" : "activeTab"
         }
       };
     });
+}
+
+function stableBrowserTabComponentId(source: BrowserTabSource): string {
+  if (typeof source.windowId === "number" && typeof source.tabId === "number") {
+    return `component_browser_chrome_${source.windowId}_${source.tabId}`;
+  }
+  if (typeof source.tabId === "number") {
+    return `component_browser_chrome_${source.tabId}`;
+  }
+  return `component_browser_chrome_${createHash("sha1").update(source.url).digest("hex").slice(0, 12)}`;
 }
 
 function createBrowserTabSource(message: Record<string, unknown>, boundAt: string): BrowserTabSource {
