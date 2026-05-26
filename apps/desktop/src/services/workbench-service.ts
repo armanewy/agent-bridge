@@ -183,11 +183,12 @@ export class WorkbenchService {
     if (!verificationResult) {
       throw new Error("No verification result found for this mission.");
     }
+    const artifacts = await this.store.listArtifactsForMission(missionId);
     const review = await this.planner.review({
       missionId,
       taskSpec: card.taskSpec,
       verificationResult,
-      verificationSummary: verificationResult.summary,
+      verificationSummary: buildPlannerReviewSummary(verificationResult.summary, artifacts),
       artifactIds: unique([...mission.artifactIds, ...verificationResult.artifactIds]),
       metadata: { source: "verificationReview" }
     });
@@ -395,6 +396,32 @@ function parseTaskSpec(content: string): TaskSpec | undefined {
     }
   }
   return undefined;
+}
+
+function buildPlannerReviewSummary(summary: string, artifacts: Artifact[]): string {
+  const gitDiff = artifacts.find((artifact) => artifact.kind === "gitDiff");
+  const commandOutputs = artifacts.filter(
+    (artifact) => artifact.kind === "testOutput" || artifact.kind === "lintOutput" || artifact.kind === "typecheckOutput"
+  );
+  const failedOutputs = commandOutputs.filter((artifact) => /exitCode:\s*(?!0\b)\d+/i.test(artifact.content ?? ""));
+  return [
+    summary,
+    "",
+    "Changed files summary:",
+    excerpt(gitDiff?.content, 1200) ?? "No git diff artifact was captured.",
+    "",
+    "Failed command excerpts:",
+    failedOutputs.length === 0
+      ? "No failed command output artifacts were detected."
+      : failedOutputs.map((artifact) => [`${artifact.title}:`, excerpt(artifact.content, 1400) ?? "No output."].join("\n")).join("\n\n")
+  ].join("\n");
+}
+
+function excerpt(value: string | undefined, maxLength: number): string | undefined {
+  if (!value?.trim()) {
+    return undefined;
+  }
+  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...[truncated]` : value;
 }
 
 function firstLine(content: string): string | undefined {

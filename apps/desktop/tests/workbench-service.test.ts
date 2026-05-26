@@ -11,6 +11,7 @@ import type {
 } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { OpenAIPlannerProvider, type OpenAIPlannerTransport } from "../src/services/providers/openai-planner-provider.js";
+import type { OpenAIPlannerResponseRequest } from "../src/services/providers/openai-planner-provider.js";
 import { WorkbenchService } from "../src/services/workbench-service.js";
 import { VerificationService } from "../src/services/verification-service.js";
 
@@ -27,8 +28,9 @@ afterEach(async () => {
 describe("WorkbenchService", () => {
   it("coordinates planner, task spec, executor, verification, and planner review", async () => {
     const store = new JsonFileStore(tempDir);
+    const plannerRequests: OpenAIPlannerResponseRequest[] = [];
     const planner = new OpenAIPlannerProvider(store, {
-      transport: queuedTransport([JSON.stringify(sampleTaskSpec()), "Follow-up needed: inspect the failing edge case."]),
+      transport: queuedTransport([JSON.stringify(sampleTaskSpec()), "Follow-up needed: inspect the failing edge case."], plannerRequests),
       now: fixedNow
     });
     const executor = new MockExecutorProvider();
@@ -54,6 +56,7 @@ describe("WorkbenchService", () => {
     expect(delivery.deliveryMode).toBe("newSession");
     expect(verificationRun.result.status).toBe("passed");
     expect(review.statusSuggestion).toBe("follow_up_needed");
+    expect(plannerRequests[1]?.input).toContain("Changed files summary:");
     await expect(store.listArtifactsForMission(mission.id)).resolves.toEqual(
       expect.arrayContaining([
         expect.objectContaining({ title: "Planner response" }),
@@ -121,9 +124,10 @@ class MockExecutorProvider implements ExecutorProvider {
   }
 }
 
-function queuedTransport(outputs: string[]): OpenAIPlannerTransport {
+function queuedTransport(outputs: string[], requests: OpenAIPlannerResponseRequest[]): OpenAIPlannerTransport {
   return {
-    async createResponse() {
+    async createResponse(request) {
+      requests.push(request);
       const outputText = outputs.shift() ?? "Planner response.";
       return {
         responseId: `resp_${outputs.length}`,
