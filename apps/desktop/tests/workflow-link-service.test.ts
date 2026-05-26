@@ -6,6 +6,9 @@ import { browserTabComponent, codexTargetComponent, codexThreadComponent, repoCo
 import { JsonFileStore } from "@agentbridge/local-store";
 import { TransformService } from "../src/services/transform-service.js";
 import { WorkflowLinkService } from "../src/services/workflow-link-service.js";
+import { SourceService } from "../src/services/source-service.js";
+import { CodexTargetService } from "../src/services/codex-target-service.js";
+import { ComponentDiscoveryService } from "../src/services/component-discovery-service.js";
 
 let tempDir: string;
 
@@ -74,6 +77,48 @@ describe("WorkflowLinkService", () => {
     expect(preview.handoffCard.codexThreadId).toBe("thread_123");
     expect(preview.handoffCard.codexDeliveryMode).toBe("existingThread");
     expect(preview.taskSpec.title).toBeTruthy();
+  });
+
+  it("creates and persists the embedded ChatGPT to Codex link used by Start", async () => {
+    const store = new JsonFileStore(tempDir);
+    const sourceService = new SourceService(store);
+    const targetService = new CodexTargetService(store);
+    const discoveryService = new ComponentDiscoveryService(store, {
+      listTopLevelWindows: async () => []
+    } as never);
+    const workflowService = new WorkflowLinkService(store, new TransformService(store));
+
+    await sourceService.bindEmbeddedChatGptSource({
+      title: "ChatGPT - AgentBridge",
+      url: "https://chatgpt.com/c/agentbridge-smoke"
+    });
+    await targetService.configureTarget(tempDir, { testCommand: "pnpm test" });
+    const components = await discoveryService.listComponents();
+
+    const sourceComponent = components.find((component) => component.backingRef.sourceId === "src_agentbridge_chatgpt");
+    const workspaceComponent = components.find((component) => component.kind === "repo");
+    const targetComponent = components.find((component) => component.provider === "codex");
+
+    expect(sourceComponent?.status).toBe("available");
+    expect(sourceComponent?.roleCapabilities.canCapture).toBe(true);
+    expect(workspaceComponent?.roleCapabilities.canBeWorkspace).toBe(true);
+    expect(targetComponent?.roleCapabilities.canBeTarget).toBe(true);
+
+    const link = await workflowService.createWorkflowLink({
+      name: "ChatGPT to Codex",
+      sourceComponentId: sourceComponent!.id,
+      workspaceComponentId: workspaceComponent!.id,
+      targetComponentId: targetComponent!.id,
+      recipe: "implementationBrief"
+    });
+
+    const savedLinks = await store.listWorkflowLinks();
+    expect(savedLinks).toHaveLength(1);
+    expect(savedLinks[0]?.id).toBe(link.id);
+    expect(savedLinks[0]?.sourceComponentId).toBe(sourceComponent!.id);
+    expect(savedLinks[0]?.workspaceComponentId).toBe(workspaceComponent!.id);
+    expect(savedLinks[0]?.targetComponentId).toBe(targetComponent!.id);
+    expect(savedLinks[0]?.codexOpenMode).toBe("newThread");
   });
 
   it("blocks task creation when the source has no capture", async () => {
