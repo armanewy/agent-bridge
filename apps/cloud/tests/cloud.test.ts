@@ -146,6 +146,37 @@ describe("AgentBridge Cloud scaffold", () => {
     expect(JSON.stringify(app.getUsageRecords())).not.toContain("do not store this prompt");
     expect(app.getUsageRecords()[0]).toMatchObject({ route: "/v1/planner/sessions", status: 200 });
   });
+
+  it("rejects oversized hosted planner payloads", async () => {
+    const app = createCloudApp({ maxPlannerPayloadBytes: 64 }, { plannerTransport: mockPlannerTransport("Planner response.") });
+    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
+    const token = String(login.body.token);
+
+    const response = await app.handle({
+      method: "POST",
+      path: "/v1/planner/task-spec",
+      headers: { authorization: `Bearer ${token}` },
+      body: { payload: { intent: "x".repeat(200) } }
+    });
+
+    expect(response.status).toBe(413);
+  });
+
+  it("rejects file payloads unless enabled", async () => {
+    const app = createCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
+    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
+    const token = String(login.body.token);
+
+    const response = await app.handle({
+      method: "POST",
+      path: "/v1/planner/task-spec",
+      headers: { authorization: `Bearer ${token}` },
+      body: { payload: { files: [{ fileData: "raw-file-content" }] } }
+    });
+
+    expect(response.status).toBe(400);
+    expect(String(response.body.error)).toContain("file payloads");
+  });
 });
 
 function mockPlannerTransport(outputText: string): CloudPlannerTransport {

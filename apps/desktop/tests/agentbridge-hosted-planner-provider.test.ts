@@ -61,6 +61,7 @@ describe("AgentBridgeHostedPlannerProvider", () => {
     expect(turns.map((turn) => turn.role)).toEqual(["user", "assistant"]);
     expect((await store.listArtifactsForMission("mission_1")).map((artifact) => artifact.title)).toEqual([
       "Planner user message",
+      "Hosted Planner payload summary",
       "Hosted Planner response"
     ]);
   });
@@ -83,6 +84,7 @@ describe("AgentBridgeHostedPlannerProvider", () => {
     expect(response.taskSpec).toMatchObject({ title: "Hosted TaskSpec" });
     expect(response.content).toContain("Hosted TaskSpec");
     expect((await store.listArtifactsForMission("mission_2")).map((artifact) => artifact.kind)).toEqual([
+      "reviewNote",
       "reviewNote",
       "modelResponse"
     ]);
@@ -114,6 +116,28 @@ describe("AgentBridgeHostedPlannerProvider", () => {
     expect(serialized).toContain("agent-bridge");
     expect(serialized).not.toContain("very-secret-path");
     expect(serialized).not.toContain("file_should_not_send");
+  });
+
+  it("stores payload summaries and blocks high-severity redaction findings before planner message calls", async () => {
+    const requests: Array<{ path: string; body?: unknown }> = [];
+    const store = new JsonFileStore(tempDir);
+    const auth = new AuthService(new MemoryAuthStorage());
+    await auth.signInDevMode();
+    const provider = new AgentBridgeHostedPlannerProvider(store, auth, {
+      transport: mockTransport(requests),
+      now: fixedNow
+    });
+
+    await expect(provider.plan({
+      missionId: "mission_4",
+      prompt: "Authorization: Bearer abcdefghijklmnopqrstuvwxyz1234567890",
+      metadata: {}
+    })).rejects.toThrow("high-severity");
+
+    expect(requests.map((request) => request.path)).toEqual(["/v1/planner/sessions"]);
+    const artifacts = await store.listArtifactsForMission("mission_4");
+    expect(artifacts.map((artifact) => artifact.title)).toContain("Hosted Planner payload summary");
+    expect(JSON.stringify(artifacts)).toContain("bearerToken");
   });
 });
 

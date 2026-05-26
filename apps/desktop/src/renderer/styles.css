@@ -263,6 +263,56 @@ nav {
   align-self: center;
 }
 
+.planner-payload-panel {
+  border-style: dashed;
+}
+
+.planner-payload-panel.warning {
+  border-color: #d9822b;
+  background: #fff8e8;
+}
+
+.payload-toggle {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0;
+  color: #172026;
+  font: inherit;
+  cursor: pointer;
+}
+
+.payload-toggle span {
+  font-weight: 800;
+}
+
+.payload-toggle em {
+  color: #64737f;
+  font-size: 12px;
+  font-style: normal;
+}
+
+.payload-summary-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+  font-size: 13px;
+}
+
+.payload-summary-grid p,
+.payload-summary-grid ul {
+  margin: 4px 0 0;
+  color: #526270;
+}
+
+.payload-summary-grid ul {
+  padding-left: 18px;
+}
+
 .mission-timeline {
   display: flex;
   flex-wrap: wrap;

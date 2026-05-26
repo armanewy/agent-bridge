@@ -20,6 +20,8 @@ Threats:
 Default mitigations:
 
 - Redact before hosted planner calls.
+- Block hosted planner calls when high-severity redaction findings are detected.
+- Reject oversized hosted planner payloads and raw file payloads server-side by default.
 - Keep repo files local by default.
 - Require approval for file upload.
 - Run only configured verification commands by default.

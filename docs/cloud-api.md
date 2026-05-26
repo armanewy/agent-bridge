@@ -9,6 +9,7 @@ AgentBridge Cloud hosts the default Planner provider. The desktop authenticates 
 - `AGENTBRIDGE_CLOUD_OPENAI_MODEL`: hosted planner model, default `gpt-4.1-mini`.
 - `LOG_RAW_PAYLOADS`: default `false`; raw request bodies should not be logged.
 - `MAX_PLANNER_PAYLOAD_BYTES`: default `65536`.
+- `AGENTBRIDGE_CLOUD_ALLOW_FILE_UPLOADS`: default `false`; file payloads are rejected unless explicitly enabled.
 
 ## Routes
 
@@ -31,5 +32,7 @@ Planner routes require a bearer token. The development login route returns a moc
 ## Privacy
 
 The service logs request id, route, user id, status, and timestamp. It does not log raw planner payloads. Usage records store route/model/status/token metadata and payload byte counts, not prompt text.
+
+Planner routes reject oversized payloads and raw file payload fields by default. Desktop should send artifact summaries unless an explicit file-upload policy is added later.
 
 If `OPENAI_API_KEY` is missing and no test transport is injected, planner routes return unavailable instead of asking the desktop for a key.

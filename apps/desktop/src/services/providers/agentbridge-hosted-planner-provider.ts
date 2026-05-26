@@ -20,6 +20,15 @@ import {
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { AuthService } from "../auth-service.js";
+import {
+  assertPlannerPayloadAllowed,
+  buildReviewInput,
+  PlannerPayloadBuilder,
+  plannerPayloadHasHighSeverityFinding,
+  savePlannerPayloadSummaryArtifact,
+  type PlannerPayloadBuildResult,
+  type PlannerPayloadPurpose
+} from "../planner-payload-builder.js";
 
 export const AGENTBRIDGE_HOSTED_PLANNER_PROVIDER_ID = "agentbridge-hosted-planner";
 
@@ -29,11 +38,13 @@ export interface HostedPlannerTransport {
 
 export interface AgentBridgeHostedPlannerProviderOptions {
   transport?: HostedPlannerTransport;
+  payloadBuilder?: PlannerPayloadBuilder;
   now?: () => string;
 }
 
 export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
   private readonly transport: HostedPlannerTransport;
+  private readonly payloadBuilder: PlannerPayloadBuilder;
   private readonly now: () => string;
 
   constructor(
@@ -43,6 +54,7 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
   ) {
     this.transport = options.transport ?? new FetchHostedPlannerTransport();
     this.now = options.now ?? (() => new Date().toISOString());
+    this.payloadBuilder = options.payloadBuilder ?? new PlannerPayloadBuilder(store, this.now);
   }
 
   profile(): AgentProviderProfile {
@@ -145,6 +157,13 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
   async sendMessage(sessionRef: AgentSessionRef, message: string, context?: PlannerRequest): Promise<AgentTurn> {
     const userTurn = await this.saveUserTurn(sessionRef.id, message, context);
     const { token, baseUrl } = await this.requireCloudAuth();
+    const planPayloadInput: Parameters<PlannerPayloadBuilder["buildPlannerRequestPayload"]>[2] = {
+      prompt: message,
+      ...(context?.contextArtifactIds ? { contextArtifactIds: context.contextArtifactIds } : {}),
+      ...(context?.repoContext ? { repoContext: context.repoContext } : {}),
+      ...(context?.metadata ? { metadata: context.metadata } : {})
+    };
+    const payloadResult = await this.preparePayload("plan", context?.missionId, planPayloadInput);
     const response = HostedPlannerMessageResponseSchema.parse(
       await this.transport.request<HostedPlannerMessageResponse>(
         `/v1/planner/sessions/${encodeURIComponent(sessionRef.externalSessionId)}/messages`,
@@ -155,10 +174,12 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
           body: {
             sessionId: sessionRef.externalSessionId,
             missionId: context?.missionId,
-            payload: buildRepoMinimalPayload(message, context),
+            payload: payloadResult.payload,
+            policy: payloadResult.policyUsed,
             metadata: {
               source: context?.metadata?.source ?? "plannerMessage",
-              localUserTurnId: userTurn.id
+              localUserTurnId: userTurn.id,
+              payloadSummaryArtifactId: payloadResult.summaryArtifactId
             }
           }
         }
@@ -204,6 +225,13 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
     });
     await this.saveUserTurn(session.id, input.prompt, input);
     const { token, baseUrl } = await this.requireCloudAuth();
+    const taskSpecPayloadInput: Parameters<PlannerPayloadBuilder["buildPlannerRequestPayload"]>[2] = {
+      prompt: input.prompt,
+      ...(input.contextArtifactIds ? { contextArtifactIds: input.contextArtifactIds } : {}),
+      ...(input.repoContext ? { repoContext: input.repoContext } : {}),
+      ...(input.metadata ? { metadata: input.metadata } : {})
+    };
+    const payloadResult = await this.preparePayload("taskSpec", input.missionId, taskSpecPayloadInput);
     const response = HostedPlannerTaskSpecResponseSchema.parse(
       await this.transport.request<HostedPlannerTaskSpecResponse>("/v1/planner/task-spec", {
         method: "POST",
@@ -212,8 +240,12 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
         body: {
           sessionId: session.externalSessionId,
           missionId: input.missionId,
-          payload: buildRepoMinimalPayload(input.prompt, input),
-          metadata: input.metadata ?? {}
+          payload: payloadResult.payload,
+          policy: payloadResult.policyUsed,
+          metadata: {
+            ...(input.metadata ?? {}),
+            payloadSummaryArtifactId: payloadResult.summaryArtifactId
+          }
         }
       })
     );
@@ -251,6 +283,7 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
       ...(input.metadata ? { metadata: input.metadata } : {})
     });
     const { token, baseUrl } = await this.requireCloudAuth();
+    const payloadResult = await this.preparePayload("review", input.missionId, buildReviewInput(input));
     const response = HostedPlannerReviewResponseSchema.parse(
       await this.transport.request<HostedPlannerReviewResponse>("/v1/planner/review", {
         method: "POST",
@@ -259,8 +292,12 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
         body: {
           sessionId: session.externalSessionId,
           missionId: input.missionId,
-          payload: buildReviewPayload(input),
-          metadata: input.metadata ?? {}
+          payload: payloadResult.payload,
+          policy: payloadResult.policyUsed,
+          metadata: {
+            ...(input.metadata ?? {}),
+            payloadSummaryArtifactId: payloadResult.summaryArtifactId
+          }
         }
       })
     );
@@ -419,6 +456,49 @@ export class AgentBridgeHostedPlannerProvider implements PlannerProvider {
     }
     return { token, baseUrl: this.authService.getCloudBaseUrl() };
   }
+
+  private async preparePayload(
+    purpose: PlannerPayloadPurpose,
+    missionId: string | undefined,
+    input: Parameters<PlannerPayloadBuilder["buildPlannerRequestPayload"]>[2]
+  ): Promise<PlannerPayloadBuildResult & { summaryArtifactId?: string }> {
+    if (!missionId) {
+      const fallback = await this.payloadBuilder.buildPlannerRequestPayload(undefined, purpose, input);
+      assertPlannerPayloadAllowed(fallback);
+      return fallback;
+    }
+    const result = await this.payloadBuilder.buildPlannerRequestPayload(missionId, purpose, input);
+    const summaryArtifactId = await savePlannerPayloadSummaryArtifact(this.store, missionId, purpose, result, this.now);
+    if (plannerPayloadHasHighSeverityFinding(result)) {
+      await this.createRedactionDecisionIfAutopilotActive(missionId, result);
+    }
+    assertPlannerPayloadAllowed(result);
+    return { ...result, summaryArtifactId };
+  }
+
+  private async createRedactionDecisionIfAutopilotActive(missionId: string, result: PlannerPayloadBuildResult): Promise<void> {
+    const activeRun = (await this.store.listAutopilotRunsForMission(missionId)).find(
+      (run) => !["passed", "failed", "cancelled"].includes(run.status)
+    );
+    if (!activeRun) {
+      return;
+    }
+    await this.store.saveUserDecision({
+      id: `decision_${randomUUID()}`,
+      missionId,
+      autopilotRunId: activeRun.id,
+      decisionType: "approveAction",
+      prompt: [
+        "Hosted Planner payload contains high-severity redaction findings.",
+        ...result.redactionFindings
+          .filter((finding) => finding.severity === "high")
+          .map((finding) => `- ${finding.kind}: ${finding.preview}`)
+      ].join("\n"),
+      options: ["Review payload", "Stop"],
+      status: "pending",
+      createdAt: this.now()
+    });
+  }
 }
 
 export class FetchHostedPlannerTransport implements HostedPlannerTransport {
@@ -436,53 +516,4 @@ export class FetchHostedPlannerTransport implements HostedPlannerTransport {
     }
     return await response.json() as T;
   }
-}
-
-function buildRepoMinimalPayload(message: string, context?: PlannerRequest): Record<string, unknown> {
-  return {
-    intent: message,
-    missionId: context?.missionId,
-    contextArtifactIds: context?.contextArtifactIds ?? [],
-    artifactBundleIds: context?.artifactBundleIds ?? [],
-    fileIds: [],
-    repoIdentity: repoIdentity(context),
-    metadata: context?.metadata ?? {},
-    policy: {
-      repoFilesIncluded: false,
-      repoPathIncluded: false,
-      commandOutputs: "excerptsOnly",
-      artifacts: "approvedOnly"
-    }
-  };
-}
-
-function buildReviewPayload(input: ReviewRequest): Record<string, unknown> {
-  return {
-    missionId: input.missionId,
-    taskSpec: input.taskSpec,
-    verificationSummary: input.verificationSummary ?? input.verificationResult?.summary,
-    verificationStatus: input.verificationResult?.status,
-    artifactIds: input.artifactIds,
-    fileIds: [],
-    metadata: input.metadata ?? {},
-    policy: {
-      repoFilesIncluded: false,
-      repoPathIncluded: false,
-      commandOutputs: "excerptsOnly",
-      artifacts: "approvedOnly"
-    }
-  };
-}
-
-function repoIdentity(context?: PlannerRequest): Record<string, unknown> | undefined {
-  const repo = context?.repoContext;
-  if (!repo) {
-    return undefined;
-  }
-  return {
-    ...(repo.repoName ? { repoName: repo.repoName } : {}),
-    ...(repo.currentBranch ? { branch: repo.currentBranch } : {}),
-    ...(repo.gitStatusSummary ? { gitStatusSummary: repo.gitStatusSummary } : {}),
-    hasLocalPath: Boolean(repo.repoPath)
-  };
 }

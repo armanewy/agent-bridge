@@ -17,6 +17,7 @@ export interface CloudConfig {
   openAiModel: string;
   logRawPayloads: boolean;
   maxPlannerPayloadBytes: number;
+  allowFileUploads: boolean;
 }
 
 export interface CloudRequest {
@@ -374,6 +375,9 @@ export class AgentBridgeCloudApp {
     if (bytes > this.config.maxPlannerPayloadBytes) {
       throw new CloudHttpError(413, "planner payload is too large");
     }
+    if (!this.config.allowFileUploads && containsFilePayload(body)) {
+      throw new CloudHttpError(400, "planner file payloads are disabled");
+    }
   }
 
   private recordUsage(input: {
@@ -474,7 +478,8 @@ function loadConfig(): CloudConfig {
     openAiApiKeyConfigured: Boolean(openAiApiKey),
     openAiModel: process.env.AGENTBRIDGE_CLOUD_OPENAI_MODEL ?? "gpt-4.1-mini",
     logRawPayloads: process.env.LOG_RAW_PAYLOADS === "true",
-    maxPlannerPayloadBytes: Number(process.env.MAX_PLANNER_PAYLOAD_BYTES ?? 64 * 1024)
+    maxPlannerPayloadBytes: Number(process.env.MAX_PLANNER_PAYLOAD_BYTES ?? 64 * 1024),
+    allowFileUploads: process.env.AGENTBRIDGE_CLOUD_ALLOW_FILE_UPLOADS === "true"
   };
 }
 
@@ -610,6 +615,33 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function containsFilePayload(value: unknown): boolean {
+  if (Array.isArray(value)) {
+    return value.some(containsFilePayload);
+  }
+  if (!value || typeof value !== "object") {
+    return false;
+  }
+  const record = value as Record<string, unknown>;
+  for (const [key, nested] of Object.entries(record)) {
+    const normalized = key.toLowerCase();
+    if (
+      normalized === "filedata" ||
+      normalized === "file_data" ||
+      normalized === "filecontent" ||
+      normalized === "contentbytes" ||
+      normalized === "bytes" ||
+      normalized === "dataurl"
+    ) {
+      return true;
+    }
+    if (containsFilePayload(nested)) {
+      return true;
+    }
+  }
+  return false;
 }
 
 function now(): string {

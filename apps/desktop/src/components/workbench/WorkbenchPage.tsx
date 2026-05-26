@@ -1,5 +1,5 @@
 import { Bot, CheckCircle2, FileText, GitBranch, Play, Send, Square, Wrench } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
@@ -118,6 +118,16 @@ export function WorkbenchPage({
   const activeRun = autopilotStatus?.run;
   const missionWorkspace = missionDetail?.mission.repoContext;
   const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
+  const latestPayloadSummary = parsePlannerPayloadSummary(
+    missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
+  );
+  const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
+
+  useEffect(() => {
+    if (latestPayloadSummary?.redactionFindings.length) {
+      setPayloadPanelOpen(true);
+    }
+  }, [latestPayloadSummary?.artifactId, latestPayloadSummary?.redactionFindings.length]);
 
   return (
     <div className="workbench-layout">
@@ -347,6 +357,7 @@ export function WorkbenchPage({
         {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
         {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
       </section>
+      <PlannerPayloadPanel summary={latestPayloadSummary} open={payloadPanelOpen} onToggle={() => setPayloadPanelOpen((current) => !current)} />
       <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} onRevealFile={onRevealArtifactFile} />
       </details>
 
@@ -375,6 +386,82 @@ export function WorkbenchPage({
         </section>
       ) : null}
     </div>
+  );
+}
+
+interface PlannerPayloadSummary {
+  artifactId: string;
+  purpose: string;
+  estimatedBytes: number;
+  includedArtifactIds: string[];
+  excludedArtifactIds: string[];
+  excludedReasons: Record<string, string>;
+  redactionFindings: Array<{ kind: string; severity: string; preview: string }>;
+  payload: Record<string, unknown>;
+}
+
+function PlannerPayloadPanel({
+  summary,
+  open,
+  onToggle
+}: {
+  summary?: PlannerPayloadSummary | undefined;
+  open: boolean;
+  onToggle(): void;
+}): JSX.Element | null {
+  if (!summary) {
+    return null;
+  }
+  const payload = summary.payload;
+  const repoIdentity = isRecord(payload.repoIdentity) ? payload.repoIdentity : undefined;
+  const taskSpec = isRecord(payload.taskSpec) ? payload.taskSpec : undefined;
+  return (
+    <section className={summary.redactionFindings.length ? "panel planner-payload-panel warning" : "panel planner-payload-panel"}>
+      <button type="button" className="payload-toggle" onClick={onToggle}>
+        <span>What will be sent to Planner</span>
+        <em>{summary.estimatedBytes} bytes</em>
+      </button>
+      {open ? (
+        <div className="payload-summary-grid">
+          <div>
+            <strong>Intent</strong>
+            <p>{String(payload.intent ?? "Not included")}</p>
+          </div>
+          <div>
+            <strong>Task summary</strong>
+            <p>{taskSpec ? String(taskSpec.title ?? "TaskSpec included") : "No TaskSpec in this payload"}</p>
+          </div>
+          <div>
+            <strong>Repo identity</strong>
+            <p>{repoIdentity ? JSON.stringify(repoIdentity) : "Not included"}</p>
+          </div>
+          <div>
+            <strong>Artifacts</strong>
+            <p>{summary.includedArtifactIds.length} included · {summary.excludedArtifactIds.length} excluded</p>
+          </div>
+          {summary.excludedArtifactIds.length ? (
+            <div>
+              <strong>Excluded</strong>
+              <ul>
+                {summary.excludedArtifactIds.slice(0, 4).map((id) => (
+                  <li key={id}>{summary.excludedReasons[id] ?? id}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+          {summary.redactionFindings.length ? (
+            <div>
+              <strong>Redaction findings</strong>
+              <ul>
+                {summary.redactionFindings.map((finding, index) => (
+                  <li key={`${finding.kind}-${index}`}>{finding.severity}: {finding.kind} ({finding.preview})</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+        </div>
+      ) : null}
+    </section>
   );
 }
 
@@ -566,4 +653,48 @@ function formatBytes(value: number): string {
     return `${Math.round(value / 1024)} KB`;
   }
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function parsePlannerPayloadSummary(artifact?: Artifact | undefined): PlannerPayloadSummary | undefined {
+  if (!artifact?.content) {
+    return undefined;
+  }
+  try {
+    const record = JSON.parse(artifact.content) as unknown;
+    if (!isRecord(record)) {
+      return undefined;
+    }
+    const payload = isRecord(record.payload) ? record.payload : {};
+    return {
+      artifactId: artifact.id,
+      purpose: typeof record.purpose === "string" ? record.purpose : "planner",
+      estimatedBytes: typeof record.estimatedBytes === "number" ? record.estimatedBytes : 0,
+      includedArtifactIds: stringArray(record.includedArtifactIds),
+      excludedArtifactIds: stringArray(record.excludedArtifactIds),
+      excludedReasons: isRecord(record.excludedReasons) ? Object.fromEntries(Object.entries(record.excludedReasons).map(([key, value]) => [key, String(value)])) : {},
+      redactionFindings: Array.isArray(record.redactionFindings)
+        ? record.redactionFindings.flatMap((finding) => {
+            if (!isRecord(finding)) {
+              return [];
+            }
+            return [{
+              kind: String(finding.kind ?? "unknown"),
+              severity: String(finding.severity ?? "unknown"),
+              preview: String(finding.preview ?? "")
+            }];
+          })
+        : [],
+      payload
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function stringArray(value: unknown): string[] {
+  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

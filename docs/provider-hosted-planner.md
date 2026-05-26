@@ -15,12 +15,23 @@ By default, hosted planner requests include:
 - approved artifact summaries
 - repo name and branch when available
 
+Before each hosted planner call, the desktop builds a payload summary artifact containing:
+
+- purpose: `plan`, `taskSpec`, `review`, or `followUp`
+- included artifact ids
+- excluded artifact ids and reasons
+- redaction findings
+- estimated payload size
+- minimized payload preview
+
 By default, hosted planner requests do not include:
 
 - raw repo files
 - full local repo paths
 - unapproved artifact file contents
 - raw OpenAI API keys
+
+High-severity redaction findings block the hosted planner call. The Workbench can show `What will be sent to Planner` so users can inspect redaction findings and excluded artifacts without cluttering the default screen.
 
 ## Modes
 
