@@ -4,24 +4,37 @@ import { join } from "node:path";
 import { homedir } from "node:os";
 import {
   AuditEventSchema,
+  ArtifactSchema,
   CaptureSchema,
   HandoffSchema,
+  HandoffCardSchema,
   LinkSchema,
+  MissionSchema,
+  RunSchema,
+  RunStepSchema,
   SourceEndpointSchema,
   TargetEndpointSchema,
+  VerificationResultSchema,
   type Approval,
+  type Artifact,
   type AuditEvent,
   type Capture,
   type Handoff,
+  type HandoffCard,
   type Link,
   type DeliveryAttempt,
   DeliveryAttemptSchema,
+  type Mission,
+  type MissionStatus,
+  type Run,
+  type RunStep,
   type Setting,
   type SourceEndpoint,
-  type TargetEndpoint
+  type TargetEndpoint,
+  type VerificationResult
 } from "@agentbridge/core";
 
-export const CURRENT_STORE_VERSION = 1;
+export const CURRENT_STORE_VERSION = 2;
 
 export interface LocalStore {
   saveLink(link: Link): Promise<void>;
@@ -43,6 +56,25 @@ export interface LocalStore {
   deleteHandoff(id: string): Promise<boolean>;
   saveDeliveryAttempt(attempt: DeliveryAttempt): Promise<void>;
   listDeliveryAttempts(handoffId?: string): Promise<DeliveryAttempt[]>;
+  saveMission(mission: Mission): Promise<void>;
+  getMission(id: string): Promise<Mission | undefined>;
+  listMissions(): Promise<Mission[]>;
+  updateMissionStatus(id: string, status: MissionStatus): Promise<Mission | undefined>;
+  deleteMission(id: string): Promise<boolean>;
+  saveHandoffCard(card: HandoffCard): Promise<void>;
+  getHandoffCard(id: string): Promise<HandoffCard | undefined>;
+  listHandoffCardsForMission(missionId: string): Promise<HandoffCard[]>;
+  saveArtifact(artifact: Artifact): Promise<void>;
+  getArtifact(id: string): Promise<Artifact | undefined>;
+  listArtifactsForMission(missionId: string): Promise<Artifact[]>;
+  listArtifactsForHandoffCard(handoffCardId: string): Promise<Artifact[]>;
+  saveRun(run: Run): Promise<void>;
+  getRun(id: string): Promise<Run | undefined>;
+  listRunsForMission(missionId: string): Promise<Run[]>;
+  appendRunStep(step: RunStep): Promise<void>;
+  listRunSteps(runId: string): Promise<RunStep[]>;
+  saveVerificationResult(result: VerificationResult): Promise<void>;
+  listVerificationResultsForMission(missionId: string): Promise<VerificationResult[]>;
   saveApproval(approval: Approval): Promise<void>;
   getApproval(id: string): Promise<Approval | undefined>;
   appendAuditEvent(event: AuditEvent): Promise<void>;
@@ -60,6 +92,12 @@ interface StoreData {
   captures: Record<string, Capture>;
   handoffs: Record<string, Handoff>;
   deliveryAttempts: Record<string, DeliveryAttempt>;
+  missions: Record<string, Mission>;
+  handoffCards: Record<string, HandoffCard>;
+  artifacts: Record<string, Artifact>;
+  runs: Record<string, Run>;
+  runSteps: Record<string, RunStep>;
+  verificationResults: Record<string, VerificationResult>;
   approvals: Record<string, Approval>;
   auditEvents: AuditEvent[];
   settings: Record<string, Setting>;
@@ -182,6 +220,130 @@ export class JsonFileStore implements LocalStore {
       .sort((a, b) => b.attemptedAt.localeCompare(a.attemptedAt));
   }
 
+  async saveMission(mission: Mission): Promise<void> {
+    MissionSchema.parse(mission);
+    await this.update((data) => {
+      data.missions[mission.id] = mission;
+    });
+  }
+
+  async getMission(id: string): Promise<Mission | undefined> {
+    return (await this.read()).missions[id];
+  }
+
+  async listMissions(): Promise<Mission[]> {
+    return Object.values((await this.read()).missions).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async updateMissionStatus(id: string, status: MissionStatus): Promise<Mission | undefined> {
+    let updated: Mission | undefined;
+    await this.update((data) => {
+      const mission = data.missions[id];
+      if (!mission) {
+        return;
+      }
+      updated = {
+        ...mission,
+        status,
+        updatedAt: new Date().toISOString()
+      };
+      data.missions[id] = updated;
+    });
+    return updated;
+  }
+
+  async deleteMission(id: string): Promise<boolean> {
+    let deleted = false;
+    await this.update((data) => {
+      deleted = Object.hasOwn(data.missions, id);
+      delete data.missions[id];
+    });
+    return deleted;
+  }
+
+  async saveHandoffCard(card: HandoffCard): Promise<void> {
+    HandoffCardSchema.parse(card);
+    await this.update((data) => {
+      data.handoffCards[card.id] = card;
+    });
+  }
+
+  async getHandoffCard(id: string): Promise<HandoffCard | undefined> {
+    return (await this.read()).handoffCards[id];
+  }
+
+  async listHandoffCardsForMission(missionId: string): Promise<HandoffCard[]> {
+    return Object.values((await this.read()).handoffCards)
+      .filter((card) => card.missionId === missionId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async saveArtifact(artifact: Artifact): Promise<void> {
+    ArtifactSchema.parse(artifact);
+    await this.update((data) => {
+      data.artifacts[artifact.id] = artifact;
+    });
+  }
+
+  async getArtifact(id: string): Promise<Artifact | undefined> {
+    return (await this.read()).artifacts[id];
+  }
+
+  async listArtifactsForMission(missionId: string): Promise<Artifact[]> {
+    return Object.values((await this.read()).artifacts)
+      .filter((artifact) => artifact.missionId === missionId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async listArtifactsForHandoffCard(handoffCardId: string): Promise<Artifact[]> {
+    return Object.values((await this.read()).artifacts)
+      .filter((artifact) => artifact.handoffCardId === handoffCardId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async saveRun(run: Run): Promise<void> {
+    RunSchema.parse(run);
+    await this.update((data) => {
+      data.runs[run.id] = run;
+    });
+  }
+
+  async getRun(id: string): Promise<Run | undefined> {
+    return (await this.read()).runs[id];
+  }
+
+  async listRunsForMission(missionId: string): Promise<Run[]> {
+    return Object.values((await this.read()).runs)
+      .filter((run) => run.missionId === missionId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async appendRunStep(step: RunStep): Promise<void> {
+    RunStepSchema.parse(step);
+    await this.update((data) => {
+      data.runSteps[step.id] = step;
+    });
+  }
+
+  async listRunSteps(runId: string): Promise<RunStep[]> {
+    return Object.values((await this.read()).runSteps)
+      .filter((step) => step.runId === runId)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+  }
+
+  async saveVerificationResult(result: VerificationResult): Promise<void> {
+    VerificationResultSchema.parse(result);
+    await this.update((data) => {
+      data.verificationResults[result.id] = result;
+    });
+  }
+
+  async listVerificationResultsForMission(missionId: string): Promise<VerificationResult[]> {
+    return Object.values((await this.read()).verificationResults)
+      .filter((result) => result.missionId === missionId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
   async saveApproval(approval: Approval): Promise<void> {
     await this.update((data) => {
       data.approvals[approval.id] = approval;
@@ -257,6 +419,12 @@ export function createEmptyStore(): StoreData {
     captures: {},
     handoffs: {},
     deliveryAttempts: {},
+    missions: {},
+    handoffCards: {},
+    artifacts: {},
+    runs: {},
+    runSteps: {},
+    verificationResults: {},
     approvals: {},
     auditEvents: [],
     settings: {}
