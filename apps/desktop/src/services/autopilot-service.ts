@@ -11,6 +11,7 @@ import type {
 import type { LocalStore } from "@agentbridge/local-store";
 import type { ArtifactBrokerService, FileRiskFinding } from "./artifact-broker-service.js";
 import type { WorkbenchService } from "./workbench-service.js";
+import type { WorktreeManagerService } from "./worktree-manager-service.js";
 
 export interface AutopilotStatus {
   run?: AutopilotRun;
@@ -26,7 +27,8 @@ export class AutopilotService {
     private readonly store: LocalStore,
     private readonly workbenchService: WorkbenchService,
     artifactBrokerOrNow?: ArtifactBrokerService | (() => string),
-    now?: () => string
+    now?: () => string,
+    private readonly worktreeManager?: WorktreeManagerService
   ) {
     this.artifactBroker = typeof artifactBrokerOrNow === "function" ? undefined : artifactBrokerOrNow;
     this.now = typeof artifactBrokerOrNow === "function" ? artifactBrokerOrNow : now ?? (() => new Date().toISOString());
@@ -46,6 +48,10 @@ export class AutopilotService {
       updatedAt: now
     };
     await this.store.saveAutopilotRun(run);
+    const blocked = await this.prepareMissionWorkspace(run, policy);
+    if (blocked) {
+      return blocked;
+    }
     return this.continueAutopilot(run.id);
   }
 
@@ -140,7 +146,8 @@ export class AutopilotService {
           source: "userDecision",
           decisionId: decision.id,
           decisionType: decision.decisionType,
-          approvedRisk: /approve/i.test(selectedOption)
+          approvedRisk: /approve/i.test(selectedOption),
+          approvedCompletionContract: /completion contract/i.test(decision.prompt) && /approve/i.test(selectedOption)
         },
         createdAt: this.now()
       });
@@ -185,6 +192,18 @@ export class AutopilotService {
           const card = await this.workbenchService.createTaskSpecFromLatestPlannerTurn(run.missionId);
           return card.artifactIds;
         }
+      };
+    }
+    const latestContract = (await this.store.listCompletionContractsForMission(run.missionId))[0];
+    const humanReviewApproved = artifacts.some(
+      (artifact) => artifact.metadata.source === "userDecision" && artifact.metadata.approvedCompletionContract === true
+    );
+    if ((latestContract?.status === "invalid" || latestContract?.status === "needs_user_input") && !humanReviewApproved) {
+      return {
+        kind: "requestApproval",
+        title: "Resolve completion contract",
+        approvalPrompt: "The completion contract is not objectively verifiable yet. Add verification evidence or approve continuing under human review.",
+        execute: async () => []
       };
     }
     const deliveryResultCount = artifacts.filter(
@@ -397,6 +416,53 @@ export class AutopilotService {
     return findings.filter((finding) => finding.severity === "high" || policy.allowProviderFileUpload === "askEachTime");
   }
 
+  private async prepareMissionWorkspace(run: AutopilotRun, policy: AutopilotPolicy): Promise<AutopilotStatus | undefined> {
+    if (!this.worktreeManager) {
+      return undefined;
+    }
+    const strategy = policy.workspaceStrategy ?? (policy.mode === "autonomous" ? "gitWorktree" : "none");
+    if (strategy === "none") {
+      return undefined;
+    }
+    if (policy.mode !== "autonomous" && !policy.requireIsolationForParallelRuns) {
+      return undefined;
+    }
+    const mission = await this.store.getMission(run.missionId);
+    if (!mission?.repoContext?.repoPath) {
+      return undefined;
+    }
+    const existing = await this.worktreeManager.getMissionWorkspace(run.missionId);
+    if (existing?.status === "active") {
+      return undefined;
+    }
+    try {
+      const workspace = await this.worktreeManager.createMissionWorkspace({
+        missionId: run.missionId,
+        baseRepoPath: mission.repoContext.repoPath,
+        strategy,
+        ...(mission.repoContext.currentBranch ? { baseBranch: mission.repoContext.currentBranch } : {})
+      });
+      await this.store.saveMission({
+        ...mission,
+        repoContext: {
+          ...mission.repoContext,
+          repoPath: workspace.workingPath,
+          worktreePath: workspace.workingPath,
+          ...(workspace.branchName ? { currentBranch: workspace.branchName } : {})
+        },
+        updatedAt: this.now()
+      });
+      return undefined;
+    } catch (error) {
+      const decision = await this.createDecision(run, "requestApproval", `Workspace isolation failed: ${error instanceof Error ? error.message : String(error)}`);
+      await this.store.updateAutopilotRunStatus(run.id, "blocked", {
+        pendingUserDecisionId: decision.id,
+        stopReason: "Workspace isolation failed."
+      });
+      return this.statusForRunId(run.id);
+    }
+  }
+
   private async ensureDefaultPolicy(): Promise<AutopilotPolicy> {
     const existing = (await this.store.listAutopilotPolicies()).find((policy) => policy.name === "Supervised");
     if (existing) {
@@ -420,6 +486,8 @@ export class AutopilotService {
       blockedFilePatterns: ["(^|[/\\\\])\\.env$", "id_rsa", "private[-_]?key"],
       redactBeforeUpload: true,
       requireApprovalForBinaryFiles: true,
+      workspaceStrategy: "gitWorktree",
+      requireIsolationForParallelRuns: true,
       stopOnVerificationFailure: false,
       stopOnRedactionFinding: true,
       stopOnProviderWarning: true,
@@ -564,6 +632,8 @@ function basePolicy(id: string, name: string, now: string): AutopilotPolicy {
     blockedFilePatterns: ["(^|[/\\\\])\\.env$", "id_rsa", "private[-_]?key"],
     redactBeforeUpload: true,
     requireApprovalForBinaryFiles: true,
+    workspaceStrategy: "gitWorktree",
+    requireIsolationForParallelRuns: true,
     stopOnVerificationFailure: false,
     stopOnRedactionFinding: true,
     stopOnProviderWarning: true,

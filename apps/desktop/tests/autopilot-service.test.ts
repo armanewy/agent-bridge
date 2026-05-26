@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Artifact, AutopilotPolicy, HandoffCard, Mission, Run, TaskSpec, VerificationResult } from "@agentbridge/core";
+import type { Artifact, AutopilotPolicy, CompletionContract, HandoffCard, Mission, Run, TaskSpec, VerificationResult } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { ArtifactBrokerService } from "../src/services/artifact-broker-service.js";
 import { AutopilotService } from "../src/services/autopilot-service.js";
@@ -80,6 +80,38 @@ describe("AutopilotService", () => {
     expect(status.run?.status).toBe("blocked");
     expect(status.pendingDecision?.prompt).toContain("Approve risky mission files");
     expect(status.pendingDecision?.prompt).toContain("Environment-style secret");
+  });
+
+  it("blocks autonomous execution when completion contract lacks objective evidence", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    await store.saveArtifact(textArtifact("mission_1", "modelResponse", "Planner response"));
+    await store.saveHandoffCard(handoffCard());
+    await store.saveCompletionContract(completionContract("needs_user_input"));
+    const policy: AutopilotPolicy = {
+      id: "policy_autonomous",
+      name: "Autonomous",
+      mode: "autonomous",
+      maxIterations: 1,
+      allowPlannerTurnsWithoutApproval: true,
+      allowCodexTurnsWithoutApproval: true,
+      allowVerificationWithoutApproval: true,
+      allowShellCommands: "configuredOnly",
+      allowFileWrites: "repoOnly",
+      allowNetworkAccess: false,
+      stopOnVerificationFailure: false,
+      stopOnRedactionFinding: true,
+      stopOnProviderWarning: true,
+      createdAt: fixedNow(),
+      updatedAt: fixedNow()
+    };
+    await store.saveAutopilotPolicy(policy);
+    const service = new AutopilotService(store, fakeWorkbench(store), fixedNow);
+
+    const status = await service.startAutopilot("mission_1", policy.id);
+
+    expect(status.run?.status).toBe("blocked");
+    expect(status.pendingDecision?.prompt).toContain("completion contract");
   });
 
   it("stores steering notes as mission artifacts", async () => {
@@ -220,6 +252,49 @@ function taskSpec(): TaskSpec {
     suggestedFiles: [],
     verificationSteps: [],
     expectedSummaryFormat: "Summary"
+  };
+}
+
+function handoffCard(): HandoffCard {
+  return {
+    id: "card_1",
+    missionId: "mission_1",
+    sourceId: "provider:openai-planner",
+    captureId: "artifact_modelResponse",
+    targetId: "provider:codex",
+    recipe: "implementationBrief",
+    taskSpec: taskSpec(),
+    generatedPrompt: "Goal:\nDo the thing.",
+    redactionFindings: [],
+    deliveryAttemptIds: [],
+    artifactIds: ["artifact_taskSpec"],
+    createdAt: fixedNow(),
+    updatedAt: fixedNow()
+  };
+}
+
+function completionContract(status: CompletionContract["status"]): CompletionContract {
+  return {
+    id: "contract_1",
+    missionId: "mission_1",
+    goal: "Do the task.",
+    scope: [],
+    nonGoals: [],
+    acceptanceCriteria: [
+      {
+        id: "criterion_1",
+        statement: "The UI feels better.",
+        evidenceRequired: "Human review.",
+        verifierKind: "visual",
+        required: true
+      }
+    ],
+    verificationMethods: [],
+    stopConditions: [],
+    humanReviewTriggers: [],
+    status,
+    createdAt: fixedNow(),
+    updatedAt: fixedNow()
   };
 }
 

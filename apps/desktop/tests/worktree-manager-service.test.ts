@@ -5,6 +5,7 @@ import { mkdtemp } from "node:fs/promises";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { JsonFileStore } from "@agentbridge/local-store";
 import { WorktreeManagerService } from "../src/services/worktree-manager-service.js";
 
 const execFileAsync = promisify(execFile);
@@ -42,7 +43,8 @@ describe("WorktreeManagerService", () => {
   });
 
   it("creates a git worktree and detects changed files", async () => {
-    const service = new WorktreeManagerService();
+    const store = new JsonFileStore(tempDir);
+    const service = new WorktreeManagerService(store);
     const workspace = await service.createMissionWorkspace({
       missionId: "mission worktree",
       baseRepoPath: repoPath,
@@ -52,6 +54,7 @@ describe("WorktreeManagerService", () => {
     await writeFile(join(workspace.workingPath, "changed.txt"), "changed\n", "utf8");
 
     expect(workspace.strategy).toBe("gitWorktree");
+    await expect(store.getMissionWorkspace(workspace.id)).resolves.toEqual(workspace);
     expect(await service.detectChangedFiles(workspace.id)).toContain("changed.txt");
     expect(await service.abandonWorkspace(workspace.id)).toMatchObject({ status: "abandoned" });
   });

@@ -15,14 +15,26 @@ export class MissionService {
       return undefined;
     }
 
-    const [handoffCards, artifacts, artifactFiles, artifactBundles, runs, verificationResults, completionContracts] = await Promise.all([
+    const [
+      handoffCards,
+      artifacts,
+      artifactFiles,
+      artifactBundles,
+      runs,
+      verificationResults,
+      completionContracts,
+      missionWorkspaces,
+      fileOwnership
+    ] = await Promise.all([
       this.store.listHandoffCardsForMission(id),
       this.store.listArtifactsForMission(id),
       this.store.listArtifactFilesForMission(id),
       this.store.listArtifactBundlesForMission(id),
       this.store.listRunsForMission(id),
       this.store.listVerificationResultsForMission(id),
-      this.store.listCompletionContractsForMission(id)
+      this.store.listCompletionContractsForMission(id),
+      this.store.listMissionWorkspaces(id),
+      this.store.listFileOwnershipForMission(id)
     ]);
     const completionEvidence = (
       await Promise.all(completionContracts.map((contract) => this.store.listCompletionEvidenceForContract(contract.id)))
@@ -49,6 +61,8 @@ export class MissionService {
       artifactBundles,
       completionContracts,
       completionEvidence,
+      missionWorkspaces,
+      fileOwnership,
       deliveryAttempts,
       runs,
       verificationResults,

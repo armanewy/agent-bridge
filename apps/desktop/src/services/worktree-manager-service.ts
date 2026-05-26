@@ -2,9 +2,12 @@ import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
 import { join } from "node:path";
 import type { MissionWorkspace, MissionWorkspaceStrategy } from "@agentbridge/core";
+import type { LocalStore } from "@agentbridge/local-store";
 
 export class WorktreeManagerService {
   private readonly workspaces = new Map<string, MissionWorkspace>();
+
+  constructor(private readonly store?: LocalStore) {}
 
   async createMissionWorkspace(input: {
     missionId: string;
@@ -27,6 +30,7 @@ export class WorktreeManagerService {
         updatedAt: now
       };
       this.workspaces.set(workspace.id, workspace);
+      await this.store?.saveMissionWorkspace(workspace);
       return workspace;
     }
 
@@ -51,15 +55,17 @@ export class WorktreeManagerService {
       updatedAt: now
     };
     this.workspaces.set(workspace.id, workspace);
+    await this.store?.saveMissionWorkspace(workspace);
     return workspace;
   }
 
   async getMissionWorkspace(missionId: string): Promise<MissionWorkspace | undefined> {
-    return [...this.workspaces.values()].find((workspace) => workspace.missionId === missionId);
+    const stored = await this.store?.listMissionWorkspaces(missionId);
+    return stored?.[0] ?? [...this.workspaces.values()].find((workspace) => workspace.missionId === missionId);
   }
 
   async detectChangedFiles(workspaceIdOrPath: string): Promise<string[]> {
-    const workspace = this.workspaces.get(workspaceIdOrPath);
+    const workspace = this.workspaces.get(workspaceIdOrPath) ?? await this.store?.getMissionWorkspace(workspaceIdOrPath);
     const output = await runGit(workspace?.workingPath ?? workspaceIdOrPath, ["status", "--short"]);
     return output.split(/\r?\n/).map((line) => line.slice(3).trim()).filter(Boolean);
   }
@@ -85,13 +91,14 @@ export class WorktreeManagerService {
     return this.updateStatus(workspaceId, "abandoned");
   }
 
-  private updateStatus(workspaceId: string, status: MissionWorkspace["status"]): MissionWorkspace | undefined {
-    const workspace = this.workspaces.get(workspaceId);
+  private async updateStatus(workspaceId: string, status: MissionWorkspace["status"]): Promise<MissionWorkspace | undefined> {
+    const workspace = this.workspaces.get(workspaceId) ?? await this.store?.getMissionWorkspace(workspaceId);
     if (!workspace) {
       return undefined;
     }
     const updated = { ...workspace, status, updatedAt: new Date().toISOString() };
     this.workspaces.set(workspaceId, updated);
+    await this.store?.saveMissionWorkspace(updated);
     return updated;
   }
 }

@@ -1,12 +1,16 @@
 import { exec, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { promisify } from "node:util";
+import { evaluateCompletionContract } from "@agentbridge/core";
 import type {
   Artifact,
   ArtifactKind,
   CommandResult,
+  CompletionContract,
+  CompletionEvidence,
   HandoffCard,
   Mission,
+  MissionStatus,
   Run,
   RunStep,
   TaskSpec,
@@ -116,6 +120,8 @@ export class VerificationService {
       createdAt: completedAt
     };
     await this.store.saveVerificationResult(result);
+    await this.saveCompletionEvidence(mission, result, artifacts, commandResults);
+    const contractAwareStatus = await this.resolveContractAwareMissionStatus(mission.id, resultStatus);
 
     const step: RunStep = {
       id: `step_${randomUUID()}`,
@@ -143,7 +149,7 @@ export class VerificationService {
     await this.store.saveRun(completedRun);
     await this.store.saveMission({
       ...mission,
-      status: missionStatusForVerification(resultStatus),
+      status: contractAwareStatus,
       verificationPlan: plan,
       runIds: unique([...mission.runIds, run.id]),
       handoffCardIds: unique([...mission.handoffCardIds, ...(followUp ? [followUp.card.id] : [])]),
@@ -154,9 +160,54 @@ export class VerificationService {
     return { run: completedRun, result, artifacts };
   }
 
+  private async saveCompletionEvidence(
+    mission: Mission,
+    result: VerificationResult,
+    artifacts: Artifact[],
+    commandResults: CommandResult[]
+  ): Promise<CompletionEvidence[]> {
+    const contracts = await this.store.listCompletionContractsForMission(mission.id);
+    const created: CompletionEvidence[] = [];
+    for (const contract of contracts) {
+      for (const criterion of contract.acceptanceCriteria) {
+        const evidence = evidenceForCriterion(contract, criterion.id, criterion.verifierKind, result, artifacts, commandResults);
+        await this.store.saveCompletionEvidence(evidence);
+        created.push(evidence);
+      }
+    }
+    return created;
+  }
+
+  private async resolveContractAwareMissionStatus(
+    missionId: string,
+    verificationStatus: VerificationResult["status"]
+  ): Promise<MissionStatus> {
+    const contracts = await this.store.listCompletionContractsForMission(missionId);
+    if (contracts.length === 0) {
+      return missionStatusForVerification(verificationStatus);
+    }
+    const statuses = await Promise.all(
+      contracts.map(async (contract) => {
+        const storedEvidence = await this.store.listCompletionEvidenceForContract(contract.id);
+        return evaluateCompletionContract(contract, storedEvidence).status;
+      })
+    );
+    if (statuses.some((status) => status === "failed")) {
+      return "failed";
+    }
+    if (verificationStatus === "failed") {
+      return "failed";
+    }
+    if (verificationStatus === "passed" && statuses.every((status) => status === "passed")) {
+      return "passed";
+    }
+    return "needs_review";
+  }
+
   private async saveGitDiffArtifact(mission: Mission, runId: string): Promise<Artifact> {
     const createdAt = new Date().toISOString();
     const content = await readGitDiffSummary(mission.repoContext?.repoPath ?? "");
+    const changedFiles = parseChangedFilesFromGitDiffSummary(content);
     const artifact: Artifact = {
       id: `artifact_${randomUUID()}`,
       missionId: mission.id,
@@ -166,12 +217,39 @@ export class VerificationService {
       content,
       metadata: {
         repoPath: mission.repoContext?.repoPath,
-        changedFiles: mission.repoContext?.changedFiles ?? []
+        changedFiles
       },
       createdAt
     };
     await this.store.saveArtifact(artifact);
+    await this.saveFileOwnershipForChangedFiles(mission, changedFiles, createdAt);
     return artifact;
+  }
+
+  private async saveFileOwnershipForChangedFiles(mission: Mission, changedFiles: string[], now: string): Promise<void> {
+    if (!changedFiles.length) {
+      return;
+    }
+    const workspace = (await this.store.listMissionWorkspaces(mission.id))[0];
+    if (!workspace) {
+      return;
+    }
+    for (const relativePath of changedFiles) {
+      await this.store.saveFileOwnership({
+        id: `ownership_${mission.id}_${relativePath.replace(/[^a-zA-Z0-9_.-]+/g, "_")}`,
+        missionId: mission.id,
+        workspaceId: workspace.id,
+        relativePath,
+        status: "changed",
+        firstSeenAt: now,
+        updatedAt: now
+      });
+    }
+    await this.store.saveMissionWorkspace({
+      ...workspace,
+      status: "dirty",
+      updatedAt: now
+    });
   }
 
   private async saveCommandArtifact(
@@ -338,6 +416,128 @@ function summarizeResult(commandResults: CommandResult[], artifacts: Artifact[])
   ].join("\n");
 }
 
+function evidenceForCriterion(
+  contract: CompletionContract,
+  criterionId: string,
+  kind: CompletionEvidence["kind"],
+  result: VerificationResult,
+  artifacts: Artifact[],
+  commandResults: CommandResult[]
+): CompletionEvidence {
+  const createdAt = new Date().toISOString();
+  const commandArtifactId = commandResults.find((item) => item.outputArtifactId)?.outputArtifactId;
+  const summaryArtifactId = artifacts.find((artifact) => artifact.title === "Verification summary")?.id;
+  const gitDiffArtifact = artifacts.find((artifact) => artifact.kind === "gitDiff");
+  const screenshotArtifact = artifacts.find((artifact) => artifact.kind === "screenshot");
+  const failedCommand = commandResults.find((item) => item.status === "failed");
+
+  if (kind === "command") {
+    if (failedCommand) {
+      return {
+        id: `evidence_${randomUUID()}`,
+        contractId: contract.id,
+        criterionId,
+        ...(failedCommand.outputArtifactId ? { sourceArtifactId: failedCommand.outputArtifactId } : {}),
+        kind,
+        status: "failed",
+        summary: `Command failed: ${failedCommand.command}`,
+        createdAt
+      };
+    }
+    if (commandResults.length > 0) {
+      return {
+        id: `evidence_${randomUUID()}`,
+        contractId: contract.id,
+        criterionId,
+        ...(commandArtifactId ? { sourceArtifactId: commandArtifactId } : {}),
+        kind,
+        status: "passed",
+        summary: "All configured verification commands passed.",
+        createdAt
+      };
+    }
+    return missingEvidence(contract.id, criterionId, kind, "No verification commands were configured.", createdAt);
+  }
+
+  if (kind === "gitDiff") {
+    const content = gitDiffArtifact?.content ?? "";
+    const hasDiff = !/No unstaged diff|No changed files in diff/i.test(content) && !/Git diff unavailable/i.test(content);
+    return {
+      id: `evidence_${randomUUID()}`,
+      contractId: contract.id,
+      criterionId,
+      ...(gitDiffArtifact ? { sourceArtifactId: gitDiffArtifact.id } : {}),
+      kind,
+      status: hasDiff ? "passed" : "missing",
+      summary: hasDiff ? "Git diff evidence exists." : "No git diff evidence exists.",
+      createdAt
+    };
+  }
+
+  if (kind === "visual") {
+    return screenshotArtifact
+      ? {
+          id: `evidence_${randomUUID()}`,
+          contractId: contract.id,
+          criterionId,
+          sourceArtifactId: screenshotArtifact.id,
+          kind,
+          status: "inconclusive",
+          summary: "Visual artifact exists but still requires visual review.",
+          createdAt
+        }
+      : missingEvidence(contract.id, criterionId, kind, "No screenshot or visual artifact was captured.", createdAt);
+  }
+
+  if (kind === "humanReview") {
+    return missingEvidence(contract.id, criterionId, kind, "Human review is required.", createdAt);
+  }
+
+  if (result.status === "failed") {
+    return {
+      id: `evidence_${randomUUID()}`,
+      contractId: contract.id,
+      criterionId,
+      ...(summaryArtifactId ? { sourceArtifactId: summaryArtifactId } : {}),
+      kind,
+      status: "failed",
+      summary: "Verification failed.",
+      createdAt
+    };
+  }
+  if (result.status === "passed") {
+    return {
+      id: `evidence_${randomUUID()}`,
+      contractId: contract.id,
+      criterionId,
+      ...(summaryArtifactId ? { sourceArtifactId: summaryArtifactId } : {}),
+      kind,
+      status: "passed",
+      summary: "Verification summary indicates pass.",
+      createdAt
+    };
+  }
+  return missingEvidence(contract.id, criterionId, kind, "Verification was inconclusive.", createdAt);
+}
+
+function missingEvidence(
+  contractId: string,
+  criterionId: string,
+  kind: CompletionEvidence["kind"],
+  summary: string,
+  createdAt: string
+): CompletionEvidence {
+  return {
+    id: `evidence_${randomUUID()}`,
+    contractId,
+    criterionId,
+    kind,
+    status: "missing",
+    summary,
+    createdAt
+  };
+}
+
 function createFollowUpTaskSpec(base: TaskSpec, commandResults: CommandResult[], summary: string): TaskSpec {
   const failed = commandResults.filter((result) => result.status === "failed");
   return {
@@ -452,6 +652,19 @@ async function readGitDiffSummary(repoPath: string): Promise<string> {
     const message = error instanceof Error ? error.message : String(error);
     return `Git diff unavailable: ${message}`;
   }
+}
+
+function parseChangedFilesFromGitDiffSummary(content: string): string[] {
+  const marker = "changed files:";
+  const index = content.toLowerCase().indexOf(marker);
+  if (index < 0) {
+    return [];
+  }
+  return content
+    .slice(index + marker.length)
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter((line) => line && !/^No changed files/i.test(line) && !/^Git diff unavailable/i.test(line));
 }
 
 async function runShellCommand(

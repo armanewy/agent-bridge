@@ -41,6 +41,7 @@ import { AuthService, FetchAuthTransport, MemoryAuthStorage } from "../services/
 import { WorkspaceResolverService } from "../services/workspace-resolver-service.js";
 import { CompletionContractService } from "../services/completion-contract-service.js";
 import { WorkflowTemplateService } from "../services/workflow-template-service.js";
+import { WorktreeManagerService } from "../services/worktree-manager-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -110,6 +111,7 @@ app.whenReady().then(async () => {
   const workspaceResolverService = new WorkspaceResolverService(store);
   const workflowTemplateService = new WorkflowTemplateService(store);
   await workflowTemplateService.ensureDefaultTemplate();
+  const worktreeManagerService = new WorktreeManagerService(store);
   const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);
@@ -160,7 +162,7 @@ app.whenReady().then(async () => {
     workspaceResolverService,
     completionContractService
   );
-  const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService);
+  const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService, undefined, worktreeManagerService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());

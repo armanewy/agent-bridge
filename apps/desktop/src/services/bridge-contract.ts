@@ -8,6 +8,7 @@ import type {
   CodexOpenMode,
   CodexThreadRef,
   DeliveryAttempt,
+  FileOwnership,
   Artifact,
   ArtifactBundle,
   ArtifactFile,
@@ -16,6 +17,7 @@ import type {
   Link,
   LinkableComponent,
   Mission,
+  MissionWorkspace,
   Run,
   VerificationCommand,
   SourceEndpoint,
@@ -152,6 +154,8 @@ export interface MissionDetail {
   artifactBundles?: ArtifactBundle[];
   completionContracts?: CompletionContract[];
   completionEvidence?: CompletionEvidence[];
+  missionWorkspaces?: MissionWorkspace[];
+  fileOwnership?: FileOwnership[];
   deliveryAttempts: DeliveryAttempt[];
   runs: Run[];
   verificationResults: VerificationResult[];

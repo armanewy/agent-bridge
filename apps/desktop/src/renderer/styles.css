@@ -496,7 +496,8 @@ nav {
   background: #fbfcfd;
 }
 
-.done-means-panel {
+.done-means-panel,
+.workspace-isolation-panel {
   border: 1px solid #cfe2d8;
   border-radius: 8px;
   padding: 12px;
@@ -505,12 +506,14 @@ nav {
   gap: 8px;
 }
 
-.done-means-panel.warning {
+.done-means-panel.warning,
+.workspace-isolation-panel.warning {
   border-color: #efcd86;
   background: #fff8e6;
 }
 
-.done-means-panel.muted {
+.done-means-panel.muted,
+.workspace-isolation-panel.muted {
   border-color: #dce3e9;
   background: #fbfcfd;
 }
@@ -528,7 +531,8 @@ nav {
   font-weight: 700;
 }
 
-.done-means-panel p {
+.done-means-panel p,
+.workspace-isolation-panel p {
   margin: 0;
   color: #526270;
 }

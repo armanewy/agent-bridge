@@ -85,6 +85,8 @@ export function WorkbenchPage({
   const followUpCard = missionDetail?.handoffCards.find((card) => card.recipe === "debuggingRequest");
   const verification = missionDetail?.verificationResults[0];
   const completionContract = missionDetail?.completionContracts?.[0];
+  const missionWorkspaceRef = missionDetail?.missionWorkspaces?.[0];
+  const ownedFiles = missionDetail?.fileOwnership ?? [];
   const plannerResponses = missionDetail?.artifacts.filter((artifact) => artifact.kind === "modelResponse") ?? [];
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
   const latestProviderEvent = missionDetail?.agentEvents?.[0];
@@ -357,6 +359,7 @@ export function WorkbenchPage({
           </button>
         </div>
         <DoneMeansPanel contract={completionContract} evidenceCount={missionDetail?.completionEvidence?.length ?? 0} />
+        <WorkspaceIsolationPanel workspace={missionWorkspaceRef} fileCount={ownedFiles.length} />
         {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
         {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
       </section>
@@ -388,6 +391,34 @@ export function WorkbenchPage({
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function WorkspaceIsolationPanel({
+  workspace,
+  fileCount
+}: {
+  workspace: NonNullable<MissionDetail["missionWorkspaces"]>[number] | undefined;
+  fileCount: number;
+}): JSX.Element {
+  if (!workspace) {
+    return (
+      <div className="workspace-isolation-panel muted">
+        <strong>Workspace isolation</strong>
+        <p>No branch/worktree isolation recorded for this mission yet.</p>
+      </div>
+    );
+  }
+  return (
+    <div className={workspace.strategy === "none" ? "workspace-isolation-panel warning" : "workspace-isolation-panel"}>
+      <div className="done-means-heading">
+        <strong>Workspace isolation</strong>
+        <span>{workspace.status}</span>
+      </div>
+      <p>{workspace.strategy === "gitWorktree" ? "Git worktree" : workspace.strategy === "branch" ? "Branch" : "No isolation"}</p>
+      <p>{workspace.branchName ?? workspace.worktreeName ?? workspace.workingPath}</p>
+      <p>{fileCount} changed/claimed file{fileCount === 1 ? "" : "s"} tracked.</p>
     </div>
   );
 }
