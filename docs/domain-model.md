@@ -2,6 +2,17 @@
 
 ## Core Entities
 
+Mission-first objects now sit above the original handoff router model:
+
+- `Mission`: durable user task.
+- `HandoffCard`: one target-agent dispatch inside a mission.
+- `TaskSpec`: structured agent-ready task generated from a capture.
+- `RepoContextPack`: branch/status/files/command context for repository-aware handoffs.
+- `Artifact`: durable evidence such as captures, generated prompts, diffs, logs, and results.
+- `VerificationPlan` / `VerificationResult`: explicit validation plan and outcome.
+
+The legacy `Handoff` remains for compatibility and can reference `missionId` and `handoffCardId`.
+
 ### Link
 
 A saved route from one source endpoint to one target endpoint with a selected transform and delivery policy.

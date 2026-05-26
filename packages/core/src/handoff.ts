@@ -2,6 +2,8 @@ import { HandoffSchema, type Capture, type Handoff, type RedactionFinding, type 
 
 export interface CreateHandoffInput {
   id: string;
+  missionId?: string;
+  handoffCardId?: string;
   capture: Capture;
   targetId: string;
   transformId: string;
@@ -25,6 +27,8 @@ export function createStructuredHandoff(capture: Capture, prompt: string): Struc
 export function createHandoff(input: CreateHandoffInput): Handoff {
   const handoff: Handoff = {
     id: input.id,
+    ...(input.missionId ? { missionId: input.missionId } : {}),
+    ...(input.handoffCardId ? { handoffCardId: input.handoffCardId } : {}),
     captureId: input.capture.id,
     sourceId: input.capture.sourceId,
     targetId: input.targetId,
