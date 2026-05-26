@@ -10,10 +10,14 @@
 - The desktop app can list source/capture state from the local store.
 - A user can configure a Codex deep-link target by repository path.
 - A deterministic transform creates a structured handoff.
+- A deterministic transform creates a Mission, TaskSpec, HandoffCard, and generated prompt artifact.
+- Repo context is attached when a Codex target has a configured repository path.
 - The approval preview shows source, target, capture excerpt, transformed prompt, findings, and delivery strategy.
 - Dry-run Codex delivery generates the exact deep link without opening Codex.
 - Approved Codex delivery opens `codex://threads/new?prompt=...&path=...` in Electron mode.
-- Delivery attempts and audit events are stored locally.
+- Delivery attempts and audit events are stored locally with Mission and HandoffCard provenance.
+- Verification creates git diff/output artifacts and a VerificationResult.
+- Failed verification creates an inspectable follow-up HandoffCard that can be dry-run or sent manually.
 
 ## Fail Criteria
 
@@ -31,3 +35,4 @@
 - The desktop renderer uses mock data when running outside Electron.
 - Generic Windows app delivery is available at the helper/service level but not yet a polished UI flow.
 - Codex deep links open new threads only.
+- Codex thread continuation/observation is not implemented yet.

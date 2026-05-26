@@ -1,52 +1,46 @@
 # Dogfood Report
 
-## Workflow Simulated
+## Current Workflow
 
-- Browser selected text to Codex deep link: simulated through the desktop mock source, Codex target configuration, approval preview, and dry-run delivery.
-- Browser selected text to Notepad: helper/service path exists, but the polished UI flow is not complete.
-- Transform preview: working with deterministic recipes.
-- Redaction warning: working at the core scan layer; high-severity storage defaults still need UI polish.
-- Target mismatch behavior: scoring exists, but the UI does not yet show a full before/after diff.
+- Browser selected text can be captured explicitly through the Chrome extension and native host.
+- Desktop shows captures in Capture Inbox and requires visible target selection.
+- Preview creates a Mission, TaskSpec, HandoffCard, prompt artifacts, and legacy Handoff.
+- Codex delivery records mission/card-aware DeliveryAttempts and audit events.
+- Verification is user-confirmed, captures git diff and command outputs, and stores a VerificationResult.
+- Failed verification creates a visible follow-up HandoffCard that can be dry-run or sent manually.
 
-## What Worked
+## What Works
 
-- The desktop app makes the core concept understandable quickly: source, target, transform, preview, delivery.
-- Codex deep links are a good MVP delivery path because they avoid brittle UI automation.
-- The audit log now proves local provenance for source binding, target binding, transform, and delivery attempts.
-- The extension/native-host boundary keeps capture explicit and local.
+- The product now has a durable Mission lifecycle instead of a transient copy/paste handoff.
+- TaskSpec compilation is the core value layer: goal, background, requirements, constraints, non-goals, acceptance criteria, and verification steps.
+- Repo context is attached before Codex delivery.
+- Artifact memory is inspectable in Mission detail.
+- The extension no longer registers broad all-page content scripts.
 
-## What Felt Annoying
+## What Still Feels Annoying
 
-- Native host registration is still a manual Chrome developer workflow.
-- Running desktop in browser mode uses mock data, while Electron mode is needed for real deep-link opening.
+- Chrome developer-mode/native-host setup is still a multi-step process.
 - The repo path field needs a directory picker.
-- The extension ID has to be copied into a manifest template by hand.
+- Running the renderer in browser mode cannot open Codex deep links like Electron can.
+- Codex delivery observation stops at "opened deep link."
 
-## What Broke Or Is Thin
+## What Is Unsafe Or Thin
 
-- Generic Windows app delivery is service-level, not a complete UI.
-- ChatGPT latest-message capture is selector-fragile and should stay secondary to selected text.
-- Existing Codex thread continuation is not available through the deep-link MVP.
-- Delivery result observation is limited to "opened link" rather than seeing Codex thread progress.
-
-## What Is Unsafe
-
-- Clipboard fallback remains inherently risky and must stay approval-gated.
-- Terminal targets need extra command-execution warnings.
-- Consumer AI web capture needs continued terms-risk discipline: explicit user action only, no polling.
-- Wrong-target prevention needs the UI to show original and current target metadata side by side before unblocking delivery.
+- Generic Windows delivery still needs stronger visible target revalidation before it should be a daily-driver path.
+- Verification commands are user-confirmed, but command configuration still deserves careful UX.
+- ChatGPT latest-message capture remains selector-fragile and must stay secondary to selected text.
+- Codex follow-up cards are prompt-dispatch objects, not observed agent sessions yet.
 
 ## Useful Tomorrow
 
-- Add a directory picker for Codex repo path.
-- Make "selected text to Codex" work with one extension click plus one desktop approval.
-- Add a target diff panel with a hard block when process/path changes.
-- Add a first-run setup wizard for native host registration.
+- Dogfood the full path with a real ChatGPT answer and a real Codex repo target.
+- Add Codex SDK/app-server observation after the Mission/Card state proves stable.
+- Add artifact filtering and better run grouping.
 
 ## Continue/Kill Criteria
 
-- Continue if a developer uses at least five handoffs per workday after setup.
-- Continue if successful handoff latency is under 10 seconds after capture.
-- Continue if wrong-target or failed-delivery rate stays below 1% in manual dogfood.
-- Kill or pivot if users mostly treat it as a clipboard wrapper and ignore audit/provenance.
-- Kill or pivot if native host setup remains the dominant support issue after a setup wizard.
+- Continue if a developer uses at least five Missions per workday after setup.
+- Continue if successful selected-text-to-Codex Mission creation stays under 10 seconds after capture.
+- Continue if verification artifacts are actually used to decide follow-up prompts.
+- Kill or pivot if users mostly treat it as a clipboard wrapper and ignore Mission history.
+- Kill or pivot if native host setup remains the dominant support issue after setup UI improvements.

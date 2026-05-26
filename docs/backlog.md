@@ -1,25 +1,43 @@
 # Backlog
 
-## P0 Fixes
+## Done In Waves 7-10
+
+- Mission / HandoffCard / TaskSpec core model.
+- Local-store v2 for missions, artifacts, runs, and verification results.
+- Repo context pack attached to Codex handoffs.
+- Mission UI and task history.
+- User-triggered verification runner.
+- Failed-verification follow-up draft HandoffCards.
+- First-run setup status and native-host manifest generation.
+- Real capture-to-Mission default flow.
+- Mission-aware delivery provenance.
+- Capture Inbox and explicit Target Selector.
+- Verification preflight and artifact viewer.
+- Follow-up HandoffCard dry-run/send path.
+- Extension broad content-script removal.
+
+## P0 Dogfood Hardening
 
 - Add Codex repo directory picker.
-- Build native-host manifest generator using the actual extension ID and host path.
+- Add a visible end-to-end demo script result after real extension capture.
+- Improve setup path resolution for packaged Electron vs development repo root.
 - Show target verification diff before Windows delivery.
 - Block terminal-like Windows targets unless the user confirms command-execution risk.
 
 ## P1 MVP Improvements
 
-- Full selected-text extension to desktop to Codex approval workflow.
 - Windows target binding UI for foreground window and top-level window list.
 - Redaction preview actions: redact and continue, edit manually, cancel, allow once.
-- Audit detail view for one handoff with delivery attempts.
+- Audit detail view for one Mission/HandoffCard with delivery attempts.
+- Better artifact filtering by kind and run.
+- Manual acceptance-test checklist for the full ChatGPT-to-Codex-to-verification loop.
 
-## P2 Provider Expansion
+## P2 Execution Integrations
 
-- Claude/Gemini selected-text adapters only.
-- Provider-specific latest-message adapters after explicit user opt-in.
+- Codex SDK/app-server adapter for continuing existing threads and observing delivery status.
+- Codex result ingestion as `modelResponse` artifacts.
+- Provider-specific browser adapters only after explicit opt-in.
 - Cursor/VS Code target adapters through official extension APIs where possible.
-- Codex SDK/app-server adapter for continuing existing threads.
 
 ## P3 Team And Governance
 
@@ -30,6 +48,6 @@
 
 ## Next Three Features
 
-1. Native-host setup wizard.
-2. Real source-to-Codex flow from extension capture without mock data.
-3. Codex app-server spike promotion to continue existing threads and observe delivery status.
+1. Real dogfood run and demo recording/checklist from ChatGPT selected text to Codex follow-up.
+2. Codex app-server/SKD spike for continuing and observing threads.
+3. Windows target UI hardening only after the Codex mission loop feels reliable.
