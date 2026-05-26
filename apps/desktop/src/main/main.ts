@@ -10,9 +10,11 @@ import { WindowsTargetService } from "../services/windows-target-service.js";
 import { MissionService } from "../services/mission-service.js";
 import { VerificationService } from "../services/verification-service.js";
 import { SetupService } from "../services/setup-service.js";
+import { HandoffCardDeliveryService } from "../services/handoff-card-delivery-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
+  HandoffCardDeliveryRequest,
   PreviewRequest,
   VerificationRunRequest
 } from "../services/bridge-contract.js";
@@ -52,6 +54,7 @@ app.whenReady().then(async () => {
   const setupService = new SetupService(store);
   const windowsTargetService = new WindowsTargetService();
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
+  const handoffCardDeliveryService = new HandoffCardDeliveryService(store, codexTargetService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
@@ -74,6 +77,9 @@ app.whenReady().then(async () => {
     codexTargetService.configureTarget(repoPath, commands)
   );
   ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));
+  ipcMain.handle("agentbridge:deliverHandoffCardToCodex", (_event, input: HandoffCardDeliveryRequest) =>
+    handoffCardDeliveryService.deliverToCodex(input)
+  );
   ipcMain.handle("agentbridge:runVerification", (_event, input: VerificationRunRequest) =>
     verificationService.runVerification(input)
   );

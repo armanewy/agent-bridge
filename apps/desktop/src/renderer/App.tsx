@@ -213,6 +213,18 @@ export function App(): JSX.Element {
     setMissionDetail(nextMissionDetail);
   }
 
+  async function deliverHandoffCard(missionId: string, handoffCardId: string, dryRun: boolean): Promise<void> {
+    setDeliveryResult(await api.deliverHandoffCardToCodex({ missionId, handoffCardId, dryRun }));
+    const [nextMissions, nextMissionDetail] = await Promise.all([
+      api.listMissions(),
+      api.getMissionDetail(missionId)
+    ]);
+    setMissions(nextMissions);
+    selectedMissionIdRef.current = missionId;
+    setSelectedMissionId(missionId);
+    setMissionDetail(nextMissionDetail);
+  }
+
   async function configureNativeHost(): Promise<void> {
     setSetupError(undefined);
     try {
@@ -347,6 +359,7 @@ export function App(): JSX.Element {
             detail={missionDetail}
             onSelectMission={(id) => void selectMission(id)}
             onRunVerification={(id) => void runVerification(id)}
+            onDeliverHandoffCard={(missionId, handoffCardId, dryRun) => void deliverHandoffCard(missionId, handoffCardId, dryRun)}
           />
         ) : null}
 

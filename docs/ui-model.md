@@ -23,6 +23,8 @@ Mission detail shows:
 - user-triggered verification panel with repo path, commands, and local execution warning
 - verification preflight confirmation before commands run
 - TaskSpec sections
+- all HandoffCards in the Mission, including failed-verification follow-up drafts
+- dry-run and send actions for HandoffCard prompts
 - artifacts attached to the mission
 - inline artifact viewer for prompt, diff, command output, and follow-up draft artifacts
 - delivery attempts associated with the mission or its handoff cards

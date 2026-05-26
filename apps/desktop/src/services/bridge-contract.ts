@@ -53,6 +53,12 @@ export interface CodexDeliveryRequest {
   handoffId: string;
 }
 
+export interface HandoffCardDeliveryRequest {
+  missionId: string;
+  handoffCardId: string;
+  dryRun: boolean;
+}
+
 export interface CodexDeliveryResult {
   success: boolean;
   deepLink: string;
@@ -116,6 +122,7 @@ export interface AgentBridgeApi {
   revalidateTarget(target: WindowsDesktopWindowTarget): Promise<WindowRevalidation>;
   configureCodexTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget>;
   deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult>;
+  deliverHandoffCardToCodex(input: HandoffCardDeliveryRequest): Promise<CodexDeliveryResult>;
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   getSetupStatus(): Promise<SetupStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;

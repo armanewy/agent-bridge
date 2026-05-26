@@ -3,6 +3,7 @@ import type {
   AgentBridgeApi,
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
+  HandoffCardDeliveryRequest,
   PreviewRequest,
   VerificationRunRequest
 } from "../services/bridge-contract.js";
@@ -23,6 +24,7 @@ const api: AgentBridgeApi = {
   configureCodexTarget: (repoPath: string, commands?: RepoCommandConfig) =>
     ipcRenderer.invoke("agentbridge:configureCodexTarget", repoPath, commands),
   deliverToCodex: (input: CodexDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverToCodex", input),
+  deliverHandoffCardToCodex: (input: HandoffCardDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverHandoffCardToCodex", input),
   runVerification: (input: VerificationRunRequest) => ipcRenderer.invoke("agentbridge:runVerification", input),
   getSetupStatus: () => ipcRenderer.invoke("agentbridge:getSetupStatus"),
   configureNativeHost: (input: ConfigureNativeHostRequest) => ipcRenderer.invoke("agentbridge:configureNativeHost", input),

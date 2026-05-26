@@ -11,6 +11,7 @@ interface MissionPanelProps {
   detail?: MissionDetail | undefined;
   onSelectMission(id: string): void;
   onRunVerification(id: string): void;
+  onDeliverHandoffCard(missionId: string, handoffCardId: string, dryRun: boolean): void;
 }
 
 export function MissionPanel({
@@ -18,7 +19,8 @@ export function MissionPanel({
   selectedMissionId,
   detail,
   onSelectMission,
-  onRunVerification
+  onRunVerification,
+  onDeliverHandoffCard
 }: MissionPanelProps): JSX.Element {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>();
   const selectedArtifact = detail?.artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? detail?.artifacts[0];
@@ -84,16 +86,40 @@ export function MissionPanel({
               </div>
             ) : null}
 
-            {detail.handoffCards[0] ? (
+            {detail.handoffCards.length > 0 ? (
               <div className="mission-task">
-                <span className="eyebrow">TaskSpec</span>
-                <h3>{detail.handoffCards[0].taskSpec.title}</h3>
-                <p>{detail.handoffCards[0].taskSpec.background}</p>
-                <div className="task-spec-grid">
-                  <MiniList title="Requirements" items={detail.handoffCards[0].taskSpec.requirements} />
-                  <MiniList title="Acceptance Criteria" items={detail.handoffCards[0].taskSpec.acceptanceCriteria} />
-                  <MiniList title="Verification Steps" items={detail.handoffCards[0].taskSpec.verificationSteps} />
-                </div>
+                <span className="eyebrow">HandoffCards</span>
+                {detail.handoffCards.map((card, index) => (
+                  <article className="handoff-card-panel" key={card.id}>
+                    <div className="panel-heading compact">
+                      <div>
+                        <h3>{card.taskSpec.title}</h3>
+                        <p>
+                          {index === 0 ? "initial" : "follow-up"} / {card.recipe}
+                        </p>
+                      </div>
+                      <span className="status-pill">{card.deliveryAttemptIds.length > 0 ? "sent" : "draft"}</span>
+                    </div>
+                    <p>{card.taskSpec.background}</p>
+                    <div className="task-spec-grid">
+                      <MiniList title="Requirements" items={card.taskSpec.requirements} />
+                      <MiniList title="Acceptance Criteria" items={card.taskSpec.acceptanceCriteria} />
+                      <MiniList title="Verification Steps" items={card.taskSpec.verificationSteps} />
+                    </div>
+                    <div className="prompt-preview">
+                      <span className="eyebrow">Generated Prompt</span>
+                      <pre>{card.generatedPrompt}</pre>
+                    </div>
+                    <div className="button-row">
+                      <button type="button" className="secondary-button" onClick={() => onDeliverHandoffCard(detail.mission.id, card.id, true)}>
+                        Dry run Codex
+                      </button>
+                      <button type="button" className="primary-button" onClick={() => onDeliverHandoffCard(detail.mission.id, card.id, false)}>
+                        Send to Codex
+                      </button>
+                    </div>
+                  </article>
+                ))}
               </div>
             ) : null}
 

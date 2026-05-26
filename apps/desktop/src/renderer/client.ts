@@ -4,6 +4,7 @@ import type {
   CodexDeliveryResult,
   ConfigureNativeHostRequest,
   DeliveryPreview,
+  HandoffCardDeliveryRequest,
   MissionDetail,
   PreviewRequest,
   VerificationRunRequest,
@@ -289,6 +290,22 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         repoPath: input.target.repoPath,
         ...(input.dryRun ? {} : { openedAt: now() })
       };
+    },
+    async deliverHandoffCardToCodex(input: HandoffCardDeliveryRequest): Promise<CodexDeliveryResult> {
+      const detail = mockMissionDetails.get(input.missionId);
+      const card = detail?.handoffCards.find((item) => item.id === input.handoffCardId);
+      const target = card ? mockTargets.find((item) => item.id === card.targetId) : undefined;
+      if (!card || !target || target.kind !== "codexDeepLink") {
+        throw new Error("HandoffCard target is not a Codex deep-link target.");
+      }
+      return this.deliverToCodex({
+        target,
+        prompt: card.generatedPrompt,
+        dryRun: input.dryRun,
+        missionId: input.missionId,
+        handoffCardId: input.handoffCardId,
+        handoffId: `handoff_card_${input.handoffCardId}`
+      });
     },
     async runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse> {
       const detail = mockMissionDetails.get(input.missionId);
