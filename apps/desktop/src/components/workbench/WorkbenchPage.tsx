@@ -121,6 +121,8 @@ export function WorkbenchPage({
   const activeRun = autopilotStatus?.run;
   const missionWorkspace = missionDetail?.mission.repoContext;
   const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
+  const needsWorkspaceForNewCodexThread = Boolean(selectedMissionId && taskCard && !selectedSession && !missionWorkspace);
+  const shouldShowWorkspaceSurface = Boolean(missionWorkspace || needsWorkspaceForNewCodexThread);
   const latestPayloadSummary = parsePlannerPayloadSummary(
     missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
   );
@@ -148,11 +150,7 @@ export function WorkbenchPage({
           <StatusChip label="Planner" value={planner?.displayName ?? "unknown"} tone={planner?.status === "available" ? "ready" : "warning"} />
           <StatusChip label="Codex" value={codex?.status ?? "unknown"} tone={codex?.status === "available" ? "ready" : "warning"} />
           <StatusChip label="Workflow" value="Planner ↔ Codex" tone="ready" />
-          <StatusChip
-            label="Workspace"
-            value={missionWorkspace ? "selected" : bestWorkspaceCandidate ? "inferred" : "not needed yet"}
-            tone={missionWorkspace ? "ready" : bestWorkspaceCandidate ? "warning" : "muted"}
-          />
+          {missionWorkspace ? <StatusChip label="Workspace" value="selected" tone="ready" /> : null}
         </div>
         <textarea
           className="planner-input intent-input"
@@ -230,30 +228,31 @@ export function WorkbenchPage({
         ) : null}
       </section>
 
-      <section className="panel workbench-repo-strip">
-        <div>
-          <span className="eyebrow">Workspace</span>
-          <h2>{missionWorkspace ? repoName(missionWorkspace.repoPath) : bestWorkspaceCandidate ? "Workspace inferred" : "Workspace not needed yet"}</h2>
-          <p>
-            {missionWorkspace
-              ? missionWorkspace.repoPath
-              : bestWorkspaceCandidate
-                ? `${bestWorkspaceCandidate.repoName ?? repoName(bestWorkspaceCandidate.repoPath ?? "")} · ${bestWorkspaceCandidate.source} · ${bestWorkspaceCandidate.confidence}% confidence`
-                : "Planning can start without repo access. Choose a workspace when creating a new Codex thread or running verification."}
-          </p>
-        </div>
-        <div className="button-row">
-          {!missionWorkspace && bestWorkspaceCandidate?.repoPath ? (
-            <button type="button" className="primary-button compact" onClick={() => onUseWorkspaceCandidate(bestWorkspaceCandidate)}>
-              Use this
+      {shouldShowWorkspaceSurface ? (
+        <section className="panel workbench-repo-strip">
+          <div>
+            <span className="eyebrow">Workspace</span>
+            <h2>{missionWorkspace ? repoName(missionWorkspace.repoPath) : "Workspace required"}</h2>
+            <p>
+              {missionWorkspace
+                ? missionWorkspace.repoPath
+                : bestWorkspaceCandidate
+                  ? `${bestWorkspaceCandidate.repoName ?? repoName(bestWorkspaceCandidate.repoPath ?? "")} · inferred from ${bestWorkspaceCandidate.source} · ${bestWorkspaceCandidate.confidence}% confidence`
+                  : "Choose a workspace to create a new Codex thread."}
+            </p>
+          </div>
+          <div className="button-row">
+            {!missionWorkspace && bestWorkspaceCandidate?.repoPath ? (
+              <button type="button" className="primary-button compact" onClick={() => onUseWorkspaceCandidate(bestWorkspaceCandidate)}>
+                Use inferred workspace
+              </button>
+            ) : null}
+            <button type="button" className="secondary-button" onClick={onChooseRepo}>
+              {missionWorkspace ? "Change workspace" : "Choose workspace"}
             </button>
-          ) : null}
-          <button type="button" className="secondary-button" onClick={onChooseRepo}>
-            {missionWorkspace ? "Change" : "Choose workspace"}
-          </button>
-          {!missionWorkspace && bestWorkspaceCandidate ? <span className="muted-inline">Ignore for now</span> : null}
-        </div>
-      </section>
+          </div>
+        </section>
+      ) : null}
 
       {error ? <div className="error-banner">{error}</div> : null}
 
@@ -321,8 +320,8 @@ export function WorkbenchPage({
             <Send size={16} />
             Send TaskSpec to Codex
           </button>
-          {!missionWorkspace && !selectedSession ? (
-            <p className="empty-copy">Choose workspace to create a new Codex thread. Existing Codex sessions with cwd can proceed without manual repo selection.</p>
+          {needsWorkspaceForNewCodexThread ? (
+            <p className="empty-copy">Choose a workspace to create a new Codex thread, or select an existing Codex session.</p>
           ) : null}
         </section>
       </div>
@@ -359,7 +358,7 @@ export function WorkbenchPage({
           </button>
         </div>
         <DoneMeansPanel contract={completionContract} evidenceCount={missionDetail?.completionEvidence?.length ?? 0} />
-        <WorkspaceIsolationPanel workspace={missionWorkspaceRef} fileCount={ownedFiles.length} />
+        {missionWorkspaceRef ? <WorkspaceIsolationPanel workspace={missionWorkspaceRef} fileCount={ownedFiles.length} /> : null}
         {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
         {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
       </section>
@@ -401,14 +400,9 @@ function WorkspaceIsolationPanel({
 }: {
   workspace: NonNullable<MissionDetail["missionWorkspaces"]>[number] | undefined;
   fileCount: number;
-}): JSX.Element {
+}): JSX.Element | null {
   if (!workspace) {
-    return (
-      <div className="workspace-isolation-panel muted">
-        <strong>Workspace isolation</strong>
-        <p>No branch/worktree isolation recorded for this mission yet.</p>
-      </div>
-    );
+    return null;
   }
   return (
     <div className={workspace.strategy === "none" ? "workspace-isolation-panel warning" : "workspace-isolation-panel"}>
