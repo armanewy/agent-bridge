@@ -174,6 +174,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockMissionDetails.set(mission.id, {
         mission,
         handoffCards: [handoffCard],
+        captures: [capture],
         artifacts,
         deliveryAttempts: [],
         runs: [],
@@ -302,6 +303,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
           artifactIds: [...detail.mission.artifactIds, artifact.id],
           updatedAt: now()
         },
+        captures: detail.captures,
         artifacts: [artifact, ...detail.artifacts],
         runs: [run, ...detail.runs],
         verificationResults: [result, ...detail.verificationResults]

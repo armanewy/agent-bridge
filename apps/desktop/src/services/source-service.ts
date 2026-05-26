@@ -6,22 +6,11 @@ export class SourceService {
   constructor(private readonly store: LocalStore) {}
 
   async listSources(): Promise<SourceEndpoint[]> {
-    const sources = await this.store.listSources();
-    if (sources.length > 0) {
-      return sources;
-    }
-
-    return [createMockBrowserSource()];
+    return this.store.listSources();
   }
 
   async listRecentCaptures(): Promise<Capture[]> {
-    const captures = await this.store.listRecentCaptures();
-    if (captures.length > 0) {
-      return captures;
-    }
-
-    const source = createMockBrowserSource();
-    return [createMockCapture(source.id)];
+    return this.store.listRecentCaptures();
   }
 
   async bindMockBrowserSource(): Promise<BrowserTabSource> {

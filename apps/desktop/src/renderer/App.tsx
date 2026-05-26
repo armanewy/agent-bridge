@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import {
   CheckCircle,
   Chrome,
@@ -43,6 +43,7 @@ export function App(): JSX.Element {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [selectedMissionId, setSelectedMissionId] = useState<string | undefined>();
+  const selectedMissionIdRef = useRef<string | undefined>();
   const [missionDetail, setMissionDetail] = useState<MissionDetail | undefined>();
   const [recipe, setRecipe] = useState<Transform["recipe"]>("implementationBrief");
   const [repoPath, setRepoPath] = useState("");
@@ -65,6 +66,13 @@ export function App(): JSX.Element {
     void refresh();
   }, []);
 
+  useEffect(() => {
+    const timer = window.setInterval(() => {
+      void refresh();
+    }, 5000);
+    return () => window.clearInterval(timer);
+  }, []);
+
   async function refresh(): Promise<void> {
     const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents, nextMissions, nextSetupStatus] = await Promise.all([
       api.listSources(),
@@ -83,12 +91,14 @@ export function App(): JSX.Element {
     setMissions(nextMissions);
     setSetupStatus(nextSetupStatus);
     setExtensionId((current) => current || nextSetupStatus.extensionId || "");
-    const nextSelectedMissionId = selectedMissionId ?? nextMissions[0]?.id;
+    const nextSelectedMissionId = selectedMissionIdRef.current ?? nextMissions[0]?.id;
+    selectedMissionIdRef.current = nextSelectedMissionId;
     setSelectedMissionId(nextSelectedMissionId);
     setMissionDetail(nextSelectedMissionId ? await api.getMissionDetail(nextSelectedMissionId) : undefined);
   }
 
   async function selectMission(id: string): Promise<void> {
+    selectedMissionIdRef.current = id;
     setSelectedMissionId(id);
     setMissionDetail(await api.getMissionDetail(id));
   }
@@ -144,6 +154,7 @@ export function App(): JSX.Element {
     ]);
     setPreview(nextPreview);
     setMissions(nextMissions);
+    selectedMissionIdRef.current = nextPreview.mission.id;
     setSelectedMissionId(nextPreview.mission.id);
     setMissionDetail(nextMissionDetail);
   }
@@ -187,6 +198,7 @@ export function App(): JSX.Element {
       api.getMissionDetail(missionId)
     ]);
     setMissions(nextMissions);
+    selectedMissionIdRef.current = missionId;
     setSelectedMissionId(missionId);
     setMissionDetail(nextMissionDetail);
   }
@@ -256,17 +268,17 @@ export function App(): JSX.Element {
               <div className="panel-heading">
                 <div>
                   <h2>Handoff Workflow</h2>
-                  <p>Use the mock source until the extension/native-host flow is connected.</p>
+                  <p>Capture selected browser text with the extension, then turn the latest capture into a Mission.</p>
                 </div>
               </div>
               <div className="button-row">
-                <button type="button" className="primary-button" onClick={() => void bindMockSource()}>
+                <button type="button" className="secondary-button" onClick={() => void bindMockSource()}>
                   <Chrome size={16} />
                   Bind Mock Source
                 </button>
                 <button type="button" className="secondary-button" onClick={() => void createPreview()} disabled={!captures[0] || !targets[0]}>
                   <ClipboardCheck size={16} />
-                  Preview Handoff
+                  Create Mission from latest capture
                 </button>
               </div>
             </section>

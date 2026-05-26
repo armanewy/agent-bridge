@@ -536,6 +536,16 @@ pre {
   padding-top: 14px;
 }
 
+.capture-excerpt {
+  border-top: 1px solid #dce3e9;
+  padding-top: 14px;
+  margin-bottom: 14px;
+}
+
+.capture-excerpt pre {
+  margin: 8px 0 0;
+}
+
 .mission-task h3 {
   margin: 6px 0;
 }

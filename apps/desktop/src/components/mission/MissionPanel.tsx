@@ -63,9 +63,17 @@ export function MissionPanel({
               <DetailBlock label="Repo" value={detail.mission.repoContext?.repoPath ?? "No repo context"} />
               <DetailBlock label="Branch" value={detail.mission.repoContext?.currentBranch ?? "Unknown"} />
               <DetailBlock label="Verification" value={detail.verificationResults[0]?.status ?? "not_run"} />
+              <DetailBlock label="Captures" value={String(detail.captures.length)} />
               <DetailBlock label="Artifacts" value={String(detail.artifacts.length)} />
               <DetailBlock label="Deliveries" value={String(detail.deliveryAttempts.length)} />
             </div>
+
+            {detail.captures[0] ? (
+              <div className="capture-excerpt">
+                <span className="eyebrow">Source Capture</span>
+                <pre>{detail.captures[0].text.slice(0, 600)}</pre>
+              </div>
+            ) : null}
 
             {detail.handoffCards[0] ? (
               <div className="mission-task">

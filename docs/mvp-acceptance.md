@@ -5,6 +5,8 @@
 - A Chrome extension can bind the active tab as a source.
 - A Chrome extension can explicitly capture selected text.
 - The native host persists browser sources and captures locally.
+- The desktop app lists real native-host captures by default; mock capture remains an explicit development action.
+- The desktop app offers `Create Mission from latest capture` for the newest persisted capture.
 - The desktop app can list source/capture state from the local store.
 - A user can configure a Codex deep-link target by repository path.
 - A deterministic transform creates a structured handoff.
@@ -25,6 +27,7 @@
 ## Known Limitations
 
 - The browser-to-desktop flow still depends on development native-host registration.
+- The Missions detail view shows source capture excerpt, TaskSpec, artifacts, delivery attempts, and verification status.
 - The desktop renderer uses mock data when running outside Electron.
 - Generic Windows app delivery is available at the helper/service level but not yet a polished UI flow.
 - Codex deep links open new threads only.

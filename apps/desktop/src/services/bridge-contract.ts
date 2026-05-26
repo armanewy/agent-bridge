@@ -63,6 +63,7 @@ export interface CodexDeliveryResult {
 export interface MissionDetail {
   mission: Mission;
   handoffCards: HandoffCard[];
+  captures: Capture[];
   artifacts: Artifact[];
   deliveryAttempts: DeliveryAttempt[];
   runs: Run[];

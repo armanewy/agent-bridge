@@ -1,4 +1,4 @@
-import type { Mission } from "@agentbridge/core";
+import type { Capture, Mission } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { MissionDetail } from "./bridge-contract.js";
 
@@ -33,10 +33,14 @@ export class MissionService {
         (attempt.handoffCardId && handoffCardIds.has(attempt.handoffCardId)) ||
         handoffIds.has(attempt.handoffId)
     );
+    const captures = (await Promise.all(mission.captureIds.map((captureId) => this.store.getCapture(captureId)))).filter(
+      (capture): capture is Capture => Boolean(capture)
+    );
 
     return {
       mission,
       handoffCards,
+      captures,
       artifacts,
       deliveryAttempts,
       runs,
