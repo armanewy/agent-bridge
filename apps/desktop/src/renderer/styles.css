@@ -169,6 +169,152 @@ nav {
   align-items: start;
 }
 
+.workbench-layout {
+  display: grid;
+  gap: 14px;
+}
+
+.workbench-repo-strip {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: center;
+}
+
+.workbench-repo-strip h2 {
+  font-size: 22px;
+}
+
+.workbench-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 14px;
+  align-items: start;
+}
+
+.workbench-pane,
+.workbench-task-panel {
+  display: grid;
+  gap: 12px;
+}
+
+.compact-heading h2 {
+  font-size: 20px;
+}
+
+.planner-input {
+  width: 100%;
+  min-height: 140px;
+  resize: vertical;
+  border: 1px solid #c8d2db;
+  border-radius: 8px;
+  padding: 10px;
+  background: #ffffff;
+  color: #172026;
+}
+
+.session-list,
+.artifact-snippets,
+.compact-list {
+  display: grid;
+  gap: 8px;
+}
+
+.session-row,
+.compact-row {
+  width: 100%;
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+  text-align: left;
+  display: grid;
+  gap: 3px;
+}
+
+.session-row.selected,
+.compact-row.selected {
+  border-color: #1f7a5a;
+  background: #edf8f3;
+}
+
+.session-row span,
+.compact-row em,
+.artifact-snippets p {
+  color: #64737f;
+  font-style: normal;
+}
+
+.task-action-grid {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.taskspec-summary {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 12px;
+  background: #fbfcfd;
+}
+
+.taskspec-summary p {
+  margin: 5px 0 8px;
+}
+
+.taskspec-summary ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.artifact-snippets pre,
+.compact-output {
+  margin: 0;
+  max-height: 180px;
+  overflow: auto;
+  white-space: pre-wrap;
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 10px;
+  background: #f7f9fb;
+}
+
+.error-banner {
+  border: 1px solid #f0b4ad;
+  border-radius: 8px;
+  padding: 10px 12px;
+  color: #8a2e23;
+  background: #fff3f1;
+}
+
+@media (max-width: 920px) {
+  .app-shell {
+    grid-template-columns: 76px minmax(0, 1fr);
+  }
+
+  .brand div,
+  .nav-button span {
+    display: none;
+  }
+
+  .sidebar {
+    padding: 16px 10px;
+    align-items: center;
+  }
+
+  .nav-button {
+    justify-content: center;
+  }
+
+  .workspace {
+    padding: 18px;
+  }
+
+  .workbench-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
+
 .start-flow-card {
   display: grid;
   gap: 18px;

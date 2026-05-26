@@ -7,6 +7,8 @@ import {
   SlidersHorizontal
 } from "lucide-react";
 import type {
+  AgentProviderProfile,
+  AgentSessionRef,
   Capture,
   CodexDeepLinkTarget,
   CodexThreadRef,
@@ -30,22 +32,25 @@ import { LinkManager } from "../components/link-manager/LinkManager.js";
 import { MissionPanel } from "../components/mission/MissionPanel.js";
 import { SetupPanel } from "../components/setup/SetupPanel.js";
 import { StartPage } from "../components/start/StartPage.js";
+import { WorkbenchPage } from "../components/workbench/WorkbenchPage.js";
 
-type View = "start" | "tasks" | "settings" | "advanced";
-type AdvancedView = "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
+type View = "workbench" | "tasks" | "settings" | "advanced";
+type AdvancedView = "legacy" | "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
 type ChatGptSourceMode = "chrome" | "desktop";
 
 const api = getAgentBridgeApi();
 
 export function App(): JSX.Element {
-  const [view, setView] = useState<View>("start");
-  const [advancedView, setAdvancedView] = useState<AdvancedView>("components");
+  const [view, setView] = useState<View>("workbench");
+  const [advancedView, setAdvancedView] = useState<AdvancedView>("legacy");
   const [sources, setSources] = useState<SourceEndpoint[]>([]);
   const [targets, setTargets] = useState<TargetEndpoint[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [components, setComponents] = useState<LinkableComponent[]>([]);
   const [workflowLinks, setWorkflowLinks] = useState<WorkflowLink[]>([]);
   const [codexThreads, setCodexThreads] = useState<CodexThreadRef[]>([]);
+  const [providerProfiles, setProviderProfiles] = useState<AgentProviderProfile[]>([]);
+  const [agentSessions, setAgentSessions] = useState<AgentSessionRef[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
@@ -73,6 +78,7 @@ export function App(): JSX.Element {
   const [embeddedChatGptUrl, setEmbeddedChatGptUrl] = useState("");
   const [chatGptSourceMode, setChatGptSourceMode] = useState<ChatGptSourceMode>("chrome");
   const [linkError, setLinkError] = useState<string | undefined>();
+  const [workbenchError, setWorkbenchError] = useState<string | undefined>();
   const [discoveryWarnings, setDiscoveryWarnings] = useState<string[]>([]);
   const [preview, setPreview] = useState<DeliveryPreview | undefined>();
   const [deliveryResult, setDeliveryResult] = useState<CodexDeliveryResult | undefined>();
@@ -112,7 +118,7 @@ export function App(): JSX.Element {
       }
       if (action?.type === "createTaskFromLatestCapture") {
         const capture = captures[0];
-        setView("start");
+        setView("workbench");
         if (capture?.id) {
           setSelectedCaptureId(capture.id);
         }
@@ -124,7 +130,7 @@ export function App(): JSX.Element {
         setLinkError("Create a Workflow Link before using the tray shortcut to create a task.");
         return;
       }
-      setView("start");
+      setView("workbench");
     };
     window.addEventListener("agentbridge:quickAction", handleQuickAction);
     return () => window.removeEventListener("agentbridge:quickAction", handleQuickAction);
@@ -141,7 +147,9 @@ export function App(): JSX.Element {
       nextAuditEvents,
       nextMissions,
       nextSetupStatus,
-      nextCodexAppServerStatus
+      nextCodexAppServerStatus,
+      nextProviderProfiles,
+      nextAgentSessions
     ] = await Promise.all([
       api.listSources(),
       api.listTargets(),
@@ -152,7 +160,9 @@ export function App(): JSX.Element {
       api.listAuditEvents(),
       api.listMissions(),
       api.getSetupStatus(),
-      api.getCodexAppServerStatus()
+      api.getCodexAppServerStatus(),
+      api.listProviders(),
+      api.listAgentSessions("codex")
     ]);
     const nextCodexTarget = nextTargets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
     const nextCodexThreads = await api.listCodexThreads(nextCodexTarget?.repoPath);
@@ -167,6 +177,8 @@ export function App(): JSX.Element {
     setMissions(nextMissions);
     setSetupStatus(nextSetupStatus);
     setCodexAppServerStatus(nextCodexAppServerStatus);
+    setProviderProfiles(nextProviderProfiles);
+    setAgentSessions(nextAgentSessions);
     setExtensionId((current) => current || nextSetupStatus.extensionId || "");
     setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
     setSelectedSourceId((current) => current ?? nextSources[0]?.id);
@@ -356,7 +368,7 @@ export function App(): JSX.Element {
       selectedMissionIdRef.current = nextPreview.mission.id;
       setSelectedMissionId(nextPreview.mission.id);
       setMissionDetail(nextMissionDetail);
-      setView("start");
+      setView("workbench");
     } catch (error) {
       setLinkError(error instanceof Error ? error.message : String(error));
     }
@@ -467,6 +479,95 @@ export function App(): JSX.Element {
       api.getMissionDetail(missionId)
     ]);
     setMissions(nextMissions);
+    selectedMissionIdRef.current = missionId;
+    setSelectedMissionId(missionId);
+    setMissionDetail(nextMissionDetail);
+  }
+
+  async function createWorkbenchMission(): Promise<void> {
+    setWorkbenchError(undefined);
+    try {
+      const mission = await api.createWorkbenchMission({
+        ...(codexTarget
+          ? {
+              repoContext: {
+                repoPath: codexTarget.repoPath,
+                ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
+                ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
+                ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
+              }
+            }
+          : {})
+      });
+      selectedMissionIdRef.current = mission.id;
+      setSelectedMissionId(mission.id);
+      await refresh();
+      setMissionDetail(await api.getMissionDetail(mission.id));
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function askWorkbenchPlanner(text: string): Promise<void> {
+    setWorkbenchError(undefined);
+    try {
+      const missionId = selectedMissionIdRef.current ?? selectedMissionId;
+      if (!missionId) {
+        throw new Error("Create a workbench task first.");
+      }
+      await api.sendUserMessageToPlanner(missionId, text);
+      await refreshMission(missionId);
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function generateWorkbenchTaskSpec(): Promise<void> {
+    await runWorkbenchStep((missionId) => api.createTaskSpecFromLatestPlannerTurn(missionId));
+  }
+
+  async function sendWorkbenchTaskSpec(sessionRefId?: string): Promise<void> {
+    await runWorkbenchStep((missionId) => api.sendTaskSpecToExecutor(missionId, "codex", sessionRefId));
+  }
+
+  async function runWorkbenchVerification(): Promise<void> {
+    await runWorkbenchStep((missionId) => api.runMissionWorkbenchVerification(missionId));
+  }
+
+  async function askPlannerToReviewVerification(): Promise<void> {
+    await runWorkbenchStep((missionId) => api.sendVerificationToPlannerForReview(missionId));
+  }
+
+  async function createWorkbenchFollowUp(): Promise<void> {
+    await runWorkbenchStep((missionId) => api.createFollowUpFromPlannerReview(missionId));
+  }
+
+  async function sendWorkbenchFollowUp(sessionRefId?: string): Promise<void> {
+    await runWorkbenchStep((missionId) => api.sendFollowUpToExecutor(missionId, sessionRefId));
+  }
+
+  async function runWorkbenchStep(action: (missionId: string) => Promise<unknown>): Promise<void> {
+    setWorkbenchError(undefined);
+    try {
+      const missionId = selectedMissionIdRef.current ?? selectedMissionId;
+      if (!missionId) {
+        throw new Error("Create a workbench task first.");
+      }
+      await action(missionId);
+      await refreshMission(missionId);
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function refreshMission(missionId: string): Promise<void> {
+    const [nextMissions, nextMissionDetail, nextSessions] = await Promise.all([
+      api.listMissions(),
+      api.getMissionDetail(missionId),
+      api.listAgentSessions("codex")
+    ]);
+    setMissions(nextMissions);
+    setAgentSessions(nextSessions);
     selectedMissionIdRef.current = missionId;
     setSelectedMissionId(missionId);
     setMissionDetail(nextMissionDetail);
@@ -587,7 +688,7 @@ export function App(): JSX.Element {
           </div>
         </div>
         <nav aria-label="Main navigation">
-          <NavButton icon={<Network size={18} />} label="Start" active={view === "start"} onClick={() => setView("start")} />
+          <NavButton icon={<Network size={18} />} label="Workbench" active={view === "workbench"} onClick={() => setView("workbench")} />
           <NavButton icon={<ClipboardList size={18} />} label="Tasks" active={view === "tasks"} onClick={() => setView("tasks")} />
           <NavButton icon={<Settings size={18} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} />
           <NavButton
@@ -611,64 +712,28 @@ export function App(): JSX.Element {
           </button>
         </header>
 
-        {view === "start" ? (
-          <div className="start-screen">
-            <StartPage
-              components={components}
-              workflowLinks={workflowLinks}
-              captures={captures}
-              targets={targets}
-              codexThreads={codexThreads}
-              missions={missions}
-              setupStatus={setupStatus}
-              selectedSourceComponentId={selectedSourceComponentId}
-              selectedWorkspaceComponentId={selectedWorkspaceComponentId}
-              selectedTargetComponentId={selectedTargetComponentId}
-              selectedCodexThreadId={selectedCodexThreadId}
-              manualCodexThreadId={manualCodexThreadId}
-              embeddedChatGptUrl={embeddedChatGptUrl}
-              chatGptSourceMode={chatGptSourceMode}
-              linkError={linkError}
-              targetError={targetError}
-              onSelectCodexThread={setSelectedCodexThreadId}
-              onManualCodexThreadIdChange={setManualCodexThreadId}
-              onEmbeddedChatGptUrlChange={setEmbeddedChatGptUrl}
-              onChatGptSourceModeChange={(mode) => {
-                setChatGptSourceMode(mode);
-                const nextSource = components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, mode) && !isDemoSourceComponent(component));
-                setSelectedSourceComponentId(nextSource?.id);
-              }}
-              onSaveManualCodexThread={() => void saveManualCodexThread()}
-              onChooseRepo={() => void chooseRepoFolder()}
-              onCreateWorkflowLink={() => void createWorkflowLink()}
-              onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
-              onOpenTasks={() => setView("tasks")}
-              onOpenAdvanced={() => setView("advanced")}
-              onOpenSettings={() => setView("settings")}
-              onProbeDesktopApps={() => void discoverComponents()}
-              onOpenEmbeddedChatGpt={(url) => void openEmbeddedChatGpt(url)}
-              onCaptureEmbeddedChatGptSelection={() => void captureEmbeddedChatGptSelection()}
-              onConnectChrome={() => void connectChrome()}
-              onCheckChromeConnection={() => void refresh()}
-            />
-            {preview ? (
-              <HandoffPreview
-                preview={preview}
-                deliveryResult={deliveryResult}
-                onApproveDryRun={() => void dryRunCodex()}
-                onApproveSend={() => void sendCodex()}
-                onSaveDraft={() => {
-                  setPreview(undefined);
-                  setDeliveryResult(undefined);
-                  setView("tasks");
-                }}
-                onCancel={() => {
-                  setPreview(undefined);
-                  setDeliveryResult(undefined);
-                }}
-              />
-            ) : null}
-          </div>
+        {view === "workbench" ? (
+          <WorkbenchPage
+            missions={missions}
+            missionDetail={missionDetail}
+            selectedMissionId={selectedMissionId}
+            codexTarget={codexTarget}
+            codexThreads={codexThreads}
+            agentSessions={agentSessions}
+            providerProfiles={providerProfiles}
+            codexAppServerStatus={codexAppServerStatus}
+            error={workbenchError}
+            onChooseRepo={() => void chooseRepoFolder()}
+            onSelectMission={(id) => void selectMission(id)}
+            onCreateMission={() => void createWorkbenchMission()}
+            onAskPlanner={(text) => void askWorkbenchPlanner(text)}
+            onGenerateTaskSpec={() => void generateWorkbenchTaskSpec()}
+            onSendToCodex={(sessionRefId) => void sendWorkbenchTaskSpec(sessionRefId)}
+            onRunVerification={() => void runWorkbenchVerification()}
+            onAskPlannerToReview={() => void askPlannerToReviewVerification()}
+            onCreateFollowUp={() => void createWorkbenchFollowUp()}
+            onSendFollowUp={(sessionRefId) => void sendWorkbenchFollowUp(sessionRefId)}
+          />
         ) : null}
 
         {view === "settings" ? (
@@ -703,7 +768,7 @@ export function App(): JSX.Element {
               onOpenChromeExtensionsPage={() => void openChromeExtensionsPage()}
               onOpenChromeExtensionFolder={() => void openChromeExtensionFolder()}
               onRefresh={() => void refresh()}
-              onGoToConnect={() => setView("start")}
+              onGoToConnect={() => setView("workbench")}
             />
             <CodexAppServerPanel status={codexAppServerStatus} onRefresh={() => void refresh()} />
             <CodexTargetPanel
@@ -743,6 +808,9 @@ export function App(): JSX.Element {
                 </div>
               </div>
               <div className="segmented-control advanced-tabs">
+                <button type="button" className={advancedView === "legacy" ? "selected" : ""} onClick={() => setAdvancedView("legacy")}>
+                  Legacy Link Center
+                </button>
                 <button type="button" className={advancedView === "components" ? "selected" : ""} onClick={() => setAdvancedView("components")}>
                   Components
                 </button>
@@ -766,6 +834,65 @@ export function App(): JSX.Element {
                 </button>
               </div>
             </section>
+            {advancedView === "legacy" ? (
+              <div className="start-screen">
+                <StartPage
+                  components={components}
+                  workflowLinks={workflowLinks}
+                  captures={captures}
+                  targets={targets}
+                  codexThreads={codexThreads}
+                  missions={missions}
+                  setupStatus={setupStatus}
+                  selectedSourceComponentId={selectedSourceComponentId}
+                  selectedWorkspaceComponentId={selectedWorkspaceComponentId}
+                  selectedTargetComponentId={selectedTargetComponentId}
+                  selectedCodexThreadId={selectedCodexThreadId}
+                  manualCodexThreadId={manualCodexThreadId}
+                  embeddedChatGptUrl={embeddedChatGptUrl}
+                  chatGptSourceMode={chatGptSourceMode}
+                  linkError={linkError}
+                  targetError={targetError}
+                  onSelectCodexThread={setSelectedCodexThreadId}
+                  onManualCodexThreadIdChange={setManualCodexThreadId}
+                  onEmbeddedChatGptUrlChange={setEmbeddedChatGptUrl}
+                  onChatGptSourceModeChange={(mode) => {
+                    setChatGptSourceMode(mode);
+                    const nextSource = components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, mode) && !isDemoSourceComponent(component));
+                    setSelectedSourceComponentId(nextSource?.id);
+                  }}
+                  onSaveManualCodexThread={() => void saveManualCodexThread()}
+                  onChooseRepo={() => void chooseRepoFolder()}
+                  onCreateWorkflowLink={() => void createWorkflowLink()}
+                  onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
+                  onOpenTasks={() => setView("tasks")}
+                  onOpenAdvanced={() => setView("advanced")}
+                  onOpenSettings={() => setView("settings")}
+                  onProbeDesktopApps={() => void discoverComponents()}
+                  onOpenEmbeddedChatGpt={(url) => void openEmbeddedChatGpt(url)}
+                  onCaptureEmbeddedChatGptSelection={() => void captureEmbeddedChatGptSelection()}
+                  onConnectChrome={() => void connectChrome()}
+                  onCheckChromeConnection={() => void refresh()}
+                />
+                {preview ? (
+                  <HandoffPreview
+                    preview={preview}
+                    deliveryResult={deliveryResult}
+                    onApproveDryRun={() => void dryRunCodex()}
+                    onApproveSend={() => void sendCodex()}
+                    onSaveDraft={() => {
+                      setPreview(undefined);
+                      setDeliveryResult(undefined);
+                      setView("tasks");
+                    }}
+                    onCancel={() => {
+                      setPreview(undefined);
+                      setDeliveryResult(undefined);
+                    }}
+                  />
+                ) : null}
+              </div>
+            ) : null}
             {advancedView === "components" ? (
               <ConnectCenter
                 components={components}
@@ -1006,7 +1133,7 @@ function describeTarget(target: TargetEndpoint): { title: string; subtitle: stri
 
 function titleForView(view: View): string {
   return {
-    start: "Start",
+    workbench: "Workbench",
     tasks: "Tasks",
     settings: "Settings",
     advanced: "Advanced"
@@ -1015,7 +1142,7 @@ function titleForView(view: View): string {
 
 function subtitleForView(view: View): string {
   return {
-    start: "Link one ChatGPT conversation to one repo and Codex.",
+    workbench: "Plan a task, send it to Codex, verify, then review the result.",
     tasks: "Task history, verification results, artifacts, and follow-up drafts.",
     settings: "Connect Chrome, choose a repo, and configure Codex delivery.",
     advanced: "Components, captures, links, sources, targets, audit, and demo tools."
