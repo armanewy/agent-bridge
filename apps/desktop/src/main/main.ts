@@ -31,6 +31,7 @@ import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import { ProviderRegistryService } from "../services/provider-registry-service.js";
 import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
+import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -106,6 +107,9 @@ app.whenReady().then(async () => {
   const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
   providerRegistryService.registerProvider(new OpenAIPlannerProvider(store));
+  providerRegistryService.registerProvider(
+    new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient)
+  );
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
