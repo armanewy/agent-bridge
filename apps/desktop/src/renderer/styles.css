@@ -611,6 +611,14 @@ pre {
   color: #25313a;
 }
 
+.preflight-panel {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  background: #ffffff;
+}
+
 .setup-layout {
   display: grid;
   grid-template-columns: minmax(300px, 0.45fr) minmax(0, 1fr);
@@ -689,4 +697,38 @@ pre {
   color: #64737f;
   margin: 0;
   overflow-wrap: anywhere;
+}
+
+.list-card.selectable {
+  width: 100%;
+  text-align: left;
+  background: #ffffff;
+}
+
+.list-card.selectable.selected {
+  border-color: #205f4b;
+  background: #f1faf6;
+}
+
+.artifact-viewer {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 12px;
+  margin-top: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.artifact-viewer.empty {
+  color: #64737f;
+  justify-items: start;
+}
+
+.artifact-viewer pre {
+  max-height: 300px;
+  overflow: auto;
+}
+
+.artifact-metadata pre {
+  max-height: 140px;
 }

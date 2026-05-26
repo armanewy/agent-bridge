@@ -1,4 +1,5 @@
-import { PlayCircle } from "lucide-react";
+import { PlayCircle, XCircle } from "lucide-react";
+import { useState } from "react";
 import type { VerificationCommand } from "@agentbridge/core";
 import type { MissionDetail } from "../../services/bridge-contract.js";
 
@@ -8,6 +9,7 @@ interface VerificationPanelProps {
 }
 
 export function VerificationPanel({ detail, onRunVerification }: VerificationPanelProps): JSX.Element {
+  const [showPreflight, setShowPreflight] = useState(false);
   const commands = commandsForMission(detail);
   const latestResult = detail.verificationResults[0];
   const repoContext = detail.mission.repoContext;
@@ -23,7 +25,7 @@ export function VerificationPanel({ detail, onRunVerification }: VerificationPan
           type="button"
           className="primary-button"
           disabled={!repoContext?.repoPath}
-          onClick={() => onRunVerification(detail.mission.id)}
+          onClick={() => setShowPreflight(true)}
         >
           <PlayCircle size={16} />
           Run verification
@@ -52,6 +54,54 @@ export function VerificationPanel({ detail, onRunVerification }: VerificationPan
             <p className="empty-copy">No commands configured. Verification will capture git diff and require review.</p>
           )}
           {latestResult ? <p className="verification-summary">{latestResult.summary}</p> : null}
+          {showPreflight ? (
+            <div className="preflight-panel">
+              <div className="panel-heading compact">
+                <div>
+                  <span className="eyebrow">Preflight</span>
+                  <h3>Confirm local command execution</h3>
+                </div>
+                <button type="button" className="icon-button" onClick={() => setShowPreflight(false)} aria-label="Cancel verification">
+                  <XCircle size={18} />
+                </button>
+              </div>
+              <div className="verification-meta">
+                <span>Repo: {repoContext.repoPath}</span>
+                <span>Branch: {repoContext.currentBranch ?? "unknown"}</span>
+              </div>
+              <ul className="command-list">
+                {commands.length === 0 ? (
+                  <li>
+                    <strong>No commands configured</strong>
+                    <code>git diff summary only</code>
+                  </li>
+                ) : (
+                  commands.map((command) => (
+                    <li key={`preflight:${command.kind}:${command.command}`}>
+                      <strong>{command.kind}</strong>
+                      <code>{command.command}</code>
+                    </li>
+                  ))
+                )}
+              </ul>
+              <div className="button-row">
+                <button type="button" className="secondary-button" onClick={() => setShowPreflight(false)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => {
+                    setShowPreflight(false);
+                    onRunVerification(detail.mission.id);
+                  }}
+                >
+                  <PlayCircle size={16} />
+                  Run verification
+                </button>
+              </div>
+            </div>
+          ) : null}
         </>
       ) : (
         <p className="empty-copy">Attach repo context through a Codex target before running verification.</p>

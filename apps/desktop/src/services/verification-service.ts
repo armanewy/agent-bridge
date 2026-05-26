@@ -104,7 +104,7 @@ export class VerificationService {
       kind: "verification",
       status: resultStatus === "passed" ? "passed" : resultStatus === "failed" ? "failed" : "needs_review",
       title: "Run mission verification",
-      details: { commandCount: commands.length, resultStatus },
+      details: { commandCount: commands.length, resultStatus, userApproved: true },
       artifactIds: artifacts.map((artifact) => artifact.id),
       startedAt: now,
       completedAt,

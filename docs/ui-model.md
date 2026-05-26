@@ -21,8 +21,10 @@ Mission detail shows:
 - repo path and branch when available
 - verification status placeholder
 - user-triggered verification panel with repo path, commands, and local execution warning
+- verification preflight confirmation before commands run
 - TaskSpec sections
 - artifacts attached to the mission
+- inline artifact viewer for prompt, diff, command output, and follow-up draft artifacts
 - delivery attempts associated with the mission or its handoff cards
 
 The existing HandoffPreview remains the approval surface. Previewing a handoff now creates a Mission and HandoffCard behind the scenes.

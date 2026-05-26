@@ -1,6 +1,8 @@
 import { ClipboardList, FileText } from "lucide-react";
+import { useEffect, useState } from "react";
 import type { Mission } from "@agentbridge/core";
 import type { MissionDetail } from "../../services/bridge-contract.js";
+import { ArtifactViewer } from "./ArtifactViewer.js";
 import { VerificationPanel } from "../verification/VerificationPanel.js";
 
 interface MissionPanelProps {
@@ -18,6 +20,13 @@ export function MissionPanel({
   onSelectMission,
   onRunVerification
 }: MissionPanelProps): JSX.Element {
+  const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>();
+  const selectedArtifact = detail?.artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? detail?.artifacts[0];
+
+  useEffect(() => {
+    setSelectedArtifactId(detail?.artifacts[0]?.id);
+  }, [detail?.mission.id, detail?.artifacts[0]?.id]);
+
   return (
     <div className="mission-layout">
       <section className="panel">
@@ -96,16 +105,22 @@ export function MissionPanel({
                 <p className="empty-copy">No artifacts saved.</p>
               ) : (
                 detail.artifacts.map((artifact) => (
-                  <article className="list-card" key={artifact.id}>
+                  <button
+                    type="button"
+                    className={artifact.id === selectedArtifact?.id ? "list-card selectable selected" : "list-card selectable"}
+                    key={artifact.id}
+                    onClick={() => setSelectedArtifactId(artifact.id)}
+                  >
                     <strong>
                       <FileText size={14} />
                       {artifact.title}
                     </strong>
                     <span>{artifact.kind}</span>
-                  </article>
+                  </button>
                 ))
               )}
             </div>
+            <ArtifactViewer artifact={selectedArtifact} />
 
             <div className="artifact-list">
               <span className="eyebrow">Delivery Attempts</span>
