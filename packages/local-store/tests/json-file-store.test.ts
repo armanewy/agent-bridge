@@ -3,7 +3,7 @@ import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import { JsonFileStore } from "../src/index.js";
-import type { AuditEvent, Handoff, Link } from "@agentbridge/core";
+import type { AuditEvent, DeliveryAttempt, Handoff, Link } from "@agentbridge/core";
 
 let tempDir: string;
 
@@ -80,5 +80,23 @@ describe("JsonFileStore", () => {
     await store.saveSetting("theme", "system");
 
     expect(await store.getSetting("theme")).toBe("system");
+  });
+
+  it("stores delivery attempts", async () => {
+    const store = new JsonFileStore(tempDir);
+    const attempt: DeliveryAttempt = {
+      id: "delivery_1",
+      handoffId: "handoff_1",
+      targetId: "target_1",
+      strategy: "codexDeepLink",
+      success: true,
+      warnings: [],
+      targetMetadata: { repoPath: tempDir },
+      attemptedAt: new Date().toISOString()
+    };
+
+    await store.saveDeliveryAttempt(attempt);
+
+    expect(await store.listDeliveryAttempts("handoff_1")).toEqual([attempt]);
   });
 });

@@ -1,6 +1,7 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
+import { homedir } from "node:os";
 import {
   AuditEventSchema,
   CaptureSchema,
@@ -13,6 +14,8 @@ import {
   type Capture,
   type Handoff,
   type Link,
+  type DeliveryAttempt,
+  DeliveryAttemptSchema,
   type Setting,
   type SourceEndpoint,
   type TargetEndpoint
@@ -38,6 +41,8 @@ export interface LocalStore {
   getHandoff(id: string): Promise<Handoff | undefined>;
   listRecentHandoffs(limit?: number): Promise<Handoff[]>;
   deleteHandoff(id: string): Promise<boolean>;
+  saveDeliveryAttempt(attempt: DeliveryAttempt): Promise<void>;
+  listDeliveryAttempts(handoffId?: string): Promise<DeliveryAttempt[]>;
   saveApproval(approval: Approval): Promise<void>;
   getApproval(id: string): Promise<Approval | undefined>;
   appendAuditEvent(event: AuditEvent): Promise<void>;
@@ -54,6 +59,7 @@ interface StoreData {
   targets: Record<string, TargetEndpoint>;
   captures: Record<string, Capture>;
   handoffs: Record<string, Handoff>;
+  deliveryAttempts: Record<string, DeliveryAttempt>;
   approvals: Record<string, Approval>;
   auditEvents: AuditEvent[];
   settings: Record<string, Setting>;
@@ -163,6 +169,19 @@ export class JsonFileStore implements LocalStore {
     return deleted;
   }
 
+  async saveDeliveryAttempt(attempt: DeliveryAttempt): Promise<void> {
+    DeliveryAttemptSchema.parse(attempt);
+    await this.update((data) => {
+      data.deliveryAttempts[attempt.id] = attempt;
+    });
+  }
+
+  async listDeliveryAttempts(handoffId?: string): Promise<DeliveryAttempt[]> {
+    return Object.values((await this.read()).deliveryAttempts)
+      .filter((attempt) => !handoffId || attempt.handoffId === handoffId)
+      .sort((a, b) => b.attemptedAt.localeCompare(a.attemptedAt));
+  }
+
   async saveApproval(approval: Approval): Promise<void> {
     await this.update((data) => {
       data.approvals[approval.id] = approval;
@@ -237,17 +256,23 @@ export function createEmptyStore(): StoreData {
     targets: {},
     captures: {},
     handoffs: {},
+    deliveryAttempts: {},
     approvals: {},
     auditEvents: [],
     settings: {}
   };
 }
 
-function migrate(data: StoreData): StoreData {
-  if (data.version === CURRENT_STORE_VERSION) {
-    return data;
+export function defaultAgentBridgeDataDir(): string {
+  if (process.env.AGENTBRIDGE_STORE_DIR) {
+    return process.env.AGENTBRIDGE_STORE_DIR;
   }
 
+  const base = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+  return join(base, "AgentBridge");
+}
+
+function migrate(data: StoreData): StoreData {
   return {
     ...createEmptyStore(),
     ...data,

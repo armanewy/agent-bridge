@@ -13,6 +13,7 @@ import type {
   Capture,
   CodexDeepLinkTarget,
   Link,
+  AuditEvent,
   SourceEndpoint,
   TargetEndpoint,
   Transform
@@ -33,6 +34,7 @@ export function App(): JSX.Element {
   const [targets, setTargets] = useState<TargetEndpoint[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
+  const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [recipe, setRecipe] = useState<Transform["recipe"]>("implementationBrief");
   const [repoPath, setRepoPath] = useState("");
   const [targetError, setTargetError] = useState<string | undefined>();
@@ -49,16 +51,18 @@ export function App(): JSX.Element {
   }, []);
 
   async function refresh(): Promise<void> {
-    const [nextSources, nextTargets, nextLinks, nextCaptures] = await Promise.all([
+    const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents] = await Promise.all([
       api.listSources(),
       api.listTargets(),
       api.listLinks(),
-      api.listCaptures()
+      api.listCaptures(),
+      api.listAuditEvents()
     ]);
     setSources(nextSources);
     setTargets(nextTargets);
     setLinks(nextLinks);
     setCaptures(nextCaptures);
+    setAuditEvents(nextAuditEvents);
   }
 
   async function bindMockSource(): Promise<void> {
@@ -113,9 +117,32 @@ export function App(): JSX.Element {
       await api.deliverToCodex({
         target: preview.target,
         prompt: preview.handoff.prompt,
-        dryRun: true
+        dryRun: true,
+        handoffId: preview.handoff.id
       })
     );
+    await refresh();
+  }
+
+  async function sendCodex(): Promise<void> {
+    if (!preview || preview.target?.kind !== "codexDeepLink") {
+      return;
+    }
+
+    setDeliveryResult(
+      await api.deliverToCodex({
+        target: preview.target,
+        prompt: preview.handoff.prompt,
+        dryRun: false,
+        handoffId: preview.handoff.id
+      })
+    );
+    await refresh();
+  }
+
+  async function clearAudit(): Promise<void> {
+    await api.clearAuditEvents();
+    await refresh();
   }
 
   return (
@@ -186,6 +213,7 @@ export function App(): JSX.Element {
               preview={preview}
               deliveryResult={deliveryResult}
               onApproveDryRun={() => void dryRunCodex()}
+              onApproveSend={() => void sendCodex()}
               onCancel={() => {
                 setPreview(undefined);
                 setDeliveryResult(undefined);
@@ -223,15 +251,30 @@ export function App(): JSX.Element {
         ) : null}
 
         {view === "audit" ? (
-          <EntityPanel
-            title="Recent Handoffs"
-            items={(preview ? [preview.handoff] : []).map((handoff) => ({
-              title: handoff.transformId,
-              subtitle: `${handoff.prompt.length} characters`,
-              detail: handoff.createdAt
-            }))}
-            empty="No handoffs previewed in this session."
-          />
+          <section className="panel">
+            <div className="panel-heading">
+              <div>
+                <h2>Audit Events</h2>
+                <p>{auditEvents.length} local event(s)</p>
+              </div>
+              <button type="button" className="secondary-button" onClick={() => void clearAudit()}>
+                Clear Audit
+              </button>
+            </div>
+            <div className="item-list">
+              {auditEvents.length === 0 ? (
+                <p className="empty-copy">No local audit events yet.</p>
+              ) : (
+                auditEvents.map((event) => (
+                  <article className="list-card" key={event.id}>
+                    <strong>{event.type}</strong>
+                    <span>{event.entityId ?? "No entity"}</span>
+                    <small>{event.createdAt}</small>
+                  </article>
+                ))
+              )}
+            </div>
+          </section>
         ) : null}
       </main>
     </div>

@@ -43,6 +43,14 @@ export class WindowsTargetService {
     return this.invoke("findEditableTargets", { hwnd });
   }
 
+  async deliverText(
+    target: WindowsDesktopWindowTarget,
+    text: string,
+    strategy: "autoUiaOnly" | "valuePattern" | "clipboardPasteApproved" | "dryRun"
+  ): Promise<HelperResponse> {
+    return this.invoke("deliverText", { hwnd: target.hwnd, text, strategy });
+  }
+
   async revalidate(target: WindowsDesktopWindowTarget): Promise<WindowRevalidation> {
     const current = await this.inspectWindow(target.hwnd);
     if (!current) {

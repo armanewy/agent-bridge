@@ -17,7 +17,9 @@ const api: AgentBridgeApi = {
   revalidateTarget: (target: WindowsDesktopWindowTarget) => ipcRenderer.invoke("agentbridge:revalidateTarget", target),
   configureCodexTarget: (repoPath: string) => ipcRenderer.invoke("agentbridge:configureCodexTarget", repoPath),
   deliverToCodex: (input: CodexDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverToCodex", input),
-  bindMockBrowserSource: () => ipcRenderer.invoke("agentbridge:bindMockBrowserSource")
+  bindMockBrowserSource: () => ipcRenderer.invoke("agentbridge:bindMockBrowserSource"),
+  listAuditEvents: () => ipcRenderer.invoke("agentbridge:listAuditEvents"),
+  clearAuditEvents: () => ipcRenderer.invoke("agentbridge:clearAuditEvents")
 };
 
 contextBridge.exposeInMainWorld("agentBridge", api);

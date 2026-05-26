@@ -7,8 +7,10 @@ AgentBridge MVP persistence is local-only. Wave 2 uses a JSON-file store because
 The store implementation accepts an explicit directory. Desktop integration should use an application data directory such as:
 
 ```text
-%APPDATA%\AgentBridge
+%LOCALAPPDATA%\AgentBridge
 ```
+
+Set `AGENTBRIDGE_STORE_DIR` to override this during development or tests.
 
 Tests use temporary directories.
 
@@ -17,6 +19,7 @@ Tests use temporary directories.
 - links
 - source and target endpoint records through links and handoffs
 - handoffs
+- delivery attempts
 - approval records
 - audit events
 - settings

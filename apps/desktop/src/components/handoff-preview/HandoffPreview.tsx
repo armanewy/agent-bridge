@@ -6,6 +6,7 @@ interface HandoffPreviewProps {
   preview?: DeliveryPreview | undefined;
   deliveryResult?: CodexDeliveryResult | undefined;
   onApproveDryRun(): void;
+  onApproveSend(): void;
   onCancel(): void;
 }
 
@@ -13,6 +14,7 @@ export function HandoffPreview({
   preview,
   deliveryResult,
   onApproveDryRun,
+  onApproveSend,
   onCancel
 }: HandoffPreviewProps): JSX.Element {
   if (!preview) {
@@ -42,6 +44,10 @@ export function HandoffPreview({
           <button type="button" className="primary-button" onClick={onApproveDryRun} disabled={!codexTarget}>
             <Send size={16} />
             Dry Run Codex
+          </button>
+          <button type="button" className="primary-button" onClick={onApproveSend} disabled={!codexTarget}>
+            <Send size={16} />
+            Send to Codex
           </button>
         </div>
       </div>
@@ -91,7 +97,7 @@ export function HandoffPreview({
         <div className="result-line">
           <CheckCircle size={16} />
           <span>
-            Dry run generated {deliveryResult.promptLength} characters for {deliveryResult.repoPath}.
+            {deliveryResult.openedAt ? "Opened Codex deep link" : "Dry run generated"} {deliveryResult.promptLength} characters for {deliveryResult.repoPath}.
           </span>
         </div>
       ) : null}

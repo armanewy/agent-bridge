@@ -22,4 +22,4 @@ Then register it:
 powershell -ExecutionPolicy Bypass -File apps/native-host/scripts/install-native-host-windows.ps1 -ManifestPath C:\path\to\manifest.json
 ```
 
-The Wave 2 host writes received events to `%LOCALAPPDATA%\AgentBridge\native-host-dev-log.jsonl` until the desktop service is implemented.
+The host writes received events to `%LOCALAPPDATA%\AgentBridge\native-host-dev-log.jsonl` and persists converted sources/captures to the local AgentBridge store. Set `AGENTBRIDGE_STORE_DIR` to override the storage directory during development.

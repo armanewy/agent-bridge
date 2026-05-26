@@ -63,6 +63,9 @@ importers:
       '@agentbridge/core':
         specifier: workspace:*
         version: link:../../packages/core
+      '@agentbridge/local-store':
+        specifier: workspace:*
+        version: link:../../packages/local-store
     devDependencies:
       tsx:
         specifier: ^4.19.2

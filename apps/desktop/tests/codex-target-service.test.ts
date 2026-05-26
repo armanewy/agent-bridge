@@ -27,9 +27,16 @@ describe("CodexTargetService", () => {
   it("supports dry-run delivery without opening Codex", async () => {
     const service = new CodexTargetService(new JsonFileStore(tempDir));
     const target = await service.configureTarget(tempDir);
-    const result = await service.deliver({ target, prompt: "Fix it", dryRun: true });
+    const store = new JsonFileStore(tempDir);
+    const result = await new CodexTargetService(store).deliver({
+      target,
+      prompt: "Fix it",
+      dryRun: true,
+      handoffId: "handoff_1"
+    });
 
     expect(result.deepLink).toContain("codex://threads/new?");
     expect(result.promptLength).toBe(6);
+    await expect(store.listDeliveryAttempts("handoff_1")).resolves.toHaveLength(1);
   });
 });

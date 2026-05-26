@@ -58,6 +58,8 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle("agentbridge:configureCodexTarget", (_event, repoPath: string) => codexTargetService.configureTarget(repoPath));
   ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));
+  ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
+  ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());
 
   await createWindow();
 });

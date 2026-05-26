@@ -11,6 +11,7 @@ import type {
   Capture,
   CodexDeepLinkTarget,
   Link,
+  AuditEvent,
   SourceEndpoint,
   TargetEndpoint,
   WindowsDesktopWindowTarget
@@ -41,6 +42,7 @@ let mockSources: SourceEndpoint[] = [mockSource];
 let mockTargets: TargetEndpoint[] = [];
 let mockLinks: Link[] = [];
 let mockCaptures: Capture[] = [mockCapture];
+let mockAuditEvents: AuditEvent[] = [];
 
 export function getAgentBridgeApi(): AgentBridgeApi {
   return window.agentBridge ?? createMockAgentBridgeApi();
@@ -63,6 +65,16 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async bindMockBrowserSource() {
       mockSources = [mockSource];
       mockCaptures = [mockCapture];
+      mockAuditEvents = [
+        {
+          id: `audit_${mockAuditEvents.length + 1}`,
+          type: "sourceBound",
+          entityId: mockSource.id,
+          details: { mode: "mock" },
+          createdAt: now()
+        },
+        ...mockAuditEvents
+      ];
       return mockSource;
     },
     async createLink(input) {
@@ -74,6 +86,16 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         enabled: true
       };
       mockLinks = [link, ...mockLinks];
+      mockAuditEvents = [
+        {
+          id: `audit_${mockAuditEvents.length + 1}`,
+          type: "targetBound",
+          entityId: link.targetId,
+          details: { linkId: link.id },
+          createdAt: now()
+        },
+        ...mockAuditEvents
+      ];
       return link;
     },
     async previewHandoff(input: PreviewRequest): Promise<DeliveryPreview> {
@@ -119,12 +141,32 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         boundAt: now()
       };
       mockTargets = [target, ...mockTargets];
+      mockAuditEvents = [
+        {
+          id: `audit_${mockAuditEvents.length + 1}`,
+          type: "targetBound",
+          entityId: target.id,
+          details: { kind: "codexDeepLink", repoPath },
+          createdAt: now()
+        },
+        ...mockAuditEvents
+      ];
       return target;
     },
     async deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult> {
       const params = new URLSearchParams();
       params.set("prompt", input.prompt);
       params.set("path", input.target.repoPath);
+      mockAuditEvents = [
+        {
+          id: `audit_${mockAuditEvents.length + 1}`,
+          type: input.dryRun ? "deliveryAttempted" : "deliverySucceeded",
+          ...(input.handoffId ? { entityId: input.handoffId } : {}),
+          details: { targetId: input.target.id, dryRun: input.dryRun },
+          createdAt: now()
+        },
+        ...mockAuditEvents
+      ];
       return {
         success: true,
         deepLink: `codex://threads/new?${params.toString()}`,
@@ -132,6 +174,12 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         repoPath: input.target.repoPath,
         ...(input.dryRun ? {} : { openedAt: now() })
       };
+    },
+    async listAuditEvents() {
+      return mockAuditEvents;
+    },
+    async clearAuditEvents() {
+      mockAuditEvents = [];
     }
   };
 }

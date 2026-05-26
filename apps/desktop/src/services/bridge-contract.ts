@@ -6,7 +6,8 @@ import type {
   Link,
   SourceEndpoint,
   TargetEndpoint,
-  WindowsDesktopWindowTarget
+  WindowsDesktopWindowTarget,
+  AuditEvent
 } from "@agentbridge/core";
 
 export interface WindowRevalidation {
@@ -33,6 +34,7 @@ export interface CodexDeliveryRequest {
   target: CodexDeepLinkTarget;
   prompt: string;
   dryRun: boolean;
+  handoffId?: string;
 }
 
 export interface CodexDeliveryResult {
@@ -55,6 +57,8 @@ export interface AgentBridgeApi {
   configureCodexTarget(repoPath: string): Promise<CodexDeepLinkTarget>;
   deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult>;
   bindMockBrowserSource(): Promise<BrowserTabSource>;
+  listAuditEvents(): Promise<AuditEvent[]>;
+  clearAuditEvents(): Promise<void>;
 }
 
 declare global {
