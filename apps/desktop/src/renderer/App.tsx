@@ -738,6 +738,12 @@ export function App(): JSX.Element {
 
         {view === "settings" ? (
           <div className="settings-layout">
+            <ProviderSettingsPanel
+              profiles={providerProfiles}
+              codexAppServerStatus={codexAppServerStatus}
+              codexTarget={codexTarget}
+              onRefresh={() => void refresh()}
+            />
             <section className="panel">
               <div className="panel-heading">
                 <div>
@@ -1084,6 +1090,62 @@ function CodexAppServerPanel({
   );
 }
 
+function ProviderSettingsPanel({
+  profiles,
+  codexAppServerStatus,
+  codexTarget,
+  onRefresh
+}: {
+  profiles: AgentProviderProfile[];
+  codexAppServerStatus?: CodexAppServerStatus | undefined;
+  codexTarget?: CodexDeepLinkTarget | undefined;
+  onRefresh(): void;
+}): JSX.Element {
+  const planner = profiles.find((profile) => profile.id === "openai-planner");
+  const codex = profiles.find((profile) => profile.id === "codex");
+  return (
+    <section className="panel">
+      <div className="panel-heading compact">
+        <div>
+          <h2>Provider connections</h2>
+          <p>Workbench uses OpenAI for planning and Codex for repo execution.</p>
+        </div>
+        <button type="button" className="secondary-button" onClick={onRefresh}>
+          Check connections
+        </button>
+      </div>
+      <div className="provider-settings-grid">
+        <article className="setup-check">
+          <strong>Planner Provider: OpenAI</strong>
+          <span>{planner?.status ?? "unknown"}</span>
+          <small>
+            API key source: {String(planner?.metadata.apiKeySource ?? "not set")}. Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY before launch.
+          </small>
+          <small>Model: {String(planner?.metadata.model ?? "configured by environment")}</small>
+        </article>
+        <article className="setup-check">
+          <strong>Executor Provider: Codex</strong>
+          <span>{codex?.status ?? "unknown"}</span>
+          <small>Deep link: {codexTarget ? "available" : "choose a repo first"}</small>
+          <small>
+            App Server: {codexAppServerStatus?.available ? "connected" : codexAppServerStatus?.configured ? "not connected" : "not configured"}
+          </small>
+        </article>
+        <article className="setup-check">
+          <strong>Repo settings</strong>
+          <span>{codexTarget ? codexTarget.repoPath : "No repo selected"}</span>
+          <small>Verification commands are configured in the Repo and Codex panel below.</small>
+        </article>
+      </div>
+      {!codexAppServerStatus?.available ? (
+        <div className="warning-callout">
+          New Codex thread delivery can use deep links. Sending into existing Codex threads requires CODEX_APP_SERVER_URL.
+        </div>
+      ) : null}
+    </section>
+  );
+}
+
 function verificationCommandsFromComponent(component?: LinkableComponent): Array<{ kind: "test" | "lint" | "typecheck"; command: string }> {
   const metadata = component?.metadata as { testCommand?: unknown; lintCommand?: unknown; typecheckCommand?: unknown } | undefined;
   return [
@@ -1144,7 +1206,7 @@ function subtitleForView(view: View): string {
   return {
     workbench: "Plan a task, send it to Codex, verify, then review the result.",
     tasks: "Task history, verification results, artifacts, and follow-up drafts.",
-    settings: "Connect Chrome, choose a repo, and configure Codex delivery.",
+    settings: "Configure OpenAI Planner, Codex Executor, repo, and local diagnostics.",
     advanced: "Components, captures, links, sources, targets, audit, and demo tools."
   }[view];
 }
