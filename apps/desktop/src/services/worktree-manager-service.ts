@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { MissionWorkspace, MissionWorkspaceStrategy } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
@@ -17,6 +18,8 @@ export class WorktreeManagerService {
   }): Promise<MissionWorkspace> {
     const now = new Date().toISOString();
     const suffix = safeName(input.missionId);
+    await ensureGitRepo(input.baseRepoPath);
+
     if (input.strategy === "none") {
       const workspace: MissionWorkspace = {
         id: `workspace_${randomUUID()}`,
@@ -36,8 +39,12 @@ export class WorktreeManagerService {
 
     const branchName = `agentbridge/${suffix}`;
     const workingPath = input.strategy === "gitWorktree" ? join(input.baseRepoPath, "..", `.agentbridge-${suffix}`) : input.baseRepoPath;
+    await ensureCleanWorkingTree(input.baseRepoPath);
+    if (input.strategy === "gitWorktree" && existsSync(workingPath)) {
+      throw new Error(`Mission worktree path already exists: ${workingPath}`);
+    }
     if (input.strategy === "branch") {
-      await runGit(input.baseRepoPath, ["checkout", "-B", branchName]);
+      await runGit(input.baseRepoPath, ["checkout", "-b", branchName]);
     } else {
       await runGit(input.baseRepoPath, ["worktree", "add", "-b", branchName, workingPath]);
     }
@@ -100,6 +107,21 @@ export class WorktreeManagerService {
     this.workspaces.set(workspaceId, updated);
     await this.store?.saveMissionWorkspace(updated);
     return updated;
+  }
+}
+
+async function ensureGitRepo(cwd: string): Promise<void> {
+  await runGit(cwd, ["rev-parse", "--show-toplevel"]);
+}
+
+async function ensureCleanWorkingTree(cwd: string): Promise<void> {
+  const status = await runGit(cwd, ["status", "--porcelain"]);
+  if (status.trim()) {
+    throw new Error("Base repository has uncommitted changes. Commit or stash them before creating an isolated mission workspace.");
+  }
+  const branch = (await runGit(cwd, ["rev-parse", "--abbrev-ref", "HEAD"])).trim();
+  if (!branch || branch === "HEAD") {
+    throw new Error("Cannot create mission workspace from detached HEAD.");
   }
 }
 

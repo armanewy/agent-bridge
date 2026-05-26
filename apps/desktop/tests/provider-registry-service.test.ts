@@ -2,6 +2,16 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import type {
+  AgentProviderProfile,
+  AgentSessionRef,
+  AgentTurn,
+  PlannerProvider,
+  PlannerRequest,
+  PlannerResponse,
+  ReviewRequest,
+  ReviewResult
+} from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { ProviderRegistryService } from "../src/services/provider-registry-service.js";
 
@@ -116,4 +126,101 @@ describe("ProviderRegistryService", () => {
     expect(modes.find((mode) => mode.mode === "hostedAgentBridge")?.default).toBe(true);
     expect(modes.find((mode) => mode.mode === "userOpenAiApiKey")?.advanced).toBe(true);
   });
+
+  it("resolves the active planner adapter from the selected planner mode", async () => {
+    const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
+    registry.registerProvider(new MockPlanner("agentbridge-hosted-planner", "hosted response"));
+    registry.registerProvider(new MockPlanner("codex-local-planner", "local response"));
+
+    await expect((await registry.getActivePlannerAdapter()).plan(plannerRequest())).resolves.toMatchObject({
+      content: "hosted response"
+    });
+
+    await registry.setPlannerMode("codexLocalPlanner");
+
+    expect(registry.getActivePlannerProfile()).toMatchObject({ id: "codex-local-planner" });
+    await expect((await registry.getActivePlannerAdapter()).plan(plannerRequest())).resolves.toMatchObject({
+      content: "local response"
+    });
+  });
 });
+
+class MockPlanner implements PlannerProvider {
+  constructor(private readonly id: string, private readonly response: string) {}
+
+  profile(): AgentProviderProfile {
+    return {
+      id: this.id,
+      kind: "planner",
+      displayName: this.id,
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      authMode: "none",
+      status: "available",
+      metadata: {}
+    };
+  }
+
+  async status(): Promise<AgentProviderProfile> {
+    return this.profile();
+  }
+
+  async createSession(): Promise<AgentSessionRef> {
+    return {
+      id: `session_${this.id}`,
+      providerId: this.id,
+      providerKind: "planner",
+      externalSessionId: `external_${this.id}`,
+      status: "active",
+      lastSeenAt: "2026-01-01T00:00:00.000Z",
+      metadata: {}
+    };
+  }
+
+  async resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef> {
+    return sessionRef;
+  }
+
+  async sendMessage(sessionRef: AgentSessionRef, message: string): Promise<AgentTurn> {
+    return {
+      id: `turn_${this.id}`,
+      providerId: this.id,
+      sessionRefId: sessionRef.id,
+      role: "assistant",
+      content: message,
+      status: "completed",
+      artifactIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      completedAt: "2026-01-01T00:00:00.000Z",
+      metadata: {}
+    };
+  }
+
+  async plan(input: PlannerRequest): Promise<PlannerResponse> {
+    return {
+      providerId: this.id,
+      content: this.response,
+      artifactIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      metadata: { prompt: input.prompt }
+    };
+  }
+
+  async review(_input: ReviewRequest): Promise<ReviewResult> {
+    return {
+      providerId: this.id,
+      content: this.response,
+      statusSuggestion: "needs_review",
+      artifactIds: [],
+      createdAt: "2026-01-01T00:00:00.000Z",
+      metadata: {}
+    };
+  }
+}
+
+function plannerRequest(): PlannerRequest {
+  return {
+    missionId: "mission_1",
+    prompt: "Plan",
+    metadata: {}
+  };
+}

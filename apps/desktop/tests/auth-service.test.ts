@@ -1,5 +1,8 @@
+import { mkdtemp, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
-import { AuthService, MemoryAuthStorage, type AuthTransport } from "../src/services/auth-service.js";
+import { AuthService, FileAuthStorage, MemoryAuthStorage, type AuthTransport } from "../src/services/auth-service.js";
 
 describe("AuthService", () => {
   it("is signed out by default", async () => {
@@ -28,6 +31,24 @@ describe("AuthService", () => {
 
     expect(status.status).toBe("signedOut");
     await expect(service.getAuthToken()).resolves.toBeUndefined();
+  });
+
+  it("persists development auth tokens across service instances", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agentbridge-auth-"));
+    try {
+      const authPath = join(tempDir, "auth.json");
+      const first = new AuthService(new FileAuthStorage(authPath));
+      await first.signInDevMode();
+
+      const second = new AuthService(new FileAuthStorage(authPath));
+
+      await expect(second.getAuthStatus()).resolves.toMatchObject({
+        status: "signedIn",
+        signedIn: true
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
   });
 
   it("reports unavailable when the cloud cannot return the current user", async () => {

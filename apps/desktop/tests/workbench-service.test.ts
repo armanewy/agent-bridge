@@ -5,14 +5,21 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
+  AgentTurn,
   CodexThreadRef,
   ExecutorProvider,
   ExecutorTaskRequest,
-  ExecutorTaskResult
+  ExecutorTaskResult,
+  PlannerProvider,
+  PlannerRequest,
+  PlannerResponse,
+  ReviewRequest,
+  ReviewResult
 } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { OpenAIPlannerProvider, type OpenAIPlannerTransport } from "../src/services/providers/openai-planner-provider.js";
 import type { OpenAIPlannerResponseRequest } from "../src/services/providers/openai-planner-provider.js";
+import { ActivePlannerProvider, ProviderRegistryService } from "../src/services/provider-registry-service.js";
 import { WorkbenchService } from "../src/services/workbench-service.js";
 import { VerificationService } from "../src/services/verification-service.js";
 import { WorkspaceResolverService } from "../src/services/workspace-resolver-service.js";
@@ -48,6 +55,27 @@ describe("WorkbenchService", () => {
 
     expect(mission.repoContext).toBeUndefined();
     expect(response.content).toContain("Planner can start");
+  });
+
+  it("uses the currently selected planner mode through the active planner adapter", async () => {
+    const store = new JsonFileStore(tempDir);
+    const registry = new ProviderRegistryService(store);
+    registry.registerProvider(new MockPlannerProvider("agentbridge-hosted-planner", "Hosted planner response."));
+    registry.registerProvider(new MockPlannerProvider("codex-local-planner", "Codex local planner response."));
+    await registry.setPlannerMode("codexLocalPlanner");
+    const workbench = new WorkbenchService(
+      store,
+      new ActivePlannerProvider(registry),
+      new MockExecutorProvider(),
+      new VerificationService(store, async () => ({ exitCode: 0, stdout: "", stderr: "", durationMs: 0 })),
+      fixedNow
+    );
+
+    const mission = await workbench.createWorkbenchMission({ goal: "Use selected planner." });
+    const response = await workbench.sendUserMessageToPlanner(mission.id, "Plan this first.");
+
+    expect(response.providerId).toBe("codex-local-planner");
+    expect(response.content).toContain("Codex local planner");
   });
 
   it("attaches a high-confidence Codex workspace candidate", async () => {
@@ -219,6 +247,78 @@ class MockExecutorProvider implements ExecutorProvider {
       artifactIds: [],
       createdAt: fixedNow(),
       metadata: { taskTitle: input.taskSpec.title }
+    };
+  }
+}
+
+class MockPlannerProvider implements PlannerProvider {
+  constructor(private readonly id: string, private readonly response: string) {}
+
+  profile(): AgentProviderProfile {
+    return {
+      id: this.id,
+      kind: "planner",
+      displayName: this.id,
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      authMode: "none",
+      status: "available",
+      metadata: {}
+    };
+  }
+
+  async status(): Promise<AgentProviderProfile> {
+    return this.profile();
+  }
+
+  async createSession(): Promise<AgentSessionRef> {
+    return {
+      id: `session_${this.id}`,
+      providerId: this.id,
+      providerKind: "planner",
+      externalSessionId: `external_${this.id}`,
+      status: "active",
+      lastSeenAt: fixedNow(),
+      metadata: {}
+    };
+  }
+
+  async resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef> {
+    return sessionRef;
+  }
+
+  async sendMessage(sessionRef: AgentSessionRef, message: string): Promise<AgentTurn> {
+    return {
+      id: `turn_${this.id}`,
+      providerId: this.id,
+      sessionRefId: sessionRef.id,
+      role: "assistant",
+      content: message,
+      status: "completed",
+      artifactIds: [],
+      createdAt: fixedNow(),
+      completedAt: fixedNow(),
+      metadata: {}
+    };
+  }
+
+  async plan(input: PlannerRequest): Promise<PlannerResponse> {
+    return {
+      providerId: this.id,
+      content: this.response,
+      artifactIds: [],
+      createdAt: fixedNow(),
+      metadata: { missionId: input.missionId }
+    };
+  }
+
+  async review(_input: ReviewRequest): Promise<ReviewResult> {
+    return {
+      providerId: this.id,
+      content: this.response,
+      statusSuggestion: "needs_review",
+      artifactIds: [],
+      createdAt: fixedNow(),
+      metadata: {}
     };
   }
 }

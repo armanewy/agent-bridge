@@ -1,4 +1,6 @@
 import { randomUUID } from "node:crypto";
+import { mkdir, readFile, rm, writeFile } from "node:fs/promises";
+import { dirname } from "node:path";
 import type { AgentBridgeCloudAuthStatus } from "@agentbridge/core";
 
 export interface AgentBridgeUser {
@@ -128,6 +130,46 @@ export class MemoryAuthStorage implements AuthStorage {
   }
 }
 
+export class FileAuthStorage implements AuthStorage {
+  constructor(private readonly filePath: string) {}
+
+  async get(key: string): Promise<string | undefined> {
+    return (await this.read())[key];
+  }
+
+  async set(key: string, value: string): Promise<void> {
+    const data = await this.read();
+    data[key] = value;
+    await this.write(data);
+  }
+
+  async delete(key: string): Promise<void> {
+    const data = await this.read();
+    delete data[key];
+    if (Object.keys(data).length === 0) {
+      await rm(this.filePath, { force: true });
+      return;
+    }
+    await this.write(data);
+  }
+
+  private async read(): Promise<Record<string, string>> {
+    try {
+      return JSON.parse(await readFile(this.filePath, "utf8")) as Record<string, string>;
+    } catch (error) {
+      if (isNotFoundError(error)) {
+        return {};
+      }
+      throw error;
+    }
+  }
+
+  private async write(data: Record<string, string>): Promise<void> {
+    await mkdir(dirname(this.filePath), { recursive: true });
+    await writeFile(this.filePath, JSON.stringify(data, null, 2), "utf8");
+  }
+}
+
 export class FetchAuthTransport implements AuthTransport {
   constructor(private baseUrl: string) {}
 
@@ -149,4 +191,8 @@ export class FetchAuthTransport implements AuthTransport {
     }
     return await response.json() as T;
   }
+}
+
+function isNotFoundError(error: unknown): boolean {
+  return error instanceof Error && "code" in error && (error as { code?: string }).code === "ENOENT";
 }

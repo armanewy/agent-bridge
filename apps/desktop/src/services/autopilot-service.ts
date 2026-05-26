@@ -258,30 +258,32 @@ export class AutopilotService {
         }
       };
     }
+    const contract = (await this.store.listCompletionContractsForMission(run.missionId))[0];
+    const completionEvaluation = contract
+      ? evaluateCompletionContract(contract, await this.store.listCompletionEvidenceForContract(contract.id), this.now())
+      : undefined;
+    const decision = decideAutopilot({
+      ...(completionEvaluation ? { completionEvaluation } : {}),
+      iteration: run.iteration,
+      maxIterations: run.maxIterations,
+      ...(await this.buildLoopSignals(run.missionId))
+    });
+    if (decision.kind === "stopBlocked" || decision.kind === "stopFailed" || decision.kind === "askUser") {
+      return { kind: "stop", status: "blocked", reason: decision.reason };
+    }
     if (latestVerification.status === "passed") {
-      const contract = (await this.store.listCompletionContractsForMission(run.missionId))[0];
-      if (contract) {
-        const evidence = await this.store.listCompletionEvidenceForContract(contract.id);
-        const completionEvaluation = evaluateCompletionContract(contract, evidence, this.now());
-        const decision = decideAutopilot({
-          completionEvaluation,
-          iteration: run.iteration,
-          maxIterations: run.maxIterations
-        });
-        if (decision.kind === "stopPassed") {
-          return { kind: "stop", status: "passed", reason: decision.reason };
-        }
-        if (decision.kind === "retryWithFollowUp") {
-          return {
-            kind: "review",
-            title: "Ask Planner to review failed completion evidence",
-            execute: async () => {
-              const review = await this.workbenchService.sendVerificationToPlannerForReview(run.missionId);
-              return review.artifactIds;
-            }
-          };
-        }
-        return { kind: "stop", status: "blocked", reason: decision.reason };
+      if (decision.kind === "stopPassed") {
+        return { kind: "stop", status: "passed", reason: decision.reason };
+      }
+      if (decision.kind === "retryWithFollowUp") {
+        return {
+          kind: "review",
+          title: "Ask Planner to review failed completion evidence",
+          execute: async () => {
+            const review = await this.workbenchService.sendVerificationToPlannerForReview(run.missionId);
+            return review.artifactIds;
+          }
+        };
       }
       return { kind: "stop", status: "passed", reason: "Verification passed." };
     }
@@ -303,6 +305,45 @@ export class AutopilotService {
         const card = await this.workbenchService.createFollowUpFromPlannerReview(run.missionId);
         return card.artifactIds;
       }
+    };
+  }
+
+  private async buildLoopSignals(missionId: string): Promise<{
+    repeatedFailureCount?: number;
+    repeatedDiffCount?: number;
+    noChangeTurnCount?: number;
+    providerWarnings?: string[];
+  }> {
+    const [verificationResults, artifacts] = await Promise.all([
+      this.store.listVerificationResultsForMission(missionId),
+      this.store.listArtifactsForMission(missionId)
+    ]);
+    const failedResults = verificationResults.filter((result) => result.status === "failed");
+    const latestFailure = failedResults[0];
+    const repeatedFailureCount = latestFailure
+      ? failedResults.filter((result) => normalizeSignal(result.summary) === normalizeSignal(latestFailure.summary)).length
+      : 0;
+
+    const gitDiffArtifacts = artifacts.filter((artifact) => artifact.kind === "gitDiff" && artifact.content);
+    const latestDiff = gitDiffArtifacts[0]?.content;
+    const repeatedDiffCount = latestDiff
+      ? gitDiffArtifacts.filter((artifact) => artifact.content && normalizeSignal(artifact.content) === normalizeSignal(latestDiff)).length
+      : 0;
+
+    const noChangeTurnCount = gitDiffArtifacts.filter((artifact) => {
+      const changedFiles = artifact.metadata.changedFiles;
+      return Array.isArray(changedFiles) && changedFiles.length === 0;
+    }).length;
+
+    const providerWarnings = artifacts
+      .filter((artifact) => artifact.kind === "deliveryResult" && /warning/i.test(artifact.content ?? ""))
+      .map((artifact) => artifact.title);
+
+    return {
+      ...(repeatedFailureCount ? { repeatedFailureCount } : {}),
+      ...(repeatedDiffCount ? { repeatedDiffCount } : {}),
+      ...(noChangeTurnCount ? { noChangeTurnCount } : {}),
+      ...(providerWarnings.length ? { providerWarnings } : {})
     };
   }
 
@@ -640,6 +681,10 @@ function basePolicy(id: string, name: string, now: string): AutopilotPolicy {
     createdAt: now,
     updatedAt: now
   };
+}
+
+function normalizeSignal(value: string): string {
+  return value.replace(/\s+/g, " ").trim().slice(0, 1600);
 }
 
 function hasSteerExecutor(value: WorkbenchService): value is WorkbenchService & {

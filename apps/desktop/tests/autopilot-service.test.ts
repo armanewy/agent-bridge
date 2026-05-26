@@ -114,6 +114,42 @@ describe("AutopilotService", () => {
     expect(status.pendingDecision?.prompt).toContain("completion contract");
   });
 
+  it("stops when verification repeats the same failure", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    await store.saveArtifact(textArtifact("mission_1", "modelResponse", "Planner response"));
+    await store.saveHandoffCard(handoffCard());
+    const delivery = textArtifact("mission_1", "deliveryResult", "Delivered cleanly");
+    delivery.title = "Executor delivery result";
+    await store.saveArtifact(delivery);
+    await store.saveVerificationResult(failedVerification("verification_1"));
+    await store.saveVerificationResult(failedVerification("verification_2"));
+    const policy: AutopilotPolicy = {
+      id: "policy_autonomous",
+      name: "Autonomous",
+      mode: "autonomous",
+      maxIterations: 3,
+      allowPlannerTurnsWithoutApproval: true,
+      allowCodexTurnsWithoutApproval: true,
+      allowVerificationWithoutApproval: true,
+      allowShellCommands: "configuredOnly",
+      allowFileWrites: "repoOnly",
+      allowNetworkAccess: false,
+      stopOnVerificationFailure: false,
+      stopOnRedactionFinding: true,
+      stopOnProviderWarning: true,
+      createdAt: fixedNow(),
+      updatedAt: fixedNow()
+    };
+    await store.saveAutopilotPolicy(policy);
+    const service = new AutopilotService(store, fakeWorkbench(store), fixedNow);
+
+    const status = await service.startAutopilot("mission_1", policy.id);
+
+    expect(status.run?.status).toBe("blocked");
+    expect(status.run?.stopReason).toContain("same verification failure");
+  });
+
   it("stores steering notes as mission artifacts", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveMission(mission());
@@ -306,6 +342,18 @@ function textArtifact(missionId: string, kind: Artifact["kind"], content: string
     title: kind,
     content,
     metadata: {},
+    createdAt: fixedNow()
+  };
+}
+
+function failedVerification(id: string): VerificationResult {
+  return {
+    id,
+    missionId: "mission_1",
+    status: "failed",
+    commandResults: [],
+    summary: "Test failed: expected compact workbench layout.",
+    artifactIds: [],
     createdAt: fixedNow()
   };
 }

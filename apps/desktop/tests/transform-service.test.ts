@@ -13,7 +13,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(tempDir, { recursive: true, force: true });
+  await removeTempDir(tempDir);
 });
 
 describe("TransformService", () => {
@@ -73,4 +73,18 @@ async function seed(store: JsonFileStore, text: string): Promise<void> {
   await store.saveSource(source);
   await store.saveCapture(capture);
   await store.saveTarget(target);
+}
+
+async function removeTempDir(path: string): Promise<void> {
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      await rm(path, { recursive: true, force: true });
+      return;
+    } catch (error) {
+      if (attempt === 2) {
+        throw error;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+  }
 }

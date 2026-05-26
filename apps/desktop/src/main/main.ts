@@ -28,7 +28,7 @@ import { ComponentDiscoveryService } from "../services/component-discovery-servi
 import { CodexAppServerClient } from "../services/codex-app-server-client.js";
 import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
-import { ProviderRegistryService } from "../services/provider-registry-service.js";
+import { ActivePlannerProvider, ProviderRegistryService } from "../services/provider-registry-service.js";
 import { AgentBridgeHostedPlannerProvider } from "../services/providers/agentbridge-hosted-planner-provider.js";
 import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
 import { CodexLocalPlannerProvider } from "../services/providers/codex-local-planner-provider.js";
@@ -37,7 +37,7 @@ import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/
 import { PlatformService } from "../services/platform-service.js";
 import { ArtifactBrokerService } from "../services/artifact-broker-service.js";
 import { AutopilotService } from "../services/autopilot-service.js";
-import { AuthService, FetchAuthTransport, MemoryAuthStorage } from "../services/auth-service.js";
+import { AuthService, FetchAuthTransport, FileAuthStorage } from "../services/auth-service.js";
 import { WorkspaceResolverService } from "../services/workspace-resolver-service.js";
 import { CompletionContractService } from "../services/completion-contract-service.js";
 import { WorkflowTemplateService } from "../services/workflow-template-service.js";
@@ -107,7 +107,12 @@ app.whenReady().then(async () => {
   const store = createDesktopStore(dataDir);
   const artifactBrokerService = new ArtifactBrokerService(store, platformService);
   const cloudBaseUrl = process.env.AGENTBRIDGE_CLOUD_URL ?? "http://127.0.0.1:8787";
-  const authService = new AuthService(new MemoryAuthStorage(), cloudBaseUrl, app.isPackaged ? "production" : "development", new FetchAuthTransport(cloudBaseUrl));
+  const authService = new AuthService(
+    new FileAuthStorage(join(dataDir, "agentbridge-auth.json")),
+    cloudBaseUrl,
+    app.isPackaged ? "production" : "development",
+    new FetchAuthTransport(cloudBaseUrl)
+  );
   const workspaceResolverService = new WorkspaceResolverService(store);
   const workflowTemplateService = new WorkflowTemplateService(store);
   await workflowTemplateService.ensureDefaultTemplate();
@@ -153,9 +158,10 @@ app.whenReady().then(async () => {
   providerRegistryService.registerProvider(openAiPlannerProvider);
   providerRegistryService.registerProvider(codexLocalPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
+  const activePlannerProvider = new ActivePlannerProvider(providerRegistryService);
   const workbenchService = new WorkbenchService(
     store,
-    hostedPlannerProvider,
+    activePlannerProvider,
     codexExecutorProvider,
     verificationService,
     undefined,

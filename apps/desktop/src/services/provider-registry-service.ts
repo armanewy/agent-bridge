@@ -6,8 +6,11 @@ import type {
   ExecutorProvider,
   PlannerProviderMode,
   PlannerProvider,
+  PlannerResponse,
   PlannerRequest,
-  ReviewerProvider
+  ReviewerProvider,
+  ReviewRequest,
+  ReviewResult
 } from "@agentbridge/core";
 import type { AgentEventFilter, LocalStore } from "@agentbridge/local-store";
 
@@ -147,12 +150,70 @@ export class ProviderRegistryService {
     return mode ? this.getProviderStatus(mode.providerId) : undefined;
   }
 
+  getActivePlannerProfile(): AgentProviderProfile {
+    const modes = plannerModeInfos();
+    const mode = modes.find((item) => item.mode === this.plannerMode) ?? requireFirst(modes, "No planner modes are configured.");
+    const provider = this.providers.get(mode.providerId);
+    const profiles = defaultProviderProfiles();
+    return provider?.profile() ?? profiles.find((profile) => profile.id === mode.providerId) ?? requireFirst(profiles, "No provider profiles are configured.");
+  }
+
+  async getActivePlannerAdapter(): Promise<PlannerProvider> {
+    const modes = plannerModeInfos();
+    const mode = modes.find((item) => item.mode === this.plannerMode) ?? requireFirst(modes, "No planner modes are configured.");
+    const provider = this.providers.get(mode.providerId);
+    if (!provider || !isPlannerProvider(provider)) {
+      throw new Error(`Active planner mode ${mode.mode} is not available. Check Settings > Planner.`);
+    }
+    return provider;
+  }
+
   private async resolveProfile(providerId: string): Promise<AgentProviderProfile | undefined> {
     const provider = this.providers.get(providerId);
     if (provider) {
       return provider.status();
     }
     return defaultProviderProfiles().find((profile) => profile.id === providerId) ?? this.store.getProviderProfile(providerId);
+  }
+}
+
+export class ActivePlannerProvider implements PlannerProvider {
+  constructor(private readonly registry: ProviderRegistryService) {}
+
+  profile(): AgentProviderProfile {
+    return this.registry.getActivePlannerProfile();
+  }
+
+  async status(): Promise<AgentProviderProfile> {
+    return (await this.registry.getActivePlannerAdapter()).status();
+  }
+
+  async createSession(input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }): Promise<AgentSessionRef> {
+    return (await this.registry.getActivePlannerAdapter()).createSession(input);
+  }
+
+  async resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef> {
+    return (await this.registry.getActivePlannerAdapter()).resumeSession(sessionRef);
+  }
+
+  async sendMessage(sessionRef: AgentSessionRef, message: string, context?: PlannerRequest): Promise<AgentTurn> {
+    return (await this.registry.getActivePlannerAdapter()).sendMessage(sessionRef, message, context);
+  }
+
+  async plan(input: PlannerRequest): Promise<PlannerResponse> {
+    return (await this.registry.getActivePlannerAdapter()).plan(input);
+  }
+
+  async review(input: ReviewRequest): Promise<ReviewResult> {
+    return (await this.registry.getActivePlannerAdapter()).review(input);
+  }
+
+  async createTaskSpec(input: PlannerRequest): Promise<PlannerResponse> {
+    const provider = await this.registry.getActivePlannerAdapter();
+    if (!hasCreateTaskSpec(provider)) {
+      throw new Error(`Active planner ${provider.profile().displayName} cannot create TaskSpecs.`);
+    }
+    return provider.createTaskSpec(input);
   }
 }
 
@@ -352,4 +413,24 @@ function hasResumeSession(provider: ProviderAdapter): provider is PlannerProvide
 
 function hasSendMessage(provider: ProviderAdapter): provider is PlannerProvider {
   return typeof (provider as PlannerProvider).sendMessage === "function";
+}
+
+function isPlannerProvider(provider: ProviderAdapter): provider is PlannerProvider {
+  return typeof (provider as PlannerProvider).plan === "function"
+    && typeof (provider as PlannerProvider).review === "function"
+    && typeof (provider as PlannerProvider).sendMessage === "function";
+}
+
+function hasCreateTaskSpec(provider: PlannerProvider): provider is PlannerProvider & {
+  createTaskSpec(input: PlannerRequest): Promise<PlannerResponse>;
+} {
+  return typeof (provider as PlannerProvider & { createTaskSpec?: unknown }).createTaskSpec === "function";
+}
+
+function requireFirst<T>(values: T[], message: string): T {
+  const value = values[0];
+  if (!value) {
+    throw new Error(message);
+  }
+  return value;
 }

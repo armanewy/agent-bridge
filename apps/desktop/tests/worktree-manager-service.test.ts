@@ -58,6 +58,28 @@ describe("WorktreeManagerService", () => {
     expect(await service.detectChangedFiles(workspace.id)).toContain("changed.txt");
     expect(await service.abandonWorkspace(workspace.id)).toMatchObject({ status: "abandoned" });
   });
+
+  it("blocks isolated workspace creation from a dirty base repository", async () => {
+    const service = new WorktreeManagerService();
+    await writeFile(join(repoPath, "dirty.txt"), "dirty\n", "utf8");
+
+    await expect(service.createMissionWorkspace({
+      missionId: "mission dirty",
+      baseRepoPath: repoPath,
+      strategy: "gitWorktree"
+    })).rejects.toThrow("uncommitted changes");
+  });
+
+  it("blocks git worktree path collisions", async () => {
+    const service = new WorktreeManagerService();
+    await mkdir(join(tempDir, ".agentbridge-mission-collision"));
+
+    await expect(service.createMissionWorkspace({
+      missionId: "mission collision",
+      baseRepoPath: repoPath,
+      strategy: "gitWorktree"
+    })).rejects.toThrow("already exists");
+  });
 });
 
 async function git(args: string[], cwd: string): Promise<void> {
