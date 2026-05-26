@@ -661,3 +661,32 @@ pre {
   color: #64737f;
   overflow-wrap: anywhere;
 }
+
+.selection-list {
+  display: grid;
+  gap: 10px;
+}
+
+.selection-row {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #25313a;
+  padding: 12px;
+  text-align: left;
+  display: grid;
+  gap: 5px;
+}
+
+.selection-row.selected {
+  border-color: #205f4b;
+  background: #f1faf6;
+}
+
+.selection-row span,
+.selection-row small,
+.selection-row p {
+  color: #64737f;
+  margin: 0;
+  overflow-wrap: anywhere;
+}

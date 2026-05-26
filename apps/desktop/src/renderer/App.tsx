@@ -24,11 +24,13 @@ import type {
 import type { CodexDeliveryResult, DeliveryPreview, SetupStatus } from "../services/bridge-contract.js";
 import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
+import { CaptureInbox } from "../components/capture/CaptureInbox.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
 import { HandoffPreview } from "../components/handoff-preview/HandoffPreview.js";
 import { LinkManager } from "../components/link-manager/LinkManager.js";
 import { MissionPanel } from "../components/mission/MissionPanel.js";
 import { SetupPanel } from "../components/setup/SetupPanel.js";
+import { TargetSelector } from "../components/target-selector/TargetSelector.js";
 
 type View = "home" | "setup" | "missions" | "sources" | "targets" | "links" | "audit";
 
@@ -54,6 +56,8 @@ export function App(): JSX.Element {
   const [setupError, setSetupError] = useState<string | undefined>();
   const [setupStatus, setSetupStatus] = useState<SetupStatus | undefined>();
   const [extensionId, setExtensionId] = useState("");
+  const [selectedCaptureId, setSelectedCaptureId] = useState<string | undefined>();
+  const [selectedTargetId, setSelectedTargetId] = useState<string | undefined>();
   const [preview, setPreview] = useState<DeliveryPreview | undefined>();
   const [deliveryResult, setDeliveryResult] = useState<CodexDeliveryResult | undefined>();
 
@@ -91,6 +95,8 @@ export function App(): JSX.Element {
     setMissions(nextMissions);
     setSetupStatus(nextSetupStatus);
     setExtensionId((current) => current || nextSetupStatus.extensionId || "");
+    setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
+    setSelectedTargetId((current) => current ?? nextTargets.find((target) => target.kind === "codexDeepLink")?.id ?? nextTargets[0]?.id);
     const nextSelectedMissionId = selectedMissionIdRef.current ?? nextMissions[0]?.id;
     selectedMissionIdRef.current = nextSelectedMissionId;
     setSelectedMissionId(nextSelectedMissionId);
@@ -140,8 +146,8 @@ export function App(): JSX.Element {
   }
 
   async function createPreview(): Promise<void> {
-    const capture = captures[0];
-    const target = targets[0];
+    const capture = captures.find((item) => item.id === selectedCaptureId);
+    const target = targets.find((item) => item.id === selectedTargetId);
     if (!capture || !target) {
       return;
     }
@@ -272,7 +278,7 @@ export function App(): JSX.Element {
               <div className="panel-heading">
                 <div>
                   <h2>Handoff Workflow</h2>
-                  <p>Capture selected browser text with the extension, then turn the latest capture into a Mission.</p>
+                  <p>Select a capture and target, then turn that pair into a Mission.</p>
                 </div>
               </div>
               <div className="button-row">
@@ -280,12 +286,19 @@ export function App(): JSX.Element {
                   <Chrome size={16} />
                   Bind Mock Source
                 </button>
-                <button type="button" className="secondary-button" onClick={() => void createPreview()} disabled={!captures[0] || !targets[0]}>
+                <button type="button" className="secondary-button" onClick={() => void createPreview()} disabled={!selectedCaptureId || !selectedTargetId}>
                   <ClipboardCheck size={16} />
-                  Create Mission from latest capture
+                  Create Mission from selected capture
                 </button>
               </div>
             </section>
+            <CaptureInbox
+              captures={captures}
+              sources={sources}
+              selectedCaptureId={selectedCaptureId}
+              onSelectCapture={setSelectedCaptureId}
+            />
+            <TargetSelector targets={targets} selectedTargetId={selectedTargetId} onSelectTarget={setSelectedTargetId} />
             <CodexTargetPanel
               repoPath={repoPath}
               onRepoPathChange={setRepoPath}
