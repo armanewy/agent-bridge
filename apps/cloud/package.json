@@ -10,7 +10,8 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@agentbridge/core": "workspace:*"
+    "@agentbridge/core": "workspace:*",
+    "openai": "^6.39.0"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

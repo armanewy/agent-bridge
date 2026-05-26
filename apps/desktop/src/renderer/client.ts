@@ -35,6 +35,7 @@ import type {
   AgentTurn,
   ExecutorTaskResult,
   HandoffCard,
+  PlannerProviderMode,
   PlannerResponse,
   ReviewResult,
   TaskSpec,
@@ -74,13 +75,22 @@ let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
 let mockProviderProfiles: AgentProviderProfile[] = [
   {
+    id: "agentbridge-hosted-planner",
+    kind: "planner",
+    displayName: "AgentBridge Hosted Planner",
+    capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+    authMode: "agentBridgeCloud",
+    status: "needsAuth",
+    metadata: { mode: "hostedAgentBridge", reason: "Sign in to AgentBridge." }
+  },
+  {
     id: "openai-planner",
     kind: "planner",
     displayName: "OpenAI Planner",
     capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
     authMode: "apiKey",
     status: "needsAuth",
-    metadata: { adapter: "mock", reason: "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY." }
+    metadata: { mode: "userOpenAiApiKey", advanced: true, adapter: "mock", reason: "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY." }
   },
   {
     id: "codex",
@@ -92,6 +102,7 @@ let mockProviderProfiles: AgentProviderProfile[] = [
     metadata: { adapter: "mock", reason: "Codex provider wrapper is not active in renderer mock." }
   }
 ];
+let mockPlannerMode: PlannerProviderMode = "hostedAgentBridge";
 let mockAgentSessions: AgentSessionRef[] = [];
 let mockAgentTurns: AgentTurn[] = [];
 let mockAgentEvents: AgentEvent[] = [];
@@ -248,6 +259,57 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         .filter((event) => !filter.turnId || event.turnId === filter.turnId)
         .filter((event) => !filter.type || event.type === filter.type);
     },
+    async getPlannerMode() {
+      return mockPlannerMode;
+    },
+    async setPlannerMode(mode) {
+      mockPlannerMode = mode;
+      return mockPlannerMode;
+    },
+    async listPlannerModes() {
+      return [
+        {
+          mode: "hostedAgentBridge" as const,
+          providerId: "agentbridge-hosted-planner",
+          label: "AgentBridge hosted",
+          default: true,
+          advanced: false,
+          status: mockAuthSignedIn ? "available" as const : "needsAuth" as const,
+          description: "Default hosted planner."
+        },
+        {
+          mode: "userOpenAiApiKey" as const,
+          providerId: "openai-planner",
+          label: "Use my OpenAI API key",
+          default: false,
+          advanced: true,
+          status: "needsAuth" as const,
+          description: "Advanced BYOK mode."
+        },
+        {
+          mode: "codexLocalPlanner" as const,
+          providerId: "codex-local-planner",
+          label: "Codex-only local planner",
+          default: false,
+          advanced: true,
+          status: "unsupported" as const,
+          description: "Future no-cloud mode."
+        },
+        {
+          mode: "localModelPlaceholder" as const,
+          providerId: "local-model-planner",
+          label: "Local model",
+          default: false,
+          advanced: true,
+          status: "unsupported" as const,
+          description: "Future local model mode."
+        }
+      ];
+    },
+    async getActivePlannerProvider() {
+      const providerId = mockPlannerMode === "hostedAgentBridge" ? "agentbridge-hosted-planner" : "openai-planner";
+      return mockProviderProfiles.find((profile) => profile.id === providerId);
+    },
     async getAgentBridgeAuthStatus() {
       return {
         status: mockAuthSignedIn ? "signedIn" : "signedOut",
@@ -259,10 +321,16 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     },
     async signInAgentBridgeDevMode() {
       mockAuthSignedIn = true;
+      mockProviderProfiles = mockProviderProfiles.map((profile) =>
+        profile.id === "agentbridge-hosted-planner" ? { ...profile, status: "available" } : profile
+      );
       return this.getAgentBridgeAuthStatus();
     },
     async signOutAgentBridge() {
       mockAuthSignedIn = false;
+      mockProviderProfiles = mockProviderProfiles.map((profile) =>
+        profile.id === "agentbridge-hosted-planner" ? { ...profile, status: "needsAuth" } : profile
+      );
       return this.getAgentBridgeAuthStatus();
     },
     async getAgentBridgeCurrentUser() {
@@ -311,7 +379,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         title: input.title ?? "Workbench task",
         goal: input.goal ?? "Plan, execute, verify, and review an AI-agent task.",
         status: "draft",
-        sourceIds: ["provider:openai-planner"],
+        sourceIds: ["provider:agentbridge-hosted-planner"],
         captureIds: [],
         handoffCardIds: [],
         artifactIds: [],
@@ -340,7 +408,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async sendUserMessageToPlanner(missionId, text) {
       const response: PlannerResponse = {
         id: `planner_response_${mockAgentTurns.length + 1}`,
-        providerId: "openai-planner",
+        providerId: "agentbridge-hosted-planner",
         sessionRefId: "mock_planner_session",
         turnId: `agent_turn_${mockAgentTurns.length + 1}`,
         content: `Mock planner response: ${text}`,
@@ -381,7 +449,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async sendVerificationToPlannerForReview(missionId) {
       const result: ReviewResult = {
         id: `review_result_${mockAgentTurns.length + 1}`,
-        providerId: "openai-planner",
+        providerId: "agentbridge-hosted-planner",
         content: "Mock planner review: needs review.",
         statusSuggestion: "needs_review",
         artifactIds: [],
@@ -1092,7 +1160,7 @@ function mockHandoffCard(missionId: string, taskSpec: TaskSpec): HandoffCard {
   return {
     id: `card_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     missionId,
-    sourceId: "provider:openai-planner",
+    sourceId: "provider:agentbridge-hosted-planner",
     captureId: "mock_planner_turn",
     targetId: "provider:codex",
     recipe: "implementationBrief",

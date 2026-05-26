@@ -1,10 +1,20 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
-import type { HostedPlannerReviewResponse, HostedPlannerTaskSpecResponse } from "@agentbridge/core";
+import OpenAI from "openai";
+import {
+  HostedPlannerReviewResponseSchema,
+  HostedPlannerTaskSpecResponseSchema,
+  TaskSpecSchema,
+  type HostedPlannerReviewResponse,
+  type HostedPlannerTaskSpecResponse,
+  type TaskSpec
+} from "@agentbridge/core";
 
 export interface CloudConfig {
   port: number;
+  openAiApiKey?: string | undefined;
   openAiApiKeyConfigured: boolean;
+  openAiModel: string;
   logRawPayloads: boolean;
   maxPlannerPayloadBytes: number;
 }
@@ -29,20 +39,75 @@ export interface RequestLogEntry {
   timestamp: string;
 }
 
+export interface CloudPlannerRequest {
+  model: string;
+  instructions: string;
+  input: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CloudPlannerUsage {
+  inputTokens?: number;
+  outputTokens?: number;
+}
+
+export interface CloudPlannerResponse {
+  responseId: string;
+  outputText: string;
+  usage?: CloudPlannerUsage;
+  metadata?: Record<string, unknown>;
+}
+
+export interface CloudPlannerTransport {
+  createResponse(request: CloudPlannerRequest): Promise<CloudPlannerResponse>;
+}
+
+export interface AgentBridgeCloudAppOptions {
+  plannerTransport?: CloudPlannerTransport;
+}
+
+interface PlannerSessionMetadata {
+  sessionId: string;
+  userId: string;
+  model: string;
+  createdAt: string;
+  updatedAt: string;
+  externalConversationId?: string;
+}
+
 const DEV_USER = {
   id: "user_dev",
   email: "dev@agentbridge.local"
 };
 
+const PLANNER_SYSTEM_PROMPT = [
+  "You are AgentBridge Hosted Planner.",
+  "Produce coding direction, acceptance criteria, constraints, and review feedback.",
+  "Prefer scoped, verifiable tasks. Do not ask for repo files unless the desktop payload explicitly includes approved artifacts."
+].join(" ");
+
 export class AgentBridgeCloudApp {
   private readonly requestLogs: RequestLogEntry[] = [];
   private readonly usage: Array<Record<string, unknown>> = [];
   private readonly devTokens = new Set<string>();
+  private readonly sessions = new Map<string, PlannerSessionMetadata>();
+  private readonly plannerTransport: CloudPlannerTransport | undefined;
 
-  constructor(private readonly config: CloudConfig = loadConfig()) {}
+  constructor(
+    private readonly config: CloudConfig = loadConfig(),
+    options: AgentBridgeCloudAppOptions = {}
+  ) {
+    this.plannerTransport =
+      options.plannerTransport ??
+      (config.openAiApiKey ? new OpenAIResponsesPlannerTransport(config.openAiApiKey) : undefined);
+  }
 
   getRequestLogs(): RequestLogEntry[] {
     return [...this.requestLogs];
+  }
+
+  getUsageRecords(): Array<Record<string, unknown>> {
+    return [...this.usage];
   }
 
   async handle(request: CloudRequest): Promise<CloudResponse> {
@@ -86,51 +151,101 @@ export class AgentBridgeCloudApp {
       if (method === "POST" && request.path === "/v1/planner/sessions") {
         this.ensurePlannerPayloadAllowed(request.body);
         const sessionId = `planner_session_${randomUUID()}`;
+        const createdAt = now();
+        this.sessions.set(sessionId, {
+          sessionId,
+          userId,
+          model: this.config.openAiModel,
+          createdAt,
+          updatedAt: createdAt
+        });
         status = 200;
-        this.recordUsage(userId, request.path, status, request.body);
-        return { status, body: { sessionId, createdAt: now(), metadata: { mocked: true }, requestId } };
+        this.recordUsage({ userId, route: request.path, status, body: request.body });
+        return { status, body: { sessionId, createdAt, metadata: { model: this.config.openAiModel }, requestId } };
       }
       const messageMatch = request.path.match(/^\/v1\/planner\/sessions\/([^/]+)\/messages$/);
       if (method === "POST" && messageMatch) {
         this.ensurePlannerPayloadAllowed(request.body);
+        const sessionId = messageMatch[1] ?? "";
+        this.requireSession(userId, sessionId);
+        const planner = this.requirePlannerTransport();
+        const plannerResponse = await planner.createResponse({
+          model: this.config.openAiModel,
+          instructions: PLANNER_SYSTEM_PROMPT,
+          input: renderPlannerMessagePrompt(request.body),
+          metadata: { route: "message", sessionId }
+        });
+        this.touchSession(sessionId);
         status = 200;
-        this.recordUsage(userId, request.path, status, request.body);
+        this.recordUsage({
+          userId,
+          route: request.path,
+          status,
+          body: request.body,
+          model: this.config.openAiModel,
+          ...(plannerResponse.usage ? { usage: plannerResponse.usage } : {})
+        });
         return {
           status,
           body: {
-            sessionId: messageMatch[1],
-            turnId: `turn_${randomUUID()}`,
-            content: "Mock planner response: create a scoped, verifiable TaskSpec.",
+            sessionId,
+            turnId: plannerResponse.responseId,
+            content: plannerResponse.outputText,
             createdAt: now(),
-            metadata: { mocked: true },
+            metadata: { model: this.config.openAiModel, ...(plannerResponse.metadata ?? {}) },
             requestId
           }
         };
       }
       if (method === "POST" && request.path === "/v1/planner/task-spec") {
         this.ensurePlannerPayloadAllowed(request.body);
+        const planner = this.requirePlannerTransport();
+        const taskSpecResult = await this.createTaskSpec(planner, request.body);
         status = 200;
         const response: HostedPlannerTaskSpecResponse = {
-          taskSpec: mockTaskSpec(),
+          taskSpec: taskSpecResult.taskSpec,
           requestId,
           createdAt: now(),
-          metadata: { mocked: true }
+          metadata: {
+            model: this.config.openAiModel,
+            responseId: taskSpecResult.response.responseId,
+            repaired: taskSpecResult.repaired
+          }
         };
-        this.recordUsage(userId, request.path, status, request.body);
-        return { status, body: response };
+        this.recordUsage({
+          userId,
+          route: request.path,
+          status,
+          body: request.body,
+          model: this.config.openAiModel,
+          ...(taskSpecResult.response.usage ? { usage: taskSpecResult.response.usage } : {})
+        });
+        return { status, body: HostedPlannerTaskSpecResponseSchema.parse(response) };
       }
       if (method === "POST" && request.path === "/v1/planner/review") {
         this.ensurePlannerPayloadAllowed(request.body);
+        const planner = this.requirePlannerTransport();
+        const reviewResult = await this.createReview(planner, request.body);
         status = 200;
         const response: HostedPlannerReviewResponse = {
-          reviewSummary: "Mock review: continue only if verification is actionable.",
-          statusSuggestion: "needs_review",
+          ...reviewResult.review,
           requestId,
           createdAt: now(),
-          metadata: { mocked: true }
+          metadata: {
+            model: this.config.openAiModel,
+            responseId: reviewResult.response.responseId,
+            repaired: reviewResult.repaired
+          }
         };
-        this.recordUsage(userId, request.path, status, request.body);
-        return { status, body: response };
+        this.recordUsage({
+          userId,
+          route: request.path,
+          status,
+          body: request.body,
+          model: this.config.openAiModel,
+          ...(reviewResult.response.usage ? { usage: reviewResult.response.usage } : {})
+        });
+        return { status, body: HostedPlannerReviewResponseSchema.parse(response) };
       }
       return { status, body: { error: "not_found", requestId } };
     } catch (error) {
@@ -147,12 +262,111 @@ export class AgentBridgeCloudApp {
     }
   }
 
+  private async createTaskSpec(
+    planner: CloudPlannerTransport,
+    body: unknown
+  ): Promise<{ taskSpec: TaskSpec; response: CloudPlannerResponse; repaired: boolean }> {
+    const first = await planner.createResponse({
+      model: this.config.openAiModel,
+      instructions: [
+        PLANNER_SYSTEM_PROMPT,
+        "Return only strict JSON matching this shape:",
+        "{ title, goal, background, requirements, constraints, nonGoals, acceptanceCriteria, suggestedFiles, verificationSteps, expectedSummaryFormat }.",
+        "requirements, constraints, nonGoals, acceptanceCriteria, suggestedFiles, and verificationSteps must be arrays of strings."
+      ].join("\n"),
+      input: renderPlannerTaskSpecPrompt(body),
+      metadata: { route: "task-spec" }
+    });
+    const parsed = parseTaskSpec(first.outputText);
+    if (parsed) {
+      return { taskSpec: parsed, response: first, repaired: false };
+    }
+
+    const repair = await planner.createResponse({
+      model: this.config.openAiModel,
+      instructions: "Repair the invalid response into strict JSON for AgentBridge TaskSpec. Return JSON only.",
+      input: [
+        "The prior response did not validate.",
+        "Invalid response:",
+        first.outputText,
+        "",
+        "Original request payload:",
+        safeJson(body)
+      ].join("\n"),
+      metadata: { route: "task-spec-repair" }
+    });
+    const repaired = parseTaskSpec(repair.outputText);
+    if (!repaired) {
+      throw new CloudHttpError(502, "hosted planner returned an invalid TaskSpec");
+    }
+    return { taskSpec: repaired, response: repair, repaired: true };
+  }
+
+  private async createReview(
+    planner: CloudPlannerTransport,
+    body: unknown
+  ): Promise<{
+    review: Pick<HostedPlannerReviewResponse, "reviewSummary" | "statusSuggestion" | "followUpTaskSpec">;
+    response: CloudPlannerResponse;
+    repaired: boolean;
+  }> {
+    const first = await planner.createResponse({
+      model: this.config.openAiModel,
+      instructions: [
+        PLANNER_SYSTEM_PROMPT,
+        "Review the verification result. Return strict JSON:",
+        "{ reviewSummary, statusSuggestion, followUpTaskSpec? }.",
+        "statusSuggestion must be one of: passed, needs_review, follow_up_needed."
+      ].join("\n"),
+      input: renderPlannerReviewPrompt(body),
+      metadata: { route: "review" }
+    });
+    const parsed = parseReview(first.outputText);
+    if (parsed) {
+      return { review: parsed, response: first, repaired: false };
+    }
+
+    const repair = await planner.createResponse({
+      model: this.config.openAiModel,
+      instructions: "Repair the invalid review into strict JSON. Return JSON only.",
+      input: ["Invalid review response:", first.outputText, "", "Original request payload:", safeJson(body)].join("\n"),
+      metadata: { route: "review-repair" }
+    });
+    const repaired = parseReview(repair.outputText);
+    if (!repaired) {
+      throw new CloudHttpError(502, "hosted planner returned an invalid review");
+    }
+    return { review: repaired, response: repair, repaired: true };
+  }
+
   private requireAuth(request: CloudRequest): { userId: string } {
     const token = bearerToken(request.headers);
     if (!token || !this.devTokens.has(token)) {
       throw new CloudHttpError(401, "unauthorized");
     }
     return { userId: DEV_USER.id };
+  }
+
+  private requirePlannerTransport(): CloudPlannerTransport {
+    if (!this.plannerTransport) {
+      throw new CloudHttpError(503, "hosted planner is unavailable because OPENAI_API_KEY is not configured on AgentBridge Cloud");
+    }
+    return this.plannerTransport;
+  }
+
+  private requireSession(userId: string, sessionId: string): PlannerSessionMetadata {
+    const session = this.sessions.get(sessionId);
+    if (!session || session.userId !== userId) {
+      throw new CloudHttpError(404, "planner session not found");
+    }
+    return session;
+  }
+
+  private touchSession(sessionId: string): void {
+    const session = this.sessions.get(sessionId);
+    if (session) {
+      this.sessions.set(sessionId, { ...session, updatedAt: now() });
+    }
   }
 
   private ensurePlannerPayloadAllowed(body: unknown): void {
@@ -162,22 +376,72 @@ export class AgentBridgeCloudApp {
     }
   }
 
-  private recordUsage(userId: string, route: string, status: number, body: unknown): void {
+  private recordUsage(input: {
+    userId: string;
+    route: string;
+    status: number;
+    body: unknown;
+    model?: string;
+    usage?: CloudPlannerUsage;
+  }): void {
     this.usage.push({
       id: `usage_${randomUUID()}`,
-      userId,
-      route,
-      provider: "mock",
-      model: this.config.openAiApiKeyConfigured ? "configured" : "mock",
-      payloadBytes: Buffer.byteLength(JSON.stringify(body ?? {}), "utf8"),
-      status,
+      userId: input.userId,
+      route: input.route,
+      provider: input.model ? "openai" : "agentbridge",
+      model: input.model ?? this.config.openAiModel,
+      ...(input.usage?.inputTokens === undefined ? {} : { inputTokens: input.usage.inputTokens }),
+      ...(input.usage?.outputTokens === undefined ? {} : { outputTokens: input.usage.outputTokens }),
+      payloadBytes: Buffer.byteLength(JSON.stringify(input.body ?? {}), "utf8"),
+      status: input.status,
       createdAt: now()
     });
   }
 }
 
-export function createCloudApp(config: Partial<CloudConfig> = {}): AgentBridgeCloudApp {
-  return new AgentBridgeCloudApp({ ...loadConfig(), ...config });
+class OpenAIResponsesPlannerTransport implements CloudPlannerTransport {
+  private readonly client: OpenAI;
+
+  constructor(apiKey: string) {
+    this.client = new OpenAI({ apiKey });
+  }
+
+  async createResponse(request: CloudPlannerRequest): Promise<CloudPlannerResponse> {
+    const createResponse = this.client.responses.create.bind(this.client.responses) as (
+      body: Record<string, unknown>
+    ) => Promise<unknown>;
+    const response = await createResponse({
+      model: request.model,
+      instructions: request.instructions,
+      input: request.input
+    });
+    const record = asRecord(response);
+    const usage = asRecord(record.usage);
+    return {
+      responseId: typeof record.id === "string" ? record.id : `response_${randomUUID()}`,
+      outputText: extractResponseText(response),
+      usage: {
+        ...(typeof usage.input_tokens === "number" ? { inputTokens: usage.input_tokens } : {}),
+        ...(typeof usage.output_tokens === "number" ? { outputTokens: usage.output_tokens } : {})
+      },
+      metadata: {
+        rawStatus: typeof record.status === "string" ? record.status : undefined
+      }
+    };
+  }
+}
+
+export function createCloudApp(
+  config: Partial<CloudConfig> = {},
+  options: AgentBridgeCloudAppOptions = {}
+): AgentBridgeCloudApp {
+  const loaded = loadConfig();
+  const merged: CloudConfig = {
+    ...loaded,
+    ...config,
+    openAiApiKeyConfigured: Boolean(config.openAiApiKey ?? loaded.openAiApiKey)
+  };
+  return new AgentBridgeCloudApp(merged, options);
 }
 
 export async function startServer(app = createCloudApp()): Promise<void> {
@@ -203,28 +467,118 @@ async function handleNodeRequest(app: AgentBridgeCloudApp, request: IncomingMess
 }
 
 function loadConfig(): CloudConfig {
+  const openAiApiKey = process.env.OPENAI_API_KEY;
   return {
     port: Number(process.env.AGENTBRIDGE_CLOUD_PORT ?? 8787),
-    openAiApiKeyConfigured: Boolean(process.env.OPENAI_API_KEY),
+    ...(openAiApiKey ? { openAiApiKey } : {}),
+    openAiApiKeyConfigured: Boolean(openAiApiKey),
+    openAiModel: process.env.AGENTBRIDGE_CLOUD_OPENAI_MODEL ?? "gpt-4.1-mini",
     logRawPayloads: process.env.LOG_RAW_PAYLOADS === "true",
     maxPlannerPayloadBytes: Number(process.env.MAX_PLANNER_PAYLOAD_BYTES ?? 64 * 1024)
   };
 }
 
-function mockTaskSpec(): HostedPlannerTaskSpecResponse["taskSpec"] {
-  return {
-    title: "Mock hosted planner TaskSpec",
-    goal: "Demonstrate the hosted planner contract.",
-    background: "Cloud planner routes are mocked in Wave 24.",
-    instructions: ["Keep the task scoped.", "Verify with configured commands when a workspace exists."],
-    requirements: ["No repo files are required by default."],
-    constraints: ["Do not upload repo content."],
-    nonGoals: ["Do not implement additional providers."],
-    acceptanceCriteria: ["A valid TaskSpec is returned."],
-    suggestedFiles: [],
-    verificationSteps: [],
-    expectedSummaryFormat: "Summary, changed files, verification."
-  };
+function renderPlannerMessagePrompt(body: unknown): string {
+  return ["Desktop planner message payload:", safeJson(body)].join("\n");
+}
+
+function renderPlannerTaskSpecPrompt(body: unknown): string {
+  return [
+    "Create an AgentBridge TaskSpec from this minimized desktop payload.",
+    "Do not invent source files that were not provided; suggestedFiles may be empty.",
+    safeJson(body)
+  ].join("\n\n");
+}
+
+function renderPlannerReviewPrompt(body: unknown): string {
+  return [
+    "Review this AgentBridge verification payload.",
+    "If verification is insufficient, choose needs_review unless a focused follow-up TaskSpec is clearly useful.",
+    safeJson(body)
+  ].join("\n\n");
+}
+
+function parseTaskSpec(content: string): TaskSpec | undefined {
+  const candidates = jsonCandidates(content);
+  for (const candidate of candidates) {
+    try {
+      const result = TaskSpecSchema.safeParse(JSON.parse(candidate) as unknown);
+      if (result.success) {
+        return result.data;
+      }
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return undefined;
+}
+
+function parseReview(
+  content: string
+): Pick<HostedPlannerReviewResponse, "reviewSummary" | "statusSuggestion" | "followUpTaskSpec"> | undefined {
+  for (const candidate of jsonCandidates(content)) {
+    try {
+      const record = asRecord(JSON.parse(candidate) as unknown);
+      const reviewSummary = typeof record.reviewSummary === "string" ? record.reviewSummary : undefined;
+      const statusSuggestion =
+        record.statusSuggestion === "passed" ||
+        record.statusSuggestion === "needs_review" ||
+        record.statusSuggestion === "follow_up_needed"
+          ? record.statusSuggestion
+          : undefined;
+      if (!reviewSummary || !statusSuggestion) {
+        continue;
+      }
+      const followUpResult = record.followUpTaskSpec === undefined ? undefined : TaskSpecSchema.safeParse(record.followUpTaskSpec);
+      if (followUpResult && !followUpResult.success) {
+        continue;
+      }
+      return {
+        reviewSummary,
+        statusSuggestion,
+        ...(followUpResult?.success ? { followUpTaskSpec: followUpResult.data } : {})
+      };
+    } catch {
+      // Try the next candidate.
+    }
+  }
+  return undefined;
+}
+
+function jsonCandidates(content: string): string[] {
+  const block = content.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim();
+  return [content.trim(), block].filter((candidate): candidate is string => Boolean(candidate));
+}
+
+function extractResponseText(response: unknown): string {
+  const record = asRecord(response);
+  if (typeof record.output_text === "string" && record.output_text.trim()) {
+    return record.output_text;
+  }
+  const output = Array.isArray(record.output) ? record.output : [];
+  const chunks: string[] = [];
+  for (const item of output) {
+    const itemRecord = asRecord(item);
+    const content = Array.isArray(itemRecord.content) ? itemRecord.content : [];
+    for (const contentItem of content) {
+      const contentRecord = asRecord(contentItem);
+      if (typeof contentRecord.text === "string") {
+        chunks.push(contentRecord.text);
+      }
+      if (typeof contentRecord.output_text === "string") {
+        chunks.push(contentRecord.output_text);
+      }
+    }
+  }
+  const text = chunks.join("\n").trim();
+  if (!text) {
+    throw new Error("OpenAI planner response did not contain text output.");
+  }
+  return text;
+}
+
+function safeJson(value: unknown): string {
+  return JSON.stringify(value ?? {}, null, 2);
 }
 
 function bearerToken(headers: CloudRequest["headers"]): string | undefined {
@@ -252,6 +606,10 @@ async function readJsonBody(request: IncomingMessage): Promise<unknown> {
     return undefined;
   }
   return JSON.parse(Buffer.concat(chunks).toString("utf8")) as unknown;
+}
+
+function asRecord(value: unknown): Record<string, unknown> {
+  return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
 }
 
 function now(): string {

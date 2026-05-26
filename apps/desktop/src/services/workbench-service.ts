@@ -11,6 +11,7 @@ import {
   type HandoffCard,
   type Mission,
   type PlannerProvider,
+  type PlannerRequest,
   type PlannerResponse,
   type ReviewResult,
   type Run,
@@ -45,7 +46,7 @@ export class WorkbenchService {
       title: input.title ?? "Workbench task",
       goal: input.goal ?? "Plan, execute, verify, and review an AI-agent task.",
       status: "draft",
-      sourceIds: ["provider:openai-planner"],
+      sourceIds: [`provider:${this.planner.profile().id}`],
       captureIds: [],
       handoffCardIds: [],
       artifactIds: [],
@@ -89,15 +90,25 @@ export class WorkbenchService {
     if (!plannerArtifact?.content) {
       throw new Error("No planner response artifact found for this mission.");
     }
-    const taskSpec = taskSpecFromPlannerText(plannerArtifact.content, mission);
+    const taskSpecResponse = hasCreateTaskSpec(this.planner)
+      ? await this.planner.createTaskSpec({
+          missionId,
+          prompt: plannerArtifact.content,
+          contextArtifactIds: unique([...mission.artifactIds, plannerArtifact.id]),
+          ...(mission.repoContext ? { repoContext: mission.repoContext } : {}),
+          metadata: { source: "workbenchTaskSpec" }
+        })
+      : undefined;
+    const taskSpec = taskSpecResponse?.taskSpec ?? taskSpecFromPlannerText(plannerArtifact.content, mission);
     const createdAt = this.now();
+    const generatedFromArtifactId = taskSpecResponse?.artifactIds[0] ?? plannerArtifact.id;
     const taskArtifact: Artifact = {
       id: `artifact_${randomUUID()}`,
       missionId,
       kind: "taskSpec",
       title: "TaskSpec",
       content: JSON.stringify(taskSpec, null, 2),
-      metadata: { generatedFromArtifactId: plannerArtifact.id },
+      metadata: { generatedFromArtifactId },
       createdAt
     };
     const generatedPrompt = renderTaskSpecForTarget(taskSpec, undefined, mission.repoContext);
@@ -113,7 +124,7 @@ export class WorkbenchService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId,
-      sourceId: "provider:openai-planner",
+      sourceId: `provider:${this.planner.profile().id}`,
       captureId: plannerArtifact.id,
       targetId: "provider:codex",
       recipe: "implementationBrief",
@@ -135,10 +146,14 @@ export class WorkbenchService {
       goal: taskSpec.goal,
       status: "ready",
       handoffCardIds: unique([...mission.handoffCardIds, card.id]),
-      artifactIds: unique([...mission.artifactIds, taskArtifact.id, promptArtifact.id]),
+      artifactIds: unique([...mission.artifactIds, ...(taskSpecResponse?.artifactIds ?? []), taskArtifact.id, promptArtifact.id]),
       updatedAt: createdAt
     });
-    await this.appendRunStep(missionId, "transform", "Generate TaskSpec", "passed", [taskArtifact.id, promptArtifact.id]);
+    await this.appendRunStep(missionId, "transform", "Generate TaskSpec", "passed", [
+      ...(taskSpecResponse?.artifactIds ?? []),
+      taskArtifact.id,
+      promptArtifact.id
+    ]);
     return card;
   }
 
@@ -229,7 +244,7 @@ export class WorkbenchService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId,
-      sourceId: "provider:openai-planner",
+      sourceId: `provider:${this.planner.profile().id}`,
       captureId: reviewArtifact.id,
       targetId: "provider:codex",
       recipe: "debuggingRequest",
@@ -528,4 +543,10 @@ function hasSteerTurn(provider: ExecutorProvider): provider is ExecutorProvider 
 
 function hasMonitorTurn(provider: ExecutorProvider): provider is ExecutorProvider & Required<Pick<ExecutorProvider, "monitorTurn">> {
   return typeof provider.monitorTurn === "function";
+}
+
+function hasCreateTaskSpec(provider: PlannerProvider): provider is PlannerProvider & {
+  createTaskSpec(input: PlannerRequest): Promise<PlannerResponse>;
+} {
+  return typeof (provider as PlannerProvider & { createTaskSpec?: unknown }).createTaskSpec === "function";
 }

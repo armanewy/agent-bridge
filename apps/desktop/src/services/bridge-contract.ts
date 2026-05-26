@@ -27,6 +27,7 @@ import type {
   AgentSessionRef,
   AgentTurn,
   ExecutorTaskResult,
+  PlannerProviderMode,
   PlannerRequest,
   PlannerResponse,
   PlatformCapabilities,
@@ -39,6 +40,7 @@ import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 import type { CreateWorkbenchMissionInput } from "./workbench-service.js";
 import type { AutopilotStatus } from "./autopilot-service.js";
+import type { PlannerModeInfo } from "./provider-registry-service.js";
 export type { AutopilotStatus } from "./autopilot-service.js";
 
 export interface WindowRevalidation {
@@ -237,6 +239,10 @@ export interface AgentBridgeApi {
   listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
   listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
   listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
+  getPlannerMode(): Promise<PlannerProviderMode>;
+  setPlannerMode(mode: PlannerProviderMode): Promise<PlannerProviderMode>;
+  listPlannerModes(): Promise<PlannerModeInfo[]>;
+  getActivePlannerProvider(): Promise<AgentProviderProfile | undefined>;
   getAgentBridgeAuthStatus(): Promise<AgentBridgeAuthStatus>;
   signInAgentBridgeDevMode(): Promise<AgentBridgeAuthStatus>;
   signOutAgentBridge(): Promise<AgentBridgeAuthStatus>;

@@ -105,6 +105,9 @@ export class AuthService {
       throw new Error("AgentBridge Cloud URL must start with http:// or https://.");
     }
     this.cloudBaseUrl = url.replace(/\/+$/, "");
+    if (this.transport && "setBaseUrl" in this.transport && typeof this.transport.setBaseUrl === "function") {
+      this.transport.setBaseUrl(this.cloudBaseUrl);
+    }
     return this.getAuthStatus();
   }
 }
@@ -126,7 +129,11 @@ export class MemoryAuthStorage implements AuthStorage {
 }
 
 export class FetchAuthTransport implements AuthTransport {
-  constructor(private readonly baseUrl: string) {}
+  constructor(private baseUrl: string) {}
+
+  setBaseUrl(baseUrl: string): void {
+    this.baseUrl = baseUrl;
+  }
 
   async request<T>(path: string, input: { method: string; token?: string; body?: unknown }): Promise<T> {
     const response = await fetch(`${this.baseUrl.replace(/\/+$/, "")}${path}`, {

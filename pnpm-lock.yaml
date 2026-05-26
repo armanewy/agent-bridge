@@ -23,6 +23,9 @@ importers:
       '@agentbridge/core':
         specifier: workspace:*
         version: link:../../packages/core
+      openai:
+        specifier: ^6.39.0
+        version: 6.39.0(ws@8.21.0)(zod@3.25.76)
     devDependencies:
       '@types/node':
         specifier: ^22.10.2

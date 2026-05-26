@@ -4,6 +4,7 @@ import type {
   AgentSessionRef,
   AgentTurn,
   ExecutorProvider,
+  PlannerProviderMode,
   PlannerProvider,
   PlannerRequest,
   ReviewerProvider
@@ -12,8 +13,19 @@ import type { AgentEventFilter, LocalStore } from "@agentbridge/local-store";
 
 type ProviderAdapter = PlannerProvider | ExecutorProvider | ReviewerProvider;
 
+export interface PlannerModeInfo {
+  mode: PlannerProviderMode;
+  providerId: string;
+  label: string;
+  default: boolean;
+  advanced: boolean;
+  status: "available" | "needsAuth" | "unavailable" | "unsupported";
+  description: string;
+}
+
 export class ProviderRegistryService {
   private readonly providers = new Map<string, ProviderAdapter>();
+  private plannerMode: PlannerProviderMode = "hostedAgentBridge";
 
   constructor(private readonly store: LocalStore) {}
 
@@ -97,6 +109,35 @@ export class ProviderRegistryService {
     return this.store.listAgentEvents(filter);
   }
 
+  async getPlannerMode(): Promise<PlannerProviderMode> {
+    return this.plannerMode;
+  }
+
+  async setPlannerMode(mode: PlannerProviderMode): Promise<PlannerProviderMode> {
+    const availableModes = plannerModeInfos();
+    if (!availableModes.some((item) => item.mode === mode)) {
+      throw new Error(`Planner mode ${mode} is not supported.`);
+    }
+    this.plannerMode = mode;
+    return this.plannerMode;
+  }
+
+  async listPlannerModes(): Promise<PlannerModeInfo[]> {
+    const profiles = await this.listProviderProfiles();
+    return plannerModeInfos().map((mode) => {
+      const profile = profiles.find((item) => item.id === mode.providerId);
+      return {
+        ...mode,
+        status: profile?.status ?? mode.status
+      };
+    });
+  }
+
+  async getActivePlannerProvider(): Promise<AgentProviderProfile | undefined> {
+    const mode = plannerModeInfos().find((item) => item.mode === this.plannerMode);
+    return mode ? this.getProviderStatus(mode.providerId) : undefined;
+  }
+
   private async resolveProfile(providerId: string): Promise<AgentProviderProfile | undefined> {
     const provider = this.providers.get(providerId);
     if (provider) {
@@ -109,6 +150,29 @@ export class ProviderRegistryService {
 export function defaultProviderProfiles(): AgentProviderProfile[] {
   const plannerHasKey = Boolean(process.env.AGENTBRIDGE_OPENAI_API_KEY || process.env.OPENAI_API_KEY);
   return [
+    {
+      id: "agentbridge-hosted-planner",
+      kind: "planner",
+      displayName: "AgentBridge Hosted Planner",
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      authMode: "agentBridgeCloud",
+      status: "needsAuth",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: false,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: false,
+        canReturnLogs: false,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
+      metadata: {
+        mode: "hostedAgentBridge",
+        reason: "Sign in to AgentBridge to use the hosted planner. No OpenAI API key is required in Simple Mode."
+      }
+    },
     {
       id: "openai-planner",
       kind: "planner",
@@ -128,8 +192,58 @@ export function defaultProviderProfiles(): AgentProviderProfile[] {
         acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
       },
       metadata: {
+        mode: "userOpenAiApiKey",
+        advanced: true,
         adapter: "placeholder",
         reason: plannerHasKey ? "Planner adapter is not implemented yet." : "Set AGENTBRIDGE_OPENAI_API_KEY or OPENAI_API_KEY."
+      }
+    },
+    {
+      id: "codex-local-planner",
+      kind: "planner",
+      displayName: "Codex Local Planner",
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      authMode: "appServer",
+      status: "unsupported",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: false,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: false,
+        canReturnLogs: false,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
+      metadata: {
+        mode: "codexLocalPlanner",
+        advanced: true,
+        reason: "Future no-cloud planner mode. Not implemented yet."
+      }
+    },
+    {
+      id: "local-model-planner",
+      kind: "planner",
+      displayName: "Local Model Planner",
+      capabilities: ["canPlan", "canReview"],
+      authMode: "localApp",
+      status: "unsupported",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: false,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: false,
+        canReturnLogs: false,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
+      metadata: {
+        mode: "localModelPlaceholder",
+        advanced: true,
+        reason: "Future local model mode. Not implemented yet."
       }
     },
     {
@@ -164,6 +278,47 @@ function mergeProfiles(profiles: AgentProviderProfile[]): AgentProviderProfile[]
     byId.set(profile.id, profile);
   }
   return [...byId.values()].sort((a, b) => a.displayName.localeCompare(b.displayName));
+}
+
+function plannerModeInfos(): PlannerModeInfo[] {
+  return [
+    {
+      mode: "hostedAgentBridge",
+      providerId: "agentbridge-hosted-planner",
+      label: "AgentBridge hosted",
+      default: true,
+      advanced: false,
+      status: "needsAuth",
+      description: "Default production planner. Sign in to AgentBridge; no OpenAI API key is stored on the desktop."
+    },
+    {
+      mode: "userOpenAiApiKey",
+      providerId: "openai-planner",
+      label: "Use my OpenAI API key",
+      default: false,
+      advanced: true,
+      status: "needsAuth",
+      description: "Advanced BYOK mode for local power users."
+    },
+    {
+      mode: "codexLocalPlanner",
+      providerId: "codex-local-planner",
+      label: "Codex-only local planner",
+      default: false,
+      advanced: true,
+      status: "unsupported",
+      description: "Future no-cloud mode that uses a separate Codex planning thread."
+    },
+    {
+      mode: "localModelPlaceholder",
+      providerId: "local-model-planner",
+      label: "Local model",
+      default: false,
+      advanced: true,
+      status: "unsupported",
+      description: "Future local model planner."
+    }
+  ];
 }
 
 function hasCreateSession(provider: ProviderAdapter): provider is PlannerProvider | ExecutorProvider {

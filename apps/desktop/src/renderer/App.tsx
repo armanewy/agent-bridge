@@ -16,12 +16,22 @@ import type {
   LinkableComponent,
   AuditEvent,
   Mission,
+  PlannerProviderMode,
   SourceEndpoint,
   TargetEndpoint,
   Transform,
   WorkflowLink
 } from "@agentbridge/core";
-import type { AutopilotStatus, CodexAppServerStatus, CodexDeliveryResult, DeliveryPreview, PlatformStatus, SetupStatus } from "../services/bridge-contract.js";
+import type { PlannerModeInfo } from "../services/provider-registry-service.js";
+import type {
+  AgentBridgeAuthStatus,
+  AutopilotStatus,
+  CodexAppServerStatus,
+  CodexDeliveryResult,
+  DeliveryPreview,
+  PlatformStatus,
+  SetupStatus
+} from "../services/bridge-contract.js";
 import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
@@ -50,6 +60,9 @@ export function App(): JSX.Element {
   const [workflowLinks, setWorkflowLinks] = useState<WorkflowLink[]>([]);
   const [codexThreads, setCodexThreads] = useState<CodexThreadRef[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<AgentProviderProfile[]>([]);
+  const [authStatus, setAuthStatus] = useState<AgentBridgeAuthStatus | undefined>();
+  const [plannerModes, setPlannerModes] = useState<PlannerModeInfo[]>([]);
+  const [plannerMode, setPlannerMode] = useState<PlannerProviderMode>("hostedAgentBridge");
   const [agentSessions, setAgentSessions] = useState<AgentSessionRef[]>([]);
   const [captures, setCaptures] = useState<Capture[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
@@ -152,6 +165,9 @@ export function App(): JSX.Element {
       nextPlatformStatus,
       nextCodexAppServerStatus,
       nextProviderProfiles,
+      nextAuthStatus,
+      nextPlannerMode,
+      nextPlannerModes,
       nextAgentSessions
     ] = await Promise.all([
       api.listSources(),
@@ -166,6 +182,9 @@ export function App(): JSX.Element {
       api.getPlatformStatus(),
       api.getCodexAppServerStatus(),
       api.listProviders(),
+      api.getAgentBridgeAuthStatus(),
+      api.getPlannerMode(),
+      api.listPlannerModes(),
       api.listAgentSessions("codex")
     ]);
     const nextCodexTarget = nextTargets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
@@ -183,6 +202,9 @@ export function App(): JSX.Element {
     setPlatformStatus(nextPlatformStatus);
     setCodexAppServerStatus(nextCodexAppServerStatus);
     setProviderProfiles(nextProviderProfiles);
+    setAuthStatus(nextAuthStatus);
+    setPlannerMode(nextPlannerMode);
+    setPlannerModes(nextPlannerModes);
     setAgentSessions(nextAgentSessions);
     setExtensionId((current) => current || nextSetupStatus.extensionId || "");
     setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
@@ -625,6 +647,36 @@ export function App(): JSX.Element {
     }
   }
 
+  async function signInAgentBridge(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      setAuthStatus(await api.signInAgentBridgeDevMode());
+      await refresh();
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function signOutAgentBridge(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      setAuthStatus(await api.signOutAgentBridge());
+      await refresh();
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function changePlannerMode(mode: PlannerProviderMode): Promise<void> {
+    setSetupError(undefined);
+    try {
+      setPlannerMode(await api.setPlannerMode(mode));
+      await refresh();
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function refreshMission(missionId: string): Promise<void> {
     const [nextMissions, nextMissionDetail, nextSessions, nextAutopilotStatus] = await Promise.all([
       api.listMissions(),
@@ -814,9 +866,16 @@ export function App(): JSX.Element {
           <div className="settings-layout">
             <ProviderSettingsPanel
               profiles={providerProfiles}
+              authStatus={authStatus}
+              plannerModes={plannerModes}
+              plannerMode={plannerMode}
               platformStatus={platformStatus}
               codexAppServerStatus={codexAppServerStatus}
               codexTarget={codexTarget}
+              setupError={setupError}
+              onSignIn={() => void signInAgentBridge()}
+              onSignOut={() => void signOutAgentBridge()}
+              onPlannerModeChange={(mode) => void changePlannerMode(mode)}
               onRefresh={() => void refresh()}
             />
             <section className="panel">
@@ -1167,38 +1226,68 @@ function CodexAppServerPanel({
 
 function ProviderSettingsPanel({
   profiles,
+  authStatus,
+  plannerModes,
+  plannerMode,
   platformStatus,
   codexAppServerStatus,
   codexTarget,
+  setupError,
+  onSignIn,
+  onSignOut,
+  onPlannerModeChange,
   onRefresh
 }: {
   profiles: AgentProviderProfile[];
+  authStatus?: AgentBridgeAuthStatus | undefined;
+  plannerModes: PlannerModeInfo[];
+  plannerMode: PlannerProviderMode;
   platformStatus?: PlatformStatus | undefined;
   codexAppServerStatus?: CodexAppServerStatus | undefined;
   codexTarget?: CodexDeepLinkTarget | undefined;
+  setupError?: string | undefined;
+  onSignIn(): void;
+  onSignOut(): void;
+  onPlannerModeChange(mode: PlannerProviderMode): void;
   onRefresh(): void;
 }): JSX.Element {
-  const planner = profiles.find((profile) => profile.id === "openai-planner");
+  const hostedPlanner = profiles.find((profile) => profile.id === "agentbridge-hosted-planner");
+  const byokPlanner = profiles.find((profile) => profile.id === "openai-planner");
   const codex = profiles.find((profile) => profile.id === "codex");
   return (
     <section className="panel">
       <div className="panel-heading compact">
         <div>
           <h2>Provider connections</h2>
-          <p>Workbench uses OpenAI for planning and Codex for repo execution.</p>
+          <p>Workbench uses AgentBridge hosted planning and Codex for local repo execution.</p>
         </div>
         <button type="button" className="secondary-button" onClick={onRefresh}>
           Check connections
         </button>
       </div>
       <div className="provider-settings-grid">
-        <article className="setup-check">
-          <strong>Planner Provider: OpenAI</strong>
-          <span>{planner?.status ?? "unknown"}</span>
-          <small>
-            API key source: {String(planner?.metadata.apiKeySource ?? "not set")}. Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY before launch.
-          </small>
-          <small>Model: {String(planner?.metadata.model ?? "configured by environment")}</small>
+        <article className={authStatus?.signedIn ? "setup-check ready" : "setup-check warning"}>
+          <strong>AgentBridge account</strong>
+          <span>{authStatus?.signedIn ? "Signed in" : "Not signed in"}</span>
+          <small>{authStatus?.user?.email ?? authStatus?.cloudBaseUrl ?? "AgentBridge Cloud"}</small>
+          <div className="setup-actions inline">
+            {authStatus?.signedIn ? (
+              <button type="button" className="secondary-button" onClick={onSignOut}>
+                Sign out
+              </button>
+            ) : (
+              <button type="button" className="primary-button compact" onClick={onSignIn}>
+                Sign in to AgentBridge
+              </button>
+            )}
+          </div>
+          {setupError ? <small className="error-text">{setupError}</small> : null}
+        </article>
+        <article className={hostedPlanner?.status === "available" ? "setup-check ready" : "setup-check warning"}>
+          <strong>Planner: AgentBridge hosted</strong>
+          <span>{hostedPlanner?.status ?? "unknown"}</span>
+          <small>No OpenAI API key is required in Simple Mode.</small>
+          <small>Repo files stay local unless you approve file upload.</small>
         </article>
         <article className="setup-check">
           <strong>Executor Provider: Codex</strong>
@@ -1211,7 +1300,7 @@ function ProviderSettingsPanel({
         <article className="setup-check">
           <strong>Repo settings</strong>
           <span>{codexTarget ? codexTarget.repoPath : "No repo selected"}</span>
-          <small>Verification commands are configured in the Repo and Codex panel below.</small>
+          <small>Workspace is optional until Codex new-thread delivery or verification needs it.</small>
         </article>
         <article className="setup-check">
           <strong>Platform</strong>
@@ -1222,10 +1311,41 @@ function ProviderSettingsPanel({
         <article className="setup-check">
           <strong>File exchange policy</strong>
           <span>Local-first</span>
-          <small>Provider uploads pause for approval by default.</small>
+          <small>Planner payloads include intent, task summaries, verification summaries, and approved artifacts only.</small>
           <small>Staged files are not written into the repo automatically.</small>
         </article>
       </div>
+      <details className="advanced-details">
+        <summary>Advanced planner modes</summary>
+        <div className="provider-settings-grid compact">
+          <article className="setup-check">
+            <strong>Planner mode</strong>
+            <select value={plannerMode} onChange={(event) => onPlannerModeChange(event.target.value as PlannerProviderMode)}>
+              {plannerModes.map((mode) => (
+                <option value={mode.mode} key={mode.mode}>
+                  {mode.label}{mode.advanced ? " (Advanced)" : ""}
+                </option>
+              ))}
+            </select>
+            <small>{plannerModes.find((mode) => mode.mode === plannerMode)?.description ?? "Select a planner mode."}</small>
+          </article>
+          <article className="setup-check">
+            <strong>Use my own OpenAI API key</strong>
+            <span>{byokPlanner?.status ?? "unknown"}</span>
+            <small>Advanced BYOK mode only. API keys are read from environment variables and are not stored in local JSON.</small>
+          </article>
+          <article className="setup-check">
+            <strong>Codex-only local planner</strong>
+            <span>{profiles.find((profile) => profile.id === "codex-local-planner")?.status ?? "unsupported"}</span>
+            <small>Future no-cloud dogfood mode.</small>
+          </article>
+          <article className="setup-check">
+            <strong>Local model</strong>
+            <span>{profiles.find((profile) => profile.id === "local-model-planner")?.status ?? "unsupported"}</span>
+            <small>Future local model mode.</small>
+          </article>
+        </div>
+      </details>
       {!codexAppServerStatus?.available ? (
         <div className="warning-callout">
           New Codex thread delivery can use deep links. Sending into existing Codex threads requires CODEX_APP_SERVER_URL.

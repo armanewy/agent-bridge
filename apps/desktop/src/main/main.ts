@@ -29,6 +29,7 @@ import { CodexAppServerClient } from "../services/codex-app-server-client.js";
 import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import { ProviderRegistryService } from "../services/provider-registry-service.js";
+import { AgentBridgeHostedPlannerProvider } from "../services/providers/agentbridge-hosted-planner-provider.js";
 import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
@@ -133,14 +134,16 @@ app.whenReady().then(async () => {
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
   const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
+  const hostedPlannerProvider = new AgentBridgeHostedPlannerProvider(store, authService);
   const openAiPlannerProvider = new OpenAIPlannerProvider(store, { artifactBroker: artifactBrokerService });
   const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient, undefined, {
     platform: platformCapabilities.platform,
     canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks
   }, artifactBrokerService);
+  providerRegistryService.registerProvider(hostedPlannerProvider);
   providerRegistryService.registerProvider(openAiPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
-  const workbenchService = new WorkbenchService(store, openAiPlannerProvider, codexExecutorProvider, verificationService);
+  const workbenchService = new WorkbenchService(store, hostedPlannerProvider, codexExecutorProvider, verificationService);
   const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
@@ -176,6 +179,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:listAgentEvents", (_event, filter?: { providerId?: string; sessionRefId?: string; turnId?: string; type?: string }) =>
     providerRegistryService.listEvents(filter)
   );
+  ipcMain.handle("agentbridge:getPlannerMode", () => providerRegistryService.getPlannerMode());
+  ipcMain.handle("agentbridge:setPlannerMode", (_event, mode) => providerRegistryService.setPlannerMode(mode));
+  ipcMain.handle("agentbridge:listPlannerModes", () => providerRegistryService.listPlannerModes());
+  ipcMain.handle("agentbridge:getActivePlannerProvider", () => providerRegistryService.getActivePlannerProvider());
   ipcMain.handle("agentbridge:getAgentBridgeAuthStatus", () => authService.getAuthStatus());
   ipcMain.handle("agentbridge:signInAgentBridgeDevMode", () => authService.signInDevMode());
   ipcMain.handle("agentbridge:signOutAgentBridge", () => authService.signOut());

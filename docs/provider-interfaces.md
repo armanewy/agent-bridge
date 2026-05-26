@@ -29,7 +29,7 @@ The provider layer must not replace the mission/task-card model. It adapts provi
 - `kind`: `planner`, `executor`, `reviewer`, `verifier`, `browser`, `repository`, or `unknown`.
 - `displayName`: user-facing name.
 - `capabilities`: list of supported actions.
-- `authMode`: `apiKey`, `localApp`, `appServer`, `cli`, `none`, or `unknown`.
+- `authMode`: `agentBridgeCloud`, `apiKey`, `localApp`, `appServer`, `cli`, `none`, or `unknown`.
 - `status`: `available`, `needsAuth`, `unavailable`, or `unsupported`.
 - `artifactCapabilities`: what the provider can accept and return through the artifact broker.
 - `metadata`: provider-specific diagnostics.
@@ -73,7 +73,7 @@ Required responsibilities:
 - Produce `PlannerResponse`.
 - Produce `ReviewResult`.
 
-The first implementation is `openai-planner` using the OpenAI Responses API. It must use API-native state and must not scrape consumer ChatGPT sessions.
+The default implementation is `agentbridge-hosted-planner`, which uses AgentBridge Cloud auth and hosted planner endpoints. `openai-planner` remains available as an Advanced/BYOK provider using the OpenAI Responses API. Neither planner should scrape consumer ChatGPT sessions.
 
 ### ExecutorProvider
 
