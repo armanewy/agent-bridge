@@ -486,13 +486,34 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockExtensionId = input.extensionId?.trim() || mockExtensionId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
       return mockSetupStatus(mockExtensionConnected);
     },
-    async connectChrome(): Promise<SetupStatus> {
-      mockExtensionId = mockExtensionId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+    async connectChrome(input?: ConfigureNativeHostRequest): Promise<SetupStatus> {
+      mockExtensionId = input?.extensionId?.trim() || mockExtensionId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
       mockExtensionConnected = true;
       return mockSetupStatus(mockExtensionConnected);
     },
     async openChromeExtensionInstall() {
       return undefined;
+    },
+    async openChromeExtensionsPage() {
+      return undefined;
+    },
+    async openChromeExtensionFolder() {
+      return undefined;
+    },
+    async openEmbeddedChatGpt() {
+      mockSources = [mockSource, ...mockSources.filter((source) => source.id !== mockSource.id)];
+      mockComponents = mergeMockComponents([mockBrowserTabComponent(mockSource), ...mockComponents]);
+      return mockSource;
+    },
+    async captureEmbeddedChatGptSelection() {
+      const capture = {
+        ...mockCapture,
+        id: `cap_embedded_${Math.random().toString(16).slice(2)}`,
+        metadata: { mode: "embeddedBrowser", source: { url: mockSource.url, title: mockSource.title, browser: "agentbridge" } },
+        createdAt: now()
+      };
+      mockCaptures = [capture, ...mockCaptures];
+      return capture;
     },
     async selectRepoFolder() {
       return "C:\\Users\\aoztu\\Documents\\Agent Bridge";

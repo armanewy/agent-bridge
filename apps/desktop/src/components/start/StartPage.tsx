@@ -37,6 +37,8 @@ interface StartPageProps {
   onOpenAdvanced(): void;
   onOpenSettings(): void;
   onProbeDesktopApps(): void;
+  onOpenEmbeddedChatGpt(): void;
+  onCaptureEmbeddedChatGptSelection(): void;
   onConnectChrome(): void;
   onCheckChromeConnection(): void;
 }
@@ -68,6 +70,8 @@ export function StartPage({
   onOpenAdvanced,
   onOpenSettings,
   onProbeDesktopApps,
+  onOpenEmbeddedChatGpt,
+  onCaptureEmbeddedChatGptSelection,
   onConnectChrome,
   onCheckChromeConnection
 }: StartPageProps): JSX.Element {
@@ -122,7 +126,7 @@ export function StartPage({
         <div className="start-step-list">
           <div className="segmented-control source-mode-control" aria-label="ChatGPT source type">
             <button type="button" className={chatGptSourceMode === "chrome" ? "selected" : ""} onClick={() => onChatGptSourceModeChange("chrome")}>
-              Chrome ChatGPT
+              ChatGPT Web
             </button>
             <button type="button" className={chatGptSourceMode === "desktop" ? "selected" : ""} onClick={() => onChatGptSourceModeChange("desktop")}>
               ChatGPT Desktop
@@ -138,6 +142,8 @@ export function StartPage({
             onAction={sourceAction(chatGptSourceMode, setupStatus, matchingSourceComponent, {
               onProbeDesktopApps,
               onOpenAdvanced,
+              onOpenSettings,
+              onOpenEmbeddedChatGpt,
               onConnectChrome,
               onCheckChromeConnection
             })}
@@ -172,6 +178,8 @@ export function StartPage({
             <button type="button" className="secondary-button" onClick={sourceAction(chatGptSourceMode, setupStatus, matchingSourceComponent, {
               onProbeDesktopApps,
               onOpenAdvanced,
+              onOpenSettings,
+              onOpenEmbeddedChatGpt,
               onConnectChrome,
               onCheckChromeConnection
             })}>
@@ -199,6 +207,8 @@ export function StartPage({
             target={targetComponent}
             latestCapture={latestCapture}
             canCreateTask={canCreateTask}
+            canCaptureEmbedded={Boolean(matchingSourceComponent && isEmbeddedChatGptComponent(matchingSourceComponent))}
+            onCaptureEmbedded={onCaptureEmbeddedChatGptSelection}
             onCreateTask={() => onCreateTaskFromWorkflowLink(activeLink.id)}
             onOpenTasks={onOpenTasks}
             onOpenAdvanced={onOpenAdvanced}
@@ -278,6 +288,8 @@ function ActiveLinkSummary({
   target,
   latestCapture,
   canCreateTask,
+  canCaptureEmbedded,
+  onCaptureEmbedded,
   onCreateTask,
   onOpenTasks,
   onOpenAdvanced
@@ -288,6 +300,8 @@ function ActiveLinkSummary({
   target?: LinkableComponent | undefined;
   latestCapture?: Capture | undefined;
   canCreateTask: boolean;
+  canCaptureEmbedded: boolean;
+  onCaptureEmbedded(): void;
   onCreateTask(): void;
   onOpenTasks(): void;
   onOpenAdvanced(): void;
@@ -309,7 +323,16 @@ function ActiveLinkSummary({
         </div>
       ) : (
         <div className="warning-band">
-          <span>Select text in ChatGPT and press Ctrl+Shift+Y, then create the Task Card.</span>
+          <span>
+            {canCaptureEmbedded
+              ? "Select text in the AgentBridge ChatGPT window, then capture it here."
+              : "Select text in ChatGPT and press Ctrl+Shift+Y, then create the Task Card."}
+          </span>
+          {canCaptureEmbedded ? (
+            <button type="button" className="secondary-button" onClick={onCaptureEmbedded}>
+              Capture selection
+            </button>
+          ) : null}
         </div>
       )}
       <div className="start-action-row">
@@ -430,6 +453,9 @@ function sourceMatchesMode(component: LinkableComponent, mode: "chrome" | "deskt
 }
 
 function sourceDetail(component: LinkableComponent): string {
+  if (isEmbeddedChatGptComponent(component)) {
+    return `${component.subtitle} · AgentBridge browser · no extension required`;
+  }
   if (component.provider === "chatgptDesktop") {
     const confidence = typeof component.metadata["confidence"] === "string" ? component.metadata["confidence"] : "unknown";
     if (!component.roleCapabilities.canCapture || component.status !== "available") {
@@ -465,6 +491,9 @@ function sourceBlockedCopy(mode: "chrome" | "desktop", status?: SetupStatus, com
   if (status?.extensionConnected) {
     return "Chrome is connected, but no ChatGPT tab has been synced yet. In your existing ChatGPT tab, open the AgentBridge extension and click Sync this ChatGPT tab.";
   }
+  if (!status?.extensionIdKnown) {
+    return "Open ChatGPT inside AgentBridge. No extension is required for this path.";
+  }
   return "Connect Chrome, install/open the AgentBridge extension, then sync your existing ChatGPT tab. Ctrl+Shift+Y captures selected text after the tab is synced.";
 }
 
@@ -473,7 +502,13 @@ function sourceActionLabel(mode: "chrome" | "desktop", status?: SetupStatus, com
     return component ? "Probe again" : "Probe ChatGPT Desktop";
   }
   if (component) {
+    if (isEmbeddedChatGptComponent(component)) {
+      return "Open ChatGPT";
+    }
     return "Change tab";
+  }
+  if (!status?.extensionIdKnown) {
+    return "Open ChatGPT here";
   }
   return status?.extensionConnected ? "Refresh after sync" : "Connect Chrome";
 }
@@ -485,6 +520,8 @@ function sourceAction(
   actions: {
     onProbeDesktopApps(): void;
     onOpenAdvanced(): void;
+    onOpenSettings(): void;
+    onOpenEmbeddedChatGpt(): void;
     onConnectChrome(): void;
     onCheckChromeConnection(): void;
   }
@@ -493,7 +530,13 @@ function sourceAction(
     return actions.onProbeDesktopApps;
   }
   if (component) {
+    if (isEmbeddedChatGptComponent(component)) {
+      return actions.onOpenEmbeddedChatGpt;
+    }
     return actions.onOpenAdvanced;
+  }
+  if (!status?.extensionIdKnown) {
+    return actions.onOpenEmbeddedChatGpt;
   }
   return status?.extensionConnected ? actions.onCheckChromeConnection : actions.onConnectChrome;
 }
@@ -532,7 +575,11 @@ function chromeConnectDetail(status?: SetupStatus): string {
   if (status?.extensionIdKnown) {
     return "Chrome bridge is configured. Install/open the extension, then sync this ChatGPT tab.";
   }
-  return "Connect Chrome to install the local bridge and use the AgentBridge extension.";
+  return "Open ChatGPT inside AgentBridge for the no-extension path.";
+}
+
+function isEmbeddedChatGptComponent(component: LinkableComponent): boolean {
+  return component.backingRef.sourceId === "src_agentbridge_chatgpt" || component.metadata["browser"] === "agentbridge";
 }
 
 function shortThread(threadId: string): string {

@@ -93,7 +93,7 @@ export type LinkableComponent = z.infer<typeof LinkableComponentSchema>;
 export const BrowserTabSourceSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("browserTab"),
-  browser: z.literal("chrome"),
+  browser: z.enum(["agentbridge", "chrome", "edge", "firefox"]),
   tabId: z.number().int().optional(),
   windowId: z.number().int().optional(),
   title: z.string(),

@@ -12,6 +12,7 @@ import {
   type OpenDialogOptions
 } from "electron";
 import { access, mkdir, rm } from "node:fs/promises";
+import { spawn } from "node:child_process";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDesktopStore } from "../services/store.js";
@@ -46,6 +47,7 @@ const TRAY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height
 </svg>`;
 
 let mainWindow: BrowserWindow | undefined;
+let chatGptWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 
 async function createWindow(): Promise<void> {
@@ -154,8 +156,8 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
     setupService.configureNativeHost(input ?? {})
   );
-  ipcMain.handle("agentbridge:connectChrome", async () => {
-    const status = await setupService.configureNativeHost({});
+  ipcMain.handle("agentbridge:connectChrome", async (_event, input?: ConfigureNativeHostRequest) => {
+    const status = await setupService.configureNativeHost(input ?? {});
     if (status.webStoreUrl) {
       await shell.openExternal(status.webStoreUrl);
     }
@@ -167,6 +169,33 @@ app.whenReady().then(async () => {
       throw new Error("Chrome Web Store URL is not configured.");
     }
     await shell.openExternal(status.webStoreUrl);
+  });
+  ipcMain.handle("agentbridge:openChromeExtensionsPage", () => openChromeExtensionsPage());
+  ipcMain.handle("agentbridge:openChromeExtensionFolder", () => openChromeExtensionFolder());
+  ipcMain.handle("agentbridge:openEmbeddedChatGpt", async () => {
+    const window = await showEmbeddedChatGptWindow();
+    return sourceService.bindEmbeddedChatGptSource({
+      title: window.getTitle() || "ChatGPT in AgentBridge",
+      url: window.webContents.getURL() || "https://chatgpt.com/"
+    });
+  });
+  ipcMain.handle("agentbridge:captureEmbeddedChatGptSelection", async () => {
+    if (!chatGptWindow || chatGptWindow.isDestroyed()) {
+      throw new Error("Open ChatGPT in AgentBridge first.");
+    }
+    const text = await chatGptWindow.webContents.executeJavaScript(
+      "window.getSelection ? window.getSelection().toString() : ''",
+      true
+    ) as string;
+    const trimmed = text.trim();
+    if (!trimmed) {
+      throw new Error("Select text in the AgentBridge ChatGPT window first.");
+    }
+    return sourceService.saveEmbeddedChatGptCapture({
+      text: trimmed,
+      title: chatGptWindow.getTitle() || "ChatGPT in AgentBridge",
+      url: chatGptWindow.webContents.getURL() || "https://chatgpt.com/"
+    });
   });
   ipcMain.handle("agentbridge:selectRepoFolder", () => selectRepoFolder());
   ipcMain.handle("agentbridge:openDataFolder", () => openDataFolder(dataDir));
@@ -298,6 +327,88 @@ function showMainWindow(action?: "openStart" | "openConnect" | "openTasks" | "cr
 async function openDataFolder(dataDir: string): Promise<void> {
   await mkdir(dataDir, { recursive: true });
   await shell.openPath(dataDir);
+}
+
+async function showEmbeddedChatGptWindow(): Promise<BrowserWindow> {
+  if (!chatGptWindow || chatGptWindow.isDestroyed()) {
+    chatGptWindow = new BrowserWindow({
+      width: 1120,
+      height: 860,
+      minWidth: 760,
+      minHeight: 640,
+      title: "ChatGPT - AgentBridge",
+      webPreferences: {
+        contextIsolation: true,
+        nodeIntegration: false,
+        sandbox: true
+      }
+    });
+    chatGptWindow.on("closed", () => {
+      chatGptWindow = undefined;
+    });
+    await chatGptWindow.loadURL("https://chatgpt.com/");
+  }
+
+  if (chatGptWindow.isMinimized()) {
+    chatGptWindow.restore();
+  }
+  chatGptWindow.show();
+  chatGptWindow.focus();
+  return chatGptWindow;
+}
+
+async function openChromeExtensionsPage(): Promise<void> {
+  const chromeUrl = "chrome://extensions";
+  const candidates = [
+    join(process.env["ProgramFiles"] ?? "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
+    join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe"),
+    join(process.env["LOCALAPPDATA"] ?? "", "Google", "Chrome", "Application", "chrome.exe")
+  ];
+
+  for (const candidate of candidates) {
+    if (await fileExists(candidate)) {
+      const child = spawn(candidate, [chromeUrl], { detached: true, stdio: "ignore" });
+      child.unref();
+      return;
+    }
+  }
+
+  await shell.openExternal(chromeUrl);
+}
+
+async function openChromeExtensionFolder(): Promise<void> {
+  const extensionPath = await findChromeExtensionFolder();
+  const result = await shell.openPath(extensionPath);
+  if (result) {
+    throw new Error(result);
+  }
+}
+
+async function findChromeExtensionFolder(): Promise<string> {
+  const candidates = [
+    process.env.AGENTBRIDGE_EXTENSION_DIR,
+    join(process.cwd(), "apps", "extension"),
+    join(process.cwd(), "..", "..", "..", "extension"),
+    join(app.getAppPath(), "apps", "extension"),
+    join(app.getAppPath(), "..", "..", "..", "extension")
+  ].filter(Boolean) as string[];
+
+  for (const candidate of candidates) {
+    if (await fileExists(join(candidate, "manifest.json"))) {
+      return candidate;
+    }
+  }
+
+  return join(process.cwd(), "apps", "extension");
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function selectRepoFolder(): Promise<string | undefined> {

@@ -1244,6 +1244,27 @@ pre {
   margin-top: 12px;
 }
 
+.local-extension-setup {
+  border: 1px solid #c8d2db;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 10px;
+  background: #f8fbfd;
+}
+
+.local-extension-setup h3,
+.local-extension-setup p {
+  margin: 0;
+}
+
+.inline-form {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 10px;
+  align-items: end;
+}
+
 .setup-checks {
   display: grid;
   gap: 10px;
@@ -1386,6 +1407,16 @@ pre {
   border-radius: 8px;
   padding: 0 10px;
   margin-top: 6px;
+}
+
+.inline-form input {
+  margin-top: 0;
+}
+
+@media (max-width: 760px) {
+  .inline-form {
+    grid-template-columns: 1fr;
+  }
 }
 
 .ok-copy {

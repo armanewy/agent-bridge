@@ -2,8 +2,9 @@
 
 ## Pass Criteria
 
-- Simple Mode production capture requires the Chrome extension; clipboard/manual/mock capture is not the production path.
-- The desktop Start page offers `Connect Chrome` when no ChatGPT tabs are synced.
+- Simple Mode's lowest-friction production path is the AgentBridge-owned ChatGPT web window; no browser extension is required for that path.
+- Browser extensions are optional adapters for users who want to bind existing Chrome/Firefox/other browser tabs later.
+- The desktop Start page offers `Open ChatGPT here` when no ChatGPT source is configured.
 - The packaged desktop app opens at 760x940, has minimum size 680x760, and the Start screen has no horizontal scrolling at that size.
 - Simple Mode is progressively disclosed: source first, repo second, Codex/session third, then Create Link/Create Task Card.
 - If Chrome is connected but no ChatGPT tab has been synced, Simple Mode tells the user to sync the existing ChatGPT tab through the extension instead of repeating setup jargon.
@@ -11,6 +12,7 @@
 - Extension heartbeat shows whether Chrome is connected and when it last contacted the desktop app.
 - A Chrome extension can sync an existing ChatGPT tab as a source.
 - A Chrome extension can explicitly capture selected text.
+- AgentBridge can open ChatGPT in its own browser window, bind that window as a source, and capture selected text from it after a user click.
 - The native host persists browser sources and captures locally.
 - The desktop app lists real native-host captures by default; mock capture remains an explicit development action.
 - The desktop app offers `Create Task Card` after the user selects a capture and repo/agent target.
@@ -49,7 +51,7 @@
 ## Known Limitations
 
 - Production builds need a stable Chrome extension ID and Web Store listing URL.
-- Development builds can still use manual extension ID entry under diagnostics.
+- Development builds can still use manual extension ID entry in Settings for optional unpacked-extension testing.
 - The Tasks detail view shows source capture excerpt, TaskSpec, artifacts, delivery attempts, timeline, next action, and verification status.
 - The desktop renderer uses mock data when running outside Electron.
 - Generic Windows app delivery is available at the helper/service level but not yet a polished UI flow.

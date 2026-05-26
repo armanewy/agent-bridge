@@ -9,6 +9,8 @@ interface SetupPanelProps {
   onConfigureNativeHost(): void;
   onConnectChrome(): void;
   onOpenChromeExtensionInstall(): void;
+  onOpenChromeExtensionsPage(): void;
+  onOpenChromeExtensionFolder(): void;
   onRefresh(): void;
   onGoToConnect(): void;
 }
@@ -21,11 +23,14 @@ export function SetupPanel({
   onConfigureNativeHost,
   onConnectChrome,
   onOpenChromeExtensionInstall,
+  onOpenChromeExtensionsPage,
+  onOpenChromeExtensionFolder,
   onRefresh,
   onGoToConnect
 }: SetupPanelProps): JSX.Element {
   const steps = setupSteps(status);
   const isReady = steps.every((step) => step.status === "ready" || step.optional);
+  const showLocalExtensionSetup = status?.extensionIdentityMode === "developmentManual" || status?.mode === "development";
 
   return (
     <div className="setup-layout">
@@ -44,6 +49,44 @@ export function SetupPanel({
           </div>
         ) : null}
 
+        {showLocalExtensionSetup ? (
+          <section className="local-extension-setup">
+            <div>
+              <span className="eyebrow">Local Chrome extension</span>
+              <h3>Load the unpacked extension, then paste its ID here</h3>
+              <p>
+                Use Chrome Developer mode, load the AgentBridge extension folder, copy the extension ID from Chrome,
+                then save it so AgentBridge can register the local bridge.
+              </p>
+            </div>
+            <div className="setup-actions">
+              <button type="button" className="secondary-button" onClick={onOpenChromeExtensionFolder}>
+                Open extension folder
+              </button>
+              <button type="button" className="secondary-button" onClick={onOpenChromeExtensionsPage}>
+                Open Chrome extensions
+              </button>
+            </div>
+            <label className="field-label" htmlFor="extension-id">
+              Chrome extension ID
+            </label>
+            <div className="inline-form">
+              <input
+                id="extension-id"
+                value={extensionId}
+                onChange={(event) => onExtensionIdChange(event.currentTarget.value)}
+                placeholder={status?.extensionId ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+              />
+              <button type="button" className="primary-button" disabled={!extensionId.trim()} onClick={onConfigureNativeHost}>
+                Save ID and connect
+              </button>
+            </div>
+            <p className="muted-help">
+              The extension ID is shown on the AgentBridge card in <strong>chrome://extensions</strong>.
+            </p>
+          </section>
+        ) : null}
+
         <div className="setup-step-list">
           {steps.map((step, index) => (
             <article className={`setup-step ${step.status}`} key={step.id}>
@@ -58,9 +101,11 @@ export function SetupPanel({
         </div>
 
         <div className="setup-actions">
-          <button type="button" className="primary-button" onClick={onConfigureNativeHost}>
-            Connect Chrome
-          </button>
+          {!showLocalExtensionSetup ? (
+            <button type="button" className="primary-button" onClick={onConfigureNativeHost}>
+              Connect Chrome
+            </button>
+          ) : null}
           <button type="button" className="secondary-button" onClick={onConnectChrome}>
             Install or repair Chrome connection
           </button>
@@ -89,20 +134,6 @@ export function SetupPanel({
         </div>
         <details className="advanced-details" open={false}>
           <summary>Show diagnostics</summary>
-          {status?.extensionIdentityMode === "developmentManual" ? (
-            <div className="diagnostic-form">
-              <label className="field-label" htmlFor="extension-id">
-                Development extension ID
-              </label>
-              <input
-                id="extension-id"
-                value={extensionId}
-                onChange={(event) => onExtensionIdChange(event.currentTarget.value)}
-                placeholder={status?.extensionId ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
-              />
-              <p className="muted-help">Manual IDs are only for unpacked development extensions.</p>
-            </div>
-          ) : null}
           <div className="setup-checks">
             {(status?.checks ?? []).map((check) => (
               <article className={`setup-check ${check.status}`} key={check.id}>

@@ -33,11 +33,14 @@
 - Packaged app opens at 760x940 with minimum size 680x760.
 - Start screen fits in the compact window without horizontal scrolling.
 - Simple Mode uses progressive disclosure: show ChatGPT source first, show repo only after the source is readable/synced, and show Codex only after a repo target exists.
+- With no extension configured, Start shows `Open ChatGPT here`.
+- Clicking `Open ChatGPT here` opens ChatGPT in an AgentBridge-owned window and binds it as the source.
+- After selecting text in that AgentBridge-owned ChatGPT window, `Capture selection` saves a real local capture without installing a browser extension.
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
 - Demo capture tools are only under Advanced.
 - Simple Mode does not show clipboard/manual/mock capture as a production path.
-- If no ChatGPT tabs are synced, Start shows `No ChatGPT tabs found` and `Connect Chrome`.
+- If no ChatGPT tabs are synced and an extension is configured, Start shows `No ChatGPT tabs found` and `Connect Chrome`.
 - If Chrome is connected but no ChatGPT tab is synced, Start says to sync the existing ChatGPT tab from the extension and does not show repo/Codex steps yet.
 - Switch Start source mode to `ChatGPT Desktop`, open ChatGPT Desktop, and run `Probe ChatGPT Desktop`.
 - If UIA exposes the current conversation, Start shows a ChatGPT Desktop source candidate with confidence.

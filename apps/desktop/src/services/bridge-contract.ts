@@ -191,8 +191,12 @@ export interface AgentBridgeApi {
   getSetupStatus(): Promise<SetupStatus>;
   getCodexAppServerStatus(): Promise<CodexAppServerStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
-  connectChrome(): Promise<SetupStatus>;
+  connectChrome(input?: ConfigureNativeHostRequest): Promise<SetupStatus>;
   openChromeExtensionInstall(): Promise<void>;
+  openChromeExtensionsPage(): Promise<void>;
+  openChromeExtensionFolder(): Promise<void>;
+  openEmbeddedChatGpt(): Promise<BrowserTabSource>;
+  captureEmbeddedChatGptSelection(): Promise<Capture>;
   selectRepoFolder(): Promise<string | undefined>;
   openDataFolder(): Promise<void>;
   openNativeHostLog(): Promise<void>;

@@ -132,6 +132,7 @@ export function browserTabComponent(source: BrowserTabSource, discoveredAt = sou
     metadata: {
       url: source.url,
       title: source.title,
+      browser: source.browser,
       ...(source.favIconUrl ? { favIconUrl: source.favIconUrl } : {})
     },
     discoveredAt,

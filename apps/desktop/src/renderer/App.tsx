@@ -488,6 +488,7 @@ export function App(): JSX.Element {
     try {
       const nextStatus = await api.configureNativeHost({ ...(extensionId.trim() ? { extensionId } : {}) });
       setSetupStatus(nextStatus);
+      await refresh();
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error));
     }
@@ -496,7 +497,7 @@ export function App(): JSX.Element {
   async function connectChrome(): Promise<void> {
     setSetupError(undefined);
     try {
-      const nextStatus = await api.connectChrome();
+      const nextStatus = await api.connectChrome({ ...(extensionId.trim() ? { extensionId } : {}) });
       setSetupStatus(nextStatus);
       await refresh();
     } catch (error) {
@@ -512,6 +513,48 @@ export function App(): JSX.Element {
       await api.openChromeExtensionInstall();
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openChromeExtensionsPage(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      await api.openChromeExtensionsPage();
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openChromeExtensionFolder(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      await api.openChromeExtensionFolder();
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openEmbeddedChatGpt(): Promise<void> {
+    setLinkError(undefined);
+    try {
+      const source = await api.openEmbeddedChatGpt();
+      await discoverComponents();
+      await refresh();
+      setSelectedSourceComponentId(`component_source_${source.id}`);
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function captureEmbeddedChatGptSelection(): Promise<void> {
+    setLinkError(undefined);
+    try {
+      const capture = await api.captureEmbeddedChatGptSelection();
+      setSelectedCaptureId(capture.id);
+      await discoverComponents();
+      await refresh();
+    } catch (error) {
+      setLinkError(error instanceof Error ? error.message : String(error));
     }
   }
 
@@ -600,6 +643,8 @@ export function App(): JSX.Element {
               onOpenAdvanced={() => setView("advanced")}
               onOpenSettings={() => setView("settings")}
               onProbeDesktopApps={() => void discoverComponents()}
+              onOpenEmbeddedChatGpt={() => void openEmbeddedChatGpt()}
+              onCaptureEmbeddedChatGptSelection={() => void captureEmbeddedChatGptSelection()}
               onConnectChrome={() => void connectChrome()}
               onCheckChromeConnection={() => void refresh()}
             />
@@ -652,6 +697,8 @@ export function App(): JSX.Element {
               onConfigureNativeHost={() => void configureNativeHost()}
               onConnectChrome={() => void connectChrome()}
               onOpenChromeExtensionInstall={() => void openChromeExtensionInstall()}
+              onOpenChromeExtensionsPage={() => void openChromeExtensionsPage()}
+              onOpenChromeExtensionFolder={() => void openChromeExtensionFolder()}
               onRefresh={() => void refresh()}
               onGoToConnect={() => setView("start")}
             />
