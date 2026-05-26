@@ -80,6 +80,27 @@ export interface VerificationRunResponse {
   artifacts: Artifact[];
 }
 
+export type SetupCheckStatus = "ready" | "warning" | "missing";
+
+export interface SetupCheck {
+  id: string;
+  label: string;
+  status: SetupCheckStatus;
+  details: string;
+}
+
+export interface SetupStatus {
+  checks: SetupCheck[];
+  extensionId?: string;
+  nativeHostManifestPath?: string;
+  nativeHostLauncherPath?: string;
+  storePath: string;
+}
+
+export interface ConfigureNativeHostRequest {
+  extensionId: string;
+}
+
 export interface AgentBridgeApi {
   listSources(): Promise<SourceEndpoint[]>;
   listTargets(): Promise<TargetEndpoint[]>;
@@ -93,6 +114,8 @@ export interface AgentBridgeApi {
   configureCodexTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget>;
   deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult>;
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
+  getSetupStatus(): Promise<SetupStatus>;
+  configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
   bindMockBrowserSource(): Promise<BrowserTabSource>;
   listAuditEvents(): Promise<AuditEvent[]>;
   clearAuditEvents(): Promise<void>;

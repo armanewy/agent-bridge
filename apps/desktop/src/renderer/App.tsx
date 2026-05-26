@@ -8,6 +8,7 @@ import {
   Link2,
   Monitor,
   RefreshCw,
+  Settings,
   ShieldAlert
 } from "lucide-react";
 import type {
@@ -20,15 +21,16 @@ import type {
   TargetEndpoint,
   Transform
 } from "@agentbridge/core";
-import type { CodexDeliveryResult, DeliveryPreview } from "../services/bridge-contract.js";
+import type { CodexDeliveryResult, DeliveryPreview, SetupStatus } from "../services/bridge-contract.js";
 import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
 import { HandoffPreview } from "../components/handoff-preview/HandoffPreview.js";
 import { LinkManager } from "../components/link-manager/LinkManager.js";
 import { MissionPanel } from "../components/mission/MissionPanel.js";
+import { SetupPanel } from "../components/setup/SetupPanel.js";
 
-type View = "home" | "missions" | "sources" | "targets" | "links" | "audit";
+type View = "home" | "setup" | "missions" | "sources" | "targets" | "links" | "audit";
 
 const api = getAgentBridgeApi();
 
@@ -48,6 +50,9 @@ export function App(): JSX.Element {
   const [lintCommand, setLintCommand] = useState("");
   const [typecheckCommand, setTypecheckCommand] = useState("");
   const [targetError, setTargetError] = useState<string | undefined>();
+  const [setupError, setSetupError] = useState<string | undefined>();
+  const [setupStatus, setSetupStatus] = useState<SetupStatus | undefined>();
+  const [extensionId, setExtensionId] = useState("");
   const [preview, setPreview] = useState<DeliveryPreview | undefined>();
   const [deliveryResult, setDeliveryResult] = useState<CodexDeliveryResult | undefined>();
 
@@ -61,13 +66,14 @@ export function App(): JSX.Element {
   }, []);
 
   async function refresh(): Promise<void> {
-    const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents, nextMissions] = await Promise.all([
+    const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents, nextMissions, nextSetupStatus] = await Promise.all([
       api.listSources(),
       api.listTargets(),
       api.listLinks(),
       api.listCaptures(),
       api.listAuditEvents(),
-      api.listMissions()
+      api.listMissions(),
+      api.getSetupStatus()
     ]);
     setSources(nextSources);
     setTargets(nextTargets);
@@ -75,6 +81,8 @@ export function App(): JSX.Element {
     setCaptures(nextCaptures);
     setAuditEvents(nextAuditEvents);
     setMissions(nextMissions);
+    setSetupStatus(nextSetupStatus);
+    setExtensionId((current) => current || nextSetupStatus.extensionId || "");
     const nextSelectedMissionId = selectedMissionId ?? nextMissions[0]?.id;
     setSelectedMissionId(nextSelectedMissionId);
     setMissionDetail(nextSelectedMissionId ? await api.getMissionDetail(nextSelectedMissionId) : undefined);
@@ -183,6 +191,16 @@ export function App(): JSX.Element {
     setMissionDetail(nextMissionDetail);
   }
 
+  async function configureNativeHost(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      const nextStatus = await api.configureNativeHost({ extensionId });
+      setSetupStatus(nextStatus);
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
   async function clearAudit(): Promise<void> {
     await api.clearAuditEvents();
     await refresh();
@@ -200,6 +218,7 @@ export function App(): JSX.Element {
         </div>
         <nav aria-label="Main navigation">
           <NavButton icon={<ClipboardCheck size={18} />} label="Home" active={view === "home"} onClick={() => setView("home")} />
+          <NavButton icon={<Settings size={18} />} label="Setup" active={view === "setup"} onClick={() => setView("setup")} />
           <NavButton
             icon={<ClipboardList size={18} />}
             label="Missions"
@@ -279,6 +298,17 @@ export function App(): JSX.Element {
 
         {view === "sources" ? (
           <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
+        ) : null}
+
+        {view === "setup" ? (
+          <SetupPanel
+            status={setupStatus}
+            extensionId={extensionId}
+            setupError={setupError}
+            onExtensionIdChange={setExtensionId}
+            onConfigureNativeHost={() => void configureNativeHost()}
+            onRefresh={() => void refresh()}
+          />
         ) : null}
 
         {view === "missions" ? (
@@ -435,6 +465,7 @@ function describeTarget(target: TargetEndpoint): { title: string; subtitle: stri
 function titleForView(view: View): string {
   return {
     home: "Dashboard",
+    setup: "Setup",
     missions: "Missions",
     sources: "Sources",
     targets: "Targets",
@@ -446,6 +477,7 @@ function titleForView(view: View): string {
 function subtitleForView(view: View): string {
   return {
     home: "Bind, transform, preview, and deliver local handoffs.",
+    setup: "Native host registration, extension health, and local readiness.",
     missions: "Durable task cards, artifacts, repo context, and verification state.",
     sources: "Browser tab sources captured through explicit user actions.",
     targets: "Codex deep links and Windows desktop windows.",

@@ -452,7 +452,7 @@ pre {
   }
 
   nav {
-    grid-template-columns: repeat(6, minmax(0, 1fr));
+    grid-template-columns: repeat(7, minmax(0, 1fr));
   }
 
   .nav-button {
@@ -599,4 +599,55 @@ pre {
 .verification-summary {
   margin: 10px 0 0;
   color: #25313a;
+}
+
+.setup-layout {
+  display: grid;
+  grid-template-columns: minmax(300px, 0.45fr) minmax(0, 1fr);
+  gap: 16px;
+  align-items: start;
+}
+
+.setup-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.setup-checks {
+  display: grid;
+  gap: 10px;
+}
+
+.setup-check {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  gap: 4px;
+}
+
+.setup-check.ready {
+  border-color: #81b79e;
+  background: #f2faf6;
+}
+
+.setup-check.warning {
+  border-color: #f0d099;
+  background: #fff8eb;
+}
+
+.setup-check.missing {
+  border-color: #efb1aa;
+  background: #fff5f3;
+}
+
+.setup-check span {
+  font-weight: 700;
+}
+
+.setup-check small {
+  color: #64737f;
+  overflow-wrap: anywhere;
 }

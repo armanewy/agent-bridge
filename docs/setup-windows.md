@@ -37,12 +37,21 @@ Open `http://127.0.0.1:5173`.
 
 ## Register Native Host
 
-1. Copy `apps/native-host/manifest/windows.com.agentbridge.native_host.json`.
-2. Replace the host `path` and `allowed_origins` extension ID.
-3. Register it:
+The desktop Setup view can generate and register the development native-host manifest after you paste the unpacked Chrome extension ID.
+
+Manual setup is also available:
+
+1. Build the native host with `pnpm --filter @agentbridge/native-host build`.
+2. Generate a launcher and manifest:
 
    ```powershell
-   powershell -ExecutionPolicy Bypass -File scripts/register-native-host-windows.ps1 -ManifestPath C:\path\to\manifest.json
+   powershell -ExecutionPolicy Bypass -File scripts/generate-native-host-manifest-windows.ps1 -ExtensionId <chrome-extension-id> -NativeHostScriptPath .\apps\native-host\dist\src\index.js
+   ```
+
+3. Register the generated manifest:
+
+   ```powershell
+   powershell -ExecutionPolicy Bypass -File scripts/register-native-host-windows.ps1 -ManifestPath "$env:LOCALAPPDATA\AgentBridge\com.agentbridge.native_host.json"
    ```
 
 Unregister:
@@ -64,6 +73,7 @@ Set `AGENTBRIDGE_STORE_DIR` to override it.
 ## Known Limitations
 
 - Native host registration requires the unpacked extension ID.
+- The extension popup Health check is still the source of truth for extension-to-native-host connectivity.
 - Electron packaging is not signed.
 - Codex deep links create new threads only.
 - Windows UI Automation support varies by target app.

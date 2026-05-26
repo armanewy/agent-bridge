@@ -9,7 +9,13 @@ import { CodexTargetService } from "../services/codex-target-service.js";
 import { WindowsTargetService } from "../services/windows-target-service.js";
 import { MissionService } from "../services/mission-service.js";
 import { VerificationService } from "../services/verification-service.js";
-import type { CodexDeliveryRequest, PreviewRequest, VerificationRunRequest } from "../services/bridge-contract.js";
+import { SetupService } from "../services/setup-service.js";
+import type {
+  CodexDeliveryRequest,
+  ConfigureNativeHostRequest,
+  PreviewRequest,
+  VerificationRunRequest
+} from "../services/bridge-contract.js";
 import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
 
@@ -43,6 +49,7 @@ app.whenReady().then(async () => {
   const transformService = new TransformService(store);
   const missionService = new MissionService(store);
   const verificationService = new VerificationService(store);
+  const setupService = new SetupService(store);
   const windowsTargetService = new WindowsTargetService();
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
 
@@ -69,6 +76,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));
   ipcMain.handle("agentbridge:runVerification", (_event, input: VerificationRunRequest) =>
     verificationService.runVerification(input)
+  );
+  ipcMain.handle("agentbridge:getSetupStatus", () => setupService.getStatus());
+  ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
+    setupService.configureNativeHost(input)
   );
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());

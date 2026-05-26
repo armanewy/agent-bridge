@@ -2,6 +2,7 @@ import { contextBridge, ipcRenderer } from "electron";
 import type {
   AgentBridgeApi,
   CodexDeliveryRequest,
+  ConfigureNativeHostRequest,
   PreviewRequest,
   VerificationRunRequest
 } from "../services/bridge-contract.js";
@@ -23,6 +24,8 @@ const api: AgentBridgeApi = {
     ipcRenderer.invoke("agentbridge:configureCodexTarget", repoPath, commands),
   deliverToCodex: (input: CodexDeliveryRequest) => ipcRenderer.invoke("agentbridge:deliverToCodex", input),
   runVerification: (input: VerificationRunRequest) => ipcRenderer.invoke("agentbridge:runVerification", input),
+  getSetupStatus: () => ipcRenderer.invoke("agentbridge:getSetupStatus"),
+  configureNativeHost: (input: ConfigureNativeHostRequest) => ipcRenderer.invoke("agentbridge:configureNativeHost", input),
   bindMockBrowserSource: () => ipcRenderer.invoke("agentbridge:bindMockBrowserSource"),
   listAuditEvents: () => ipcRenderer.invoke("agentbridge:listAuditEvents"),
   clearAuditEvents: () => ipcRenderer.invoke("agentbridge:clearAuditEvents")

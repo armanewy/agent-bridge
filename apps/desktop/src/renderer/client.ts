@@ -2,11 +2,13 @@ import type {
   AgentBridgeApi,
   CodexDeliveryRequest,
   CodexDeliveryResult,
+  ConfigureNativeHostRequest,
   DeliveryPreview,
   MissionDetail,
   PreviewRequest,
   VerificationRunRequest,
   VerificationRunResponse,
+  SetupStatus,
   WindowRevalidation
 } from "../services/bridge-contract.js";
 import type {
@@ -49,6 +51,7 @@ let mockCaptures: Capture[] = [mockCapture];
 let mockAuditEvents: AuditEvent[] = [];
 let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
+let mockExtensionId = "";
 
 export function getAgentBridgeApi(): AgentBridgeApi {
   return window.agentBridge ?? createMockAgentBridgeApi();
@@ -308,12 +311,49 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       );
       return { run, result, artifacts: [artifact] };
     },
+    async getSetupStatus(): Promise<SetupStatus> {
+      return mockSetupStatus();
+    },
+    async configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus> {
+      mockExtensionId = input.extensionId.trim();
+      return mockSetupStatus();
+    },
     async listAuditEvents() {
       return mockAuditEvents;
     },
     async clearAuditEvents() {
       mockAuditEvents = [];
     }
+  };
+}
+
+function mockSetupStatus(): SetupStatus {
+  return {
+    ...(mockExtensionId ? { extensionId: mockExtensionId } : {}),
+    ...(mockExtensionId ? { nativeHostManifestPath: "mock://com.agentbridge.native_host.json" } : {}),
+    ...(mockExtensionId ? { nativeHostLauncherPath: "mock://agentbridge-native-host.cmd" } : {}),
+    storePath: "mock://AgentBridge",
+    checks: [
+      { id: "storeWritable", label: "Local store writable", status: "ready", details: "mock://AgentBridge" },
+      {
+        id: "extensionId",
+        label: "Chrome extension ID configured",
+        status: mockExtensionId ? "ready" : "missing",
+        details: mockExtensionId || "No extension ID saved."
+      },
+      {
+        id: "nativeHostManifest",
+        label: "Native host manifest registered",
+        status: mockExtensionId ? "ready" : "missing",
+        details: mockExtensionId ? "Mock manifest registered." : "No registry entry found."
+      },
+      {
+        id: "extensionHealth",
+        label: "Extension health check",
+        status: "warning",
+        details: "Run Health check from the extension popup after registration."
+      }
+    ]
   };
 }
 
