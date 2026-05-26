@@ -2,7 +2,7 @@
   color: #172026;
   background: #f3f5f7;
   font-family:
-    Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI",
+    "Segoe UI", Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont,
     sans-serif;
   font-synthesis: none;
   text-rendering: optimizeLegibility;
@@ -42,23 +42,26 @@ button:focus-visible {
 .app-shell {
   min-height: 100vh;
   display: grid;
-  grid-template-columns: 248px minmax(0, 1fr);
+  grid-template-columns: 76px minmax(0, 1fr);
+  overflow-x: hidden;
 }
 
 .sidebar {
   background: #11181d;
   color: #f8fafc;
-  padding: 20px 14px;
+  padding: 16px 10px;
   display: flex;
   flex-direction: column;
   gap: 24px;
+  align-items: center;
 }
 
 .brand {
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 0 6px;
+  padding: 0;
+  justify-content: center;
 }
 
 .brand-mark {
@@ -75,6 +78,11 @@ button:focus-visible {
 .brand strong,
 .brand small {
   display: block;
+}
+
+.brand div,
+.nav-button span {
+  display: none;
 }
 
 .brand small {
@@ -96,9 +104,10 @@ nav {
   gap: 10px;
   width: 100%;
   min-height: 42px;
-  padding: 10px 12px;
+  padding: 10px;
   border-radius: 8px;
   text-align: left;
+  justify-content: center;
 }
 
 .nav-button:hover,
@@ -114,7 +123,9 @@ nav {
 }
 
 .workspace {
-  padding: 24px;
+  min-width: 0;
+  overflow-x: hidden;
+  padding: 18px;
   display: grid;
   gap: 18px;
   align-content: start;
@@ -125,6 +136,7 @@ nav {
   justify-content: space-between;
   gap: 16px;
   align-items: center;
+  min-width: 0;
 }
 
 .topbar > div,
@@ -172,6 +184,133 @@ nav {
 .workbench-layout {
   display: grid;
   gap: 14px;
+  min-width: 0;
+}
+
+.intent-panel {
+  display: grid;
+  gap: 12px;
+  min-width: 0;
+}
+
+.intent-input {
+  min-height: 104px;
+}
+
+.intent-actions,
+.steering-row {
+  display: flex;
+  gap: 10px;
+  align-items: end;
+  flex-wrap: wrap;
+}
+
+.intent-actions .field-label {
+  display: grid;
+  gap: 6px;
+  min-width: 150px;
+}
+
+.intent-actions select,
+.steering-row input {
+  min-height: 40px;
+  border: 1px solid #c8d2db;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #172026;
+}
+
+.steering-row input {
+  flex: 1 1 240px;
+}
+
+.mission-timeline {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+}
+
+.timeline-step {
+  border: 1px solid #dce3e9;
+  border-radius: 999px;
+  padding: 5px 9px;
+  color: #64737f;
+  background: #f5f7f9;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.timeline-step.active {
+  color: #0f563f;
+  background: #e4f5ed;
+  border-color: #b9dccf;
+}
+
+.latest-provider-event {
+  margin: 0;
+  color: #526270;
+  font-size: 13px;
+}
+
+.pending-decision {
+  border: 1px solid #f1c86b;
+  border-radius: 8px;
+  background: #fff8e8;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+}
+
+.artifact-tray {
+  display: grid;
+  gap: 10px;
+}
+
+.artifact-tray-list {
+  display: grid;
+  gap: 8px;
+}
+
+.artifact-tray-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+  align-items: center;
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #ffffff;
+  padding: 10px;
+}
+
+.artifact-tray-row span {
+  display: block;
+  color: #64737f;
+  font-size: 13px;
+}
+
+.artifact-tray-row em {
+  color: #64737f;
+  font-style: normal;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.artifact-actions {
+  display: flex;
+  gap: 6px;
+}
+
+.workbench-details {
+  display: grid;
+  gap: 12px;
+}
+
+.workbench-details > summary {
+  cursor: pointer;
+  font-weight: 700;
+  color: #445664;
+  padding: 8px 0;
 }
 
 .workbench-repo-strip {
@@ -644,6 +783,7 @@ nav {
   border-radius: 8px;
   padding: 18px;
   box-shadow: 0 1px 2px rgba(17, 24, 29, 0.04);
+  min-width: 0;
 }
 
 .panel-heading {

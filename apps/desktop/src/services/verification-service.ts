@@ -16,17 +16,37 @@ import type {
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { VerificationRunRequest, VerificationRunResponse } from "./bridge-contract.js";
+import { PlatformService } from "./platform-service.js";
 
 const execFileAsync = promisify(execFile);
+const DEFAULT_MAX_BUFFER_BYTES = 1024 * 1024;
 
 export interface CommandExecution {
   exitCode: number;
   stdout: string;
   stderr: string;
   durationMs: number;
+  platform?: string;
+  shell?: string;
+  cwd?: string;
 }
 
 export type CommandRunner = (command: VerificationCommand, cwd: string) => Promise<CommandExecution>;
+
+export class PlatformCommandRunner {
+  constructor(
+    private readonly platformService = new PlatformService(),
+    private readonly timeoutMs = 10 * 60 * 1000,
+    private readonly maxBufferBytes = DEFAULT_MAX_BUFFER_BYTES
+  ) {}
+
+  run: CommandRunner = async (command, cwd) => runShellCommand(command, cwd, {
+    shell: this.platformService.getDefaultShell(),
+    platform: this.platformService.getPlatform(),
+    timeoutMs: this.timeoutMs,
+    maxBufferBytes: this.maxBufferBytes
+  });
+}
 
 export class VerificationService {
   constructor(
@@ -170,7 +190,10 @@ export class VerificationService {
       metadata: {
         command: command.command,
         exitCode: output.exitCode,
-        durationMs: output.durationMs
+        durationMs: output.durationMs,
+        platform: output.platform,
+        shell: output.shell,
+        cwd: output.cwd
       },
       createdAt: new Date().toISOString()
     };
@@ -393,6 +416,9 @@ function formatCommandOutput(output: CommandExecution): string {
   return [
     `exitCode: ${output.exitCode}`,
     `durationMs: ${output.durationMs}`,
+    ...(output.platform ? [`platform: ${output.platform}`] : []),
+    ...(output.shell ? [`shell: ${output.shell}`] : []),
+    ...(output.cwd ? [`cwd: ${output.cwd}`] : []),
     "",
     "stdout:",
     output.stdout.trim(),
@@ -428,16 +454,34 @@ async function readGitDiffSummary(repoPath: string): Promise<string> {
   }
 }
 
-async function runShellCommand(command: VerificationCommand, cwd: string): Promise<CommandExecution> {
+async function runShellCommand(
+  command: VerificationCommand,
+  cwd: string,
+  options: { shell?: string; platform?: string; timeoutMs?: number; maxBufferBytes?: number } = {}
+): Promise<CommandExecution> {
   const started = Date.now();
   return new Promise((resolve) => {
-    exec(command.command, { cwd, windowsHide: true, maxBuffer: 1024 * 1024 }, (error, stdout, stderr) => {
-      resolve({
+    exec(command.command, {
+      cwd,
+      ...(options.shell ? { shell: options.shell } : {}),
+      timeout: options.timeoutMs,
+      windowsHide: true,
+      maxBuffer: options.maxBufferBytes ?? DEFAULT_MAX_BUFFER_BYTES
+    }, (error, stdout, stderr) => {
+      const output: CommandExecution = {
         exitCode: exitCodeFromError(error),
         stdout,
         stderr,
-        durationMs: Date.now() - started
-      });
+        durationMs: Date.now() - started,
+        cwd
+      };
+      if (options.platform) {
+        output.platform = options.platform;
+      }
+      if (options.shell) {
+        output.shell = options.shell;
+      }
+      resolve(output);
     });
   });
 }

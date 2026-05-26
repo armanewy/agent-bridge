@@ -8,6 +8,8 @@ import { CodexAppServerClient, type CodexAppServerTransport } from "../src/servi
 import { CodexSessionService } from "../src/services/codex-session-service.js";
 import { CodexTargetService } from "../src/services/codex-target-service.js";
 import { CODEX_EXECUTOR_PROVIDER_ID, CodexExecutorProvider } from "../src/services/providers/codex-executor-provider.js";
+import { ArtifactBrokerService } from "../src/services/artifact-broker-service.js";
+import { PlatformService } from "../src/services/platform-service.js";
 
 let tempDir: string;
 
@@ -16,7 +18,7 @@ beforeEach(async () => {
 });
 
 afterEach(async () => {
-  await rm(tempDir, { recursive: true, force: true });
+  await rm(tempDir, { recursive: true, force: true, maxRetries: 3, retryDelay: 50 });
 });
 
 describe("CodexExecutorProvider", () => {
@@ -85,6 +87,35 @@ describe("CodexExecutorProvider", () => {
     ]);
     expect(result.deliveryMode).toBe("existingSession");
     expect(result.metadata.codexTurnId).toBe("turn_123");
+    await expect(store.listAgentEvents({ providerId: CODEX_EXECUTOR_PROVIDER_ID })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "turn.completed" }),
+        expect.objectContaining({ type: "turn.started" })
+      ])
+    );
+  });
+
+  it("steers an existing app-server Codex turn", async () => {
+    const calls: Array<{ method: string; params?: unknown }> = [];
+    const transport: CodexAppServerTransport = {
+      async request(method, params) {
+        calls.push({ method, params });
+        return { turnId: "turn_123", accepted: true };
+      }
+    };
+    const appServerClient = new CodexAppServerClient({ transport });
+    const store = new JsonFileStore(tempDir);
+    const session = existingCodexSession("appServer");
+    await store.saveAgentSession({ ...session, metadata: { ...session.metadata, codexTurnId: "turn_123" } });
+    const provider = createProvider(store, { appServerClient });
+
+    const turn = await provider.steerTurn(session, "Use the smaller fix.", { missionId: "mission_2" });
+
+    expect(turn.metadata.source).toBe("autopilotSteering");
+    expect(calls).toEqual([
+      { method: "turn/steer", params: { threadId: "thread_123", input: { type: "text", text: "Use the smaller fix." }, turnId: "turn_123" } }
+    ]);
+    await expect(store.listAgentEvents({ type: "turn.steer" })).resolves.toHaveLength(1);
   });
 
   it("opens an existing thread without claiming prompt injection when app-server is unavailable", async () => {
@@ -107,16 +138,43 @@ describe("CodexExecutorProvider", () => {
     expect(result.deliveryMode).toBe("openOnlyFallback");
     expect(result.warnings).toEqual([expect.stringContaining("Prompt was staged")]);
   });
+
+  it("stages artifact files and includes a manifest in the Codex prompt", async () => {
+    const store = new JsonFileStore(tempDir);
+    const broker = new ArtifactBrokerService(store, new PlatformService({ platform: "win32", userDataDir: tempDir }), fixedNow);
+    const file = await broker.importGeneratedTextAsFile("mission_4", "notes.md", "Executor context", {
+      classification: "document"
+    });
+    const provider = createProvider(store, { artifactBroker: broker });
+
+    const result = await provider.sendTask({
+      missionId: "mission_4",
+      taskSpec: sampleTaskSpec(),
+      repoContext: { repoPath: tempDir },
+      fileIds: [file.id],
+      dryRun: true,
+      metadata: {}
+    });
+
+    const turns = await store.listAgentTurns(result.sessionRef?.id ?? "");
+    expect(turns[0]?.content).toContain("AgentBridge staged artifacts:");
+    expect(turns[0]?.content).toContain("notes.md");
+    expect(result.metadata.stagedFilePaths).toEqual([expect.stringContaining(file.id)]);
+  });
 });
 
 function createProvider(
   store: JsonFileStore,
-  options: { appServerClient?: CodexAppServerClient; openExternal?: (url: string) => Promise<void> } = {}
+  options: {
+    appServerClient?: CodexAppServerClient;
+    openExternal?: (url: string) => Promise<void>;
+    artifactBroker?: ArtifactBrokerService;
+  } = {}
 ): CodexExecutorProvider {
   const appServerClient = options.appServerClient ?? new CodexAppServerClient();
   const sessionService = new CodexSessionService(store, appServerClient);
   const targetService = new CodexTargetService(store, options.openExternal, appServerClient);
-  return new CodexExecutorProvider(store, sessionService, targetService, appServerClient, fixedNow);
+  return new CodexExecutorProvider(store, sessionService, targetService, appServerClient, fixedNow, {}, options.artifactBroker);
 }
 
 function existingCodexSession(integrationMode: "deepLink" | "appServer"): AgentSessionRef {

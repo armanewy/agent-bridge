@@ -21,7 +21,7 @@ import type {
   Transform,
   WorkflowLink
 } from "@agentbridge/core";
-import type { CodexAppServerStatus, CodexDeliveryResult, DeliveryPreview, SetupStatus } from "../services/bridge-contract.js";
+import type { AutopilotStatus, CodexAppServerStatus, CodexDeliveryResult, DeliveryPreview, PlatformStatus, SetupStatus } from "../services/bridge-contract.js";
 import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
 import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
@@ -65,7 +65,9 @@ export function App(): JSX.Element {
   const [targetError, setTargetError] = useState<string | undefined>();
   const [setupError, setSetupError] = useState<string | undefined>();
   const [setupStatus, setSetupStatus] = useState<SetupStatus | undefined>();
+  const [platformStatus, setPlatformStatus] = useState<PlatformStatus | undefined>();
   const [codexAppServerStatus, setCodexAppServerStatus] = useState<CodexAppServerStatus | undefined>();
+  const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus | undefined>();
   const [extensionId, setExtensionId] = useState("");
   const [selectedCaptureId, setSelectedCaptureId] = useState<string | undefined>();
   const [selectedSourceId, setSelectedSourceId] = useState<string | undefined>();
@@ -147,6 +149,7 @@ export function App(): JSX.Element {
       nextAuditEvents,
       nextMissions,
       nextSetupStatus,
+      nextPlatformStatus,
       nextCodexAppServerStatus,
       nextProviderProfiles,
       nextAgentSessions
@@ -160,6 +163,7 @@ export function App(): JSX.Element {
       api.listAuditEvents(),
       api.listMissions(),
       api.getSetupStatus(),
+      api.getPlatformStatus(),
       api.getCodexAppServerStatus(),
       api.listProviders(),
       api.listAgentSessions("codex")
@@ -176,6 +180,7 @@ export function App(): JSX.Element {
     setAuditEvents(nextAuditEvents);
     setMissions(nextMissions);
     setSetupStatus(nextSetupStatus);
+    setPlatformStatus(nextPlatformStatus);
     setCodexAppServerStatus(nextCodexAppServerStatus);
     setProviderProfiles(nextProviderProfiles);
     setAgentSessions(nextAgentSessions);
@@ -209,13 +214,19 @@ export function App(): JSX.Element {
     const nextSelectedMissionId = selectedMissionIdRef.current ?? nextMissions[0]?.id;
     selectedMissionIdRef.current = nextSelectedMissionId;
     setSelectedMissionId(nextSelectedMissionId);
-    setMissionDetail(nextSelectedMissionId ? await api.getMissionDetail(nextSelectedMissionId) : undefined);
+    const [nextMissionDetail, nextAutopilotStatus] = nextSelectedMissionId
+      ? await Promise.all([api.getMissionDetail(nextSelectedMissionId), api.getAutopilotStatus(nextSelectedMissionId)])
+      : [undefined, undefined];
+    setMissionDetail(nextMissionDetail);
+    setAutopilotStatus(nextAutopilotStatus);
   }
 
   async function selectMission(id: string): Promise<void> {
     selectedMissionIdRef.current = id;
     setSelectedMissionId(id);
-    setMissionDetail(await api.getMissionDetail(id));
+    const [nextMissionDetail, nextAutopilotStatus] = await Promise.all([api.getMissionDetail(id), api.getAutopilotStatus(id)]);
+    setMissionDetail(nextMissionDetail);
+    setAutopilotStatus(nextAutopilotStatus);
   }
 
   async function bindMockSource(): Promise<void> {
@@ -508,6 +519,54 @@ export function App(): JSX.Element {
     }
   }
 
+  async function startAutopilotMission(intent: string, mode: "manual" | "supervised" | "autonomous"): Promise<void> {
+    setWorkbenchError(undefined);
+    try {
+      if (!codexTarget) {
+        throw new Error("Choose a repo before starting a mission.");
+      }
+      const mission = await api.createWorkbenchMission({
+        title: intent.trim().split(/\r?\n/)[0]?.slice(0, 80) || "Workbench mission",
+        goal: intent.trim(),
+        repoContext: {
+          repoPath: codexTarget.repoPath,
+          ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
+          ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
+          ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
+        }
+      });
+      selectedMissionIdRef.current = mission.id;
+      setSelectedMissionId(mission.id);
+      const nextStatus = await api.startAutopilot(mission.id, `policy_${mode}_default`);
+      setAutopilotStatus(nextStatus);
+      await refreshMission(mission.id);
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function stopAutopilot(runId: string): Promise<void> {
+    setAutopilotStatus(await api.stopAutopilot(runId));
+  }
+
+  async function continueAutopilot(runId: string): Promise<void> {
+    setAutopilotStatus(await api.continueAutopilot(runId));
+    if (selectedMissionIdRef.current) {
+      await refreshMission(selectedMissionIdRef.current);
+    }
+  }
+
+  async function steerAutopilot(runId: string, text: string): Promise<void> {
+    setAutopilotStatus(await api.steerAutopilot(runId, text));
+  }
+
+  async function resolvePendingDecision(decisionId: string, selectedOption: string): Promise<void> {
+    setAutopilotStatus(await api.resolvePendingDecision(decisionId, selectedOption));
+    if (selectedMissionIdRef.current) {
+      await refreshMission(selectedMissionIdRef.current);
+    }
+  }
+
   async function askWorkbenchPlanner(text: string): Promise<void> {
     setWorkbenchError(undefined);
     try {
@@ -561,16 +620,18 @@ export function App(): JSX.Element {
   }
 
   async function refreshMission(missionId: string): Promise<void> {
-    const [nextMissions, nextMissionDetail, nextSessions] = await Promise.all([
+    const [nextMissions, nextMissionDetail, nextSessions, nextAutopilotStatus] = await Promise.all([
       api.listMissions(),
       api.getMissionDetail(missionId),
-      api.listAgentSessions("codex")
+      api.listAgentSessions("codex"),
+      api.getAutopilotStatus(missionId)
     ]);
     setMissions(nextMissions);
     setAgentSessions(nextSessions);
     selectedMissionIdRef.current = missionId;
     setSelectedMissionId(missionId);
     setMissionDetail(nextMissionDetail);
+    setAutopilotStatus(nextAutopilotStatus);
   }
 
   async function deliverHandoffCard(missionId: string, handoffCardId: string, dryRun: boolean): Promise<void> {
@@ -722,6 +783,7 @@ export function App(): JSX.Element {
             agentSessions={agentSessions}
             providerProfiles={providerProfiles}
             codexAppServerStatus={codexAppServerStatus}
+            autopilotStatus={autopilotStatus}
             error={workbenchError}
             onChooseRepo={() => void chooseRepoFolder()}
             onSelectMission={(id) => void selectMission(id)}
@@ -733,6 +795,11 @@ export function App(): JSX.Element {
             onAskPlannerToReview={() => void askPlannerToReviewVerification()}
             onCreateFollowUp={() => void createWorkbenchFollowUp()}
             onSendFollowUp={(sessionRefId) => void sendWorkbenchFollowUp(sessionRefId)}
+            onStartMission={(intent, mode) => void startAutopilotMission(intent, mode)}
+            onStopAutopilot={(runId) => void stopAutopilot(runId)}
+            onContinueAutopilot={(runId) => void continueAutopilot(runId)}
+            onSteerAutopilot={(runId, text) => void steerAutopilot(runId, text)}
+            onResolvePendingDecision={(decisionId, selectedOption) => void resolvePendingDecision(decisionId, selectedOption)}
           />
         ) : null}
 
@@ -740,6 +807,7 @@ export function App(): JSX.Element {
           <div className="settings-layout">
             <ProviderSettingsPanel
               profiles={providerProfiles}
+              platformStatus={platformStatus}
               codexAppServerStatus={codexAppServerStatus}
               codexTarget={codexTarget}
               onRefresh={() => void refresh()}
@@ -1092,11 +1160,13 @@ function CodexAppServerPanel({
 
 function ProviderSettingsPanel({
   profiles,
+  platformStatus,
   codexAppServerStatus,
   codexTarget,
   onRefresh
 }: {
   profiles: AgentProviderProfile[];
+  platformStatus?: PlatformStatus | undefined;
   codexAppServerStatus?: CodexAppServerStatus | undefined;
   codexTarget?: CodexDeepLinkTarget | undefined;
   onRefresh(): void;
@@ -1135,6 +1205,12 @@ function ProviderSettingsPanel({
           <strong>Repo settings</strong>
           <span>{codexTarget ? codexTarget.repoPath : "No repo selected"}</span>
           <small>Verification commands are configured in the Repo and Codex panel below.</small>
+        </article>
+        <article className="setup-check">
+          <strong>Platform</strong>
+          <span>{platformStatus?.capabilities.platform ?? "unknown"}</span>
+          <small>Shell: {platformStatus?.defaultShell ?? "unknown"}</small>
+          <small>Codex deep links: {platformStatus?.capabilities.canUseCodexDeepLinks ? "available" : "unavailable"}</small>
         </article>
       </div>
       {!codexAppServerStatus?.available ? (

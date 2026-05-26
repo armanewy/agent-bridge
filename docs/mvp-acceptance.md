@@ -10,6 +10,14 @@
 - Workbench shows OpenAI Planner status and `needsAuth` when no API key is configured.
 - Workbench shows Codex delivery status and whether existing-thread continuation is App Server capable or open-only fallback.
 - User can choose a repo, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
+- User can choose a repo, enter one intent, select Manual/Supervised/Autonomous, and start an Autopilot mission.
+- Autopilot creates durable steps for planning, TaskSpec creation, Codex delivery, verification, Planner review, follow-up, steering, and approval requests.
+- Autopilot stops when verification passes, max iterations are reached, the user stops it, a provider fails, or an approval/risk boundary is hit.
+- Steering text is stored as a mission artifact and is sent to Codex through App Server `turn/steer` when an active App Server session is available.
+- Codex provider events are stored locally for turn start, turn completion/failure, errors, and steering.
+- The Workbench shows the current timeline, pending approval cards, latest provider event, and a steering input without expanding raw provider details.
+- Mission artifacts include planner responses, TaskSpec, Codex prompt, delivery result, verification logs, git diff, Planner review, follow-up prompt, and local artifact files where produced.
+- Artifact file exchange is local-first: files are stored under the AgentBridge artifact root, staged separately for Codex, and never written into the repo or uploaded without policy support.
 - WorkflowLink, LinkableComponent, browser captures, ChatGPT Desktop, extension setup, and demo tools are hidden under Advanced.
 - If Chrome is connected but no ChatGPT tab has been synced, only the Advanced legacy link center discusses syncing external ChatGPT tabs.
 - The desktop app registers or repairs the native messaging host for the configured production extension ID.
@@ -42,6 +50,7 @@
 - Delivery attempts and audit events are stored locally with Mission and HandoffCard provenance.
 - Verification creates git diff/output artifacts and a VerificationResult.
 - Failed verification creates an inspectable follow-up HandoffCard that can be dry-run or sent manually.
+- Failed verification can trigger Planner review and follow-up generation through Autopilot when policy allows it.
 
 ## Fail Criteria
 

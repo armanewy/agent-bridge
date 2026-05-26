@@ -1,7 +1,7 @@
 {
   "name": "@agentbridge/desktop",
   "version": "0.1.0",
-  "description": "Capture tasks, send to agents, verify results.",
+  "description": "Route, track, and verify AI-agent work from one local workspace.",
   "author": "AgentBridge",
   "private": true,
   "type": "module",

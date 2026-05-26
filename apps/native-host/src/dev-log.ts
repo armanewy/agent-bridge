@@ -1,10 +1,9 @@
 import { appendFile, mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
-import { homedir } from "node:os";
+import { defaultAgentBridgeDataDir } from "@agentbridge/local-store";
 
 export function defaultDevLogPath(): string {
-  const base = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
-  return join(base, "AgentBridge", "native-host-dev-log.jsonl");
+  return join(defaultAgentBridgeDataDir(), "native-host-dev-log.jsonl");
 }
 
 export async function appendDevLog(entry: unknown, filePath = defaultDevLogPath()): Promise<void> {

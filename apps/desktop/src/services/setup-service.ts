@@ -1,9 +1,11 @@
-import { access, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
+import { access, chmod, mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import { dirname, join, resolve } from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { defaultAgentBridgeDataDir, type LocalStore } from "@agentbridge/local-store";
 import type { ConfigureNativeHostRequest, SetupCheck, SetupStatus } from "./bridge-contract.js";
+import { nativeHostLauncherPathForPlatform, nativeHostManifestPathForPlatform } from "./browser-import-service.js";
+import { platformKindFromNodePlatform } from "./platform-service.js";
 
 const execFileAsync = promisify(execFile);
 const HOST_NAME = "com.agentbridge.native_host";
@@ -12,6 +14,7 @@ const REGISTRY_KEY = `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HO
 const HEARTBEAT_STALE_MS = 5 * 60 * 1000;
 
 export interface NativeHostRegistry {
+  preferredManifestPath?(dataDir: string): string | undefined;
   readManifestPath(): Promise<string | undefined>;
   writeManifestPath(path: string): Promise<void>;
 }
@@ -44,7 +47,7 @@ export class SetupService {
 
   constructor(
     private readonly store: LocalStore,
-    private readonly registry: NativeHostRegistry = new WindowsNativeHostRegistry(),
+    private readonly registry: NativeHostRegistry = createDefaultNativeHostRegistry(),
     private readonly dataDir = defaultAgentBridgeDataDir(),
     private readonly repoRoot = process.cwd(),
     helperPathOptions: HelperPathOptions = {}
@@ -159,9 +162,14 @@ export class SetupService {
     }
 
     await mkdir(this.dataDir, { recursive: true });
-    const launcherPath = join(this.dataDir, "agentbridge-native-host.cmd");
-    const manifestPath = join(this.dataDir, `${HOST_NAME}.json`);
-    await writeFile(launcherPath, renderLauncher(this.helperPaths.nativeHostScriptPath), "utf8");
+    const platform = platformKindFromNodePlatform(process.platform);
+    const launcherPath = nativeHostLauncherPathForPlatform(platform, this.dataDir);
+    const manifestPath = this.registry.preferredManifestPath?.(this.dataDir) ?? join(this.dataDir, `${HOST_NAME}.json`);
+    await mkdir(dirname(manifestPath), { recursive: true });
+    await writeFile(launcherPath, renderLauncher(this.helperPaths.nativeHostScriptPath, platform), "utf8");
+    if (platform !== "windows") {
+      await chmod(launcherPath, 0o755);
+    }
     await writeFile(manifestPath, renderManifest(launcherPath, extensionId), "utf8");
     await this.registry.writeManifestPath(manifestPath);
     if (!this.configuredExtensionId) {
@@ -183,6 +191,13 @@ export class SetupService {
     }
     return "developmentManual";
   }
+}
+
+function createDefaultNativeHostRegistry(): NativeHostRegistry {
+  if (process.platform === "win32") {
+    return new WindowsNativeHostRegistry();
+  }
+  return new FileNativeHostRegistry(platformKindFromNodePlatform(process.platform));
 }
 
 export function resolveHelperPaths(options: HelperPathOptions = {}): HelperPaths {
@@ -222,6 +237,26 @@ class WindowsNativeHostRegistry implements NativeHostRegistry {
 
   async writeManifestPath(path: string): Promise<void> {
     await execFileAsync("reg", ["add", REGISTRY_KEY, "/ve", "/t", "REG_SZ", "/d", path, "/f"], { windowsHide: true });
+  }
+}
+
+class FileNativeHostRegistry implements NativeHostRegistry {
+  constructor(private readonly platform: ReturnType<typeof platformKindFromNodePlatform>) {}
+
+  preferredManifestPath(): string | undefined {
+    return nativeHostManifestPathForPlatform(this.platform);
+  }
+
+  async readManifestPath(): Promise<string | undefined> {
+    const manifestPath = this.preferredManifestPath();
+    if (!manifestPath) {
+      return undefined;
+    }
+    return await exists(manifestPath) ? manifestPath : undefined;
+  }
+
+  async writeManifestPath(_path: string): Promise<void> {
+    return undefined;
   }
 }
 
@@ -278,7 +313,10 @@ async function isStoreWritable(path: string): Promise<boolean> {
   }
 }
 
-function renderLauncher(hostScriptPath: string): string {
+function renderLauncher(hostScriptPath: string, platform = platformKindFromNodePlatform(process.platform)): string {
+  if (platform !== "windows") {
+    return [`#!/bin/sh`, `exec node "${hostScriptPath}"`].join("\n");
+  }
   return [`@echo off`, `node "${hostScriptPath}"`].join("\r\n");
 }
 

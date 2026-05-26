@@ -11,8 +11,7 @@ import {
   type MessageBoxOptions,
   type OpenDialogOptions
 } from "electron";
-import { access, mkdir, rm } from "node:fs/promises";
-import { spawn } from "node:child_process";
+import { access, rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDesktopStore } from "../services/store.js";
@@ -22,7 +21,7 @@ import { TransformService } from "../services/transform-service.js";
 import { CodexTargetService } from "../services/codex-target-service.js";
 import { WindowsTargetService } from "../services/windows-target-service.js";
 import { MissionService } from "../services/mission-service.js";
-import { VerificationService } from "../services/verification-service.js";
+import { PlatformCommandRunner, VerificationService } from "../services/verification-service.js";
 import { SetupService } from "../services/setup-service.js";
 import { HandoffCardDeliveryService } from "../services/handoff-card-delivery-service.js";
 import { ComponentDiscoveryService } from "../services/component-discovery-service.js";
@@ -33,6 +32,9 @@ import { ProviderRegistryService } from "../services/provider-registry-service.j
 import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
+import { PlatformService } from "../services/platform-service.js";
+import { ArtifactBrokerService } from "../services/artifact-broker-service.js";
+import { AutopilotService } from "../services/autopilot-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -42,7 +44,6 @@ import type {
 } from "../services/bridge-contract.js";
 import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, PlannerRequest, WindowsDesktopWindowTarget } from "@agentbridge/core";
-import { defaultAgentBridgeDataDir } from "@agentbridge/local-store";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TRAY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
@@ -79,14 +80,31 @@ async function createWindow(): Promise<void> {
 }
 
 app.whenReady().then(async () => {
-  const store = createDesktopStore();
-  const dataDir = defaultAgentBridgeDataDir();
+  const platformService = new PlatformService({
+    platform: process.platform,
+    userDataDir: app.getPath("userData"),
+    appPath: app.getAppPath(),
+    resourcesPath: process.resourcesPath,
+    isPackaged: app.isPackaged,
+    openExternal: (url) => shell.openExternal(url),
+    openFolder: async (folderPath) => {
+      const result = await shell.openPath(folderPath);
+      if (result) {
+        throw new Error(result);
+      }
+    },
+    selectFolder: () => selectRepoFolder()
+  });
+  const platformCapabilities = platformService.getCapabilities();
+  const dataDir = platformService.getUserDataDir();
+  const store = createDesktopStore(dataDir);
+  const artifactBrokerService = new ArtifactBrokerService(store, platformService);
   const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);
   const transformService = new TransformService(store);
   const missionService = new MissionService(store);
-  const verificationService = new VerificationService(store);
+  const verificationService = new VerificationService(store, new PlatformCommandRunner(platformService).run);
   const setupService = new SetupService(store, undefined, undefined, process.cwd(), {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
@@ -102,16 +120,23 @@ app.whenReady().then(async () => {
     codexAppServerEndpoint ? { endpoint: codexAppServerEndpoint } : {}
   );
   const codexSessionService = new CodexSessionService(store, codexAppServerClient);
-  const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url), codexAppServerClient);
+  const codexTargetService = new CodexTargetService(store, (url) => platformService.openExternal(url), codexAppServerClient, {
+    canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks,
+    platform: platformCapabilities.platform
+  });
   const handoffCardDeliveryService = new HandoffCardDeliveryService(store, codexTargetService);
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
   const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
-  const openAiPlannerProvider = new OpenAIPlannerProvider(store);
-  const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient);
+  const openAiPlannerProvider = new OpenAIPlannerProvider(store, { artifactBroker: artifactBrokerService });
+  const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient, undefined, {
+    platform: platformCapabilities.platform,
+    canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks
+  }, artifactBrokerService);
   providerRegistryService.registerProvider(openAiPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
   const workbenchService = new WorkbenchService(store, openAiPlannerProvider, codexExecutorProvider, verificationService);
+  const autopilotService = new AutopilotService(store, workbenchService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
@@ -170,6 +195,18 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:sendFollowUpToExecutor", (_event, missionId: string, sessionRefId?: string) =>
     workbenchService.sendFollowUpToExecutor(missionId, sessionRefId)
   );
+  ipcMain.handle("agentbridge:startAutopilot", (_event, missionId: string, policyId?: string) =>
+    autopilotService.startAutopilot(missionId, policyId)
+  );
+  ipcMain.handle("agentbridge:stopAutopilot", (_event, autopilotRunId: string) => autopilotService.stopAutopilot(autopilotRunId));
+  ipcMain.handle("agentbridge:continueAutopilot", (_event, autopilotRunId: string) => autopilotService.continueAutopilot(autopilotRunId));
+  ipcMain.handle("agentbridge:steerAutopilot", (_event, autopilotRunId: string, text: string) =>
+    autopilotService.steerAutopilot(autopilotRunId, text)
+  );
+  ipcMain.handle("agentbridge:getAutopilotStatus", (_event, missionId: string) => autopilotService.getAutopilotStatus(missionId));
+  ipcMain.handle("agentbridge:resolvePendingDecision", (_event, decisionId: string, selectedOption: string) =>
+    autopilotService.resolvePendingDecision(decisionId, selectedOption)
+  );
   ipcMain.handle("agentbridge:createWorkflowLink", (_event, input: CreateWorkflowLinkInput) =>
     workflowLinkService.createWorkflowLink(input)
   );
@@ -196,6 +233,14 @@ app.whenReady().then(async () => {
     verificationService.runVerification(input)
   );
   ipcMain.handle("agentbridge:getSetupStatus", () => setupService.getStatus());
+  ipcMain.handle("agentbridge:getPlatformStatus", () => ({
+    capabilities: platformService.getCapabilities(),
+    userDataDir: platformService.getUserDataDir(),
+    artifactRoot: platformService.getArtifactRoot(),
+    stagingRoot: platformService.getStagingRoot(),
+    logsDir: platformService.getLogsDir(),
+    defaultShell: platformService.getDefaultShell()
+  }));
   ipcMain.handle("agentbridge:getCodexAppServerStatus", async () => {
     const health = await codexAppServerClient.healthCheck();
     return {
@@ -213,7 +258,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:connectChrome", async (_event, input?: ConfigureNativeHostRequest) => {
     const status = await setupService.configureNativeHost(input ?? {});
     if (status.webStoreUrl) {
-      await shell.openExternal(status.webStoreUrl);
+      await platformService.openExternal(status.webStoreUrl);
     }
     return status;
   });
@@ -222,7 +267,7 @@ app.whenReady().then(async () => {
     if (!status.webStoreUrl) {
       throw new Error("Chrome Web Store URL is not configured.");
     }
-    await shell.openExternal(status.webStoreUrl);
+    await platformService.openExternal(status.webStoreUrl);
   });
   ipcMain.handle("agentbridge:openChromeExtensionsPage", () => openChromeExtensionsPage());
   ipcMain.handle("agentbridge:openChromeExtensionFolder", () => openChromeExtensionFolder());
@@ -252,14 +297,14 @@ app.whenReady().then(async () => {
       url: chatGptWindow.webContents.getURL() || "https://chatgpt.com/"
     });
   });
-  ipcMain.handle("agentbridge:selectRepoFolder", () => selectRepoFolder());
-  ipcMain.handle("agentbridge:openDataFolder", () => openDataFolder(dataDir));
-  ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(dataDir, nativeHostLogPath));
+  ipcMain.handle("agentbridge:selectRepoFolder", () => platformService.selectRepoFolder());
+  ipcMain.handle("agentbridge:openDataFolder", () => platformService.openFolder(dataDir));
+  ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(platformService, dataDir, nativeHostLogPath));
   ipcMain.handle("agentbridge:clearLocalData", () => clearLocalData(dataDir));
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());
 
-  registerAppMenu(dataDir, nativeHostLogPath);
+  registerAppMenu(platformService, dataDir, nativeHostLogPath);
   await createWindow();
   registerQuickActions();
 });
@@ -298,7 +343,7 @@ function registerQuickActions(): void {
   );
 }
 
-function registerAppMenu(dataDir: string, nativeHostLogPath: string): void {
+function registerAppMenu(platformService: PlatformService, dataDir: string, nativeHostLogPath: string): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
@@ -314,8 +359,8 @@ function registerAppMenu(dataDir: string, nativeHostLogPath: string): void {
         submenu: [
           { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openStart") },
           { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
-          { label: "Open Data Folder", click: () => void openDataFolder(dataDir) },
-          { label: "Open Native Host Log", click: () => void openNativeHostLog(dataDir, nativeHostLogPath) }
+          { label: "Open Data Folder", click: () => void platformService.openFolder(dataDir) },
+          { label: "Open Native Host Log", click: () => void openNativeHostLog(platformService, dataDir, nativeHostLogPath) }
         ]
       },
       {
@@ -377,11 +422,6 @@ function showMainWindow(action?: "openStart" | "openConnect" | "openTasks" | "cr
   if (action) {
     window.webContents.send("agentbridge:quickAction", { type: action });
   }
-}
-
-async function openDataFolder(dataDir: string): Promise<void> {
-  await mkdir(dataDir, { recursive: true });
-  await shell.openPath(dataDir);
 }
 
 async function showEmbeddedChatGptWindow(rawUrl?: string): Promise<BrowserWindow> {
@@ -468,22 +508,7 @@ function normalizeChatGptUrl(rawUrl?: string): string {
 }
 
 async function openChromeExtensionsPage(): Promise<void> {
-  const chromeUrl = "chrome://extensions";
-  const candidates = [
-    join(process.env["ProgramFiles"] ?? "C:\\Program Files", "Google", "Chrome", "Application", "chrome.exe"),
-    join(process.env["ProgramFiles(x86)"] ?? "C:\\Program Files (x86)", "Google", "Chrome", "Application", "chrome.exe"),
-    join(process.env["LOCALAPPDATA"] ?? "", "Google", "Chrome", "Application", "chrome.exe")
-  ];
-
-  for (const candidate of candidates) {
-    if (await fileExists(candidate)) {
-      const child = spawn(candidate, [chromeUrl], { detached: true, stdio: "ignore" });
-      child.unref();
-      return;
-    }
-  }
-
-  await shell.openExternal(chromeUrl);
+  await shell.openExternal("chrome://extensions");
 }
 
 async function openChromeExtensionFolder(): Promise<void> {
@@ -531,12 +556,12 @@ async function selectRepoFolder(): Promise<string | undefined> {
   return result.canceled ? undefined : result.filePaths[0];
 }
 
-async function openNativeHostLog(dataDir: string, nativeHostLogPath: string): Promise<void> {
+async function openNativeHostLog(platformService: PlatformService, dataDir: string, nativeHostLogPath: string): Promise<void> {
   try {
     await access(nativeHostLogPath);
-    await shell.openPath(nativeHostLogPath);
+    await platformService.openPath(nativeHostLogPath);
   } catch {
-    await openDataFolder(dataDir);
+    await platformService.openFolder(dataDir);
   }
 }
 

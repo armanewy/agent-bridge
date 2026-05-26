@@ -43,6 +43,34 @@ describe("CodexAppServerClient", () => {
     ]);
   });
 
+  it("steers turns and normalizes thread events", async () => {
+    const calls: Array<{ method: string; params?: unknown }> = [];
+    const client = new CodexAppServerClient({
+      transport: {
+        async request(method, params) {
+          calls.push({ method, params });
+          if (method === "turn/steer") {
+            return { turnId: "turn_1", accepted: true };
+          }
+          return { events: [{ type: "agent.message.completed", turnId: "turn_1", text: "Done" }] };
+        }
+      }
+    });
+
+    await expect(client.steerTurn("thread_1", "Keep going", { turnId: "turn_1" })).resolves.toMatchObject({
+      threadId: "thread_1",
+      turnId: "turn_1"
+    });
+    await expect(client.listThreadEvents("thread_1", "turn_1")).resolves.toEqual([
+      { type: "agent.message.completed", payload: { type: "agent.message.completed", turnId: "turn_1", text: "Done" } }
+    ]);
+
+    expect(calls).toEqual([
+      { method: "turn/steer", params: { threadId: "thread_1", input: { type: "text", text: "Keep going" }, turnId: "turn_1" } },
+      { method: "thread/read", params: { threadId: "thread_1", includeTurns: true } }
+    ]);
+  });
+
   it("returns a clean unavailable error without transport", async () => {
     const client = new CodexAppServerClient();
 

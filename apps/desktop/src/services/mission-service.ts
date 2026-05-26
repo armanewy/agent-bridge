@@ -15,9 +15,11 @@ export class MissionService {
       return undefined;
     }
 
-    const [handoffCards, artifacts, runs, verificationResults] = await Promise.all([
+    const [handoffCards, artifacts, artifactFiles, artifactBundles, runs, verificationResults] = await Promise.all([
       this.store.listHandoffCardsForMission(id),
       this.store.listArtifactsForMission(id),
+      this.store.listArtifactFilesForMission(id),
+      this.store.listArtifactBundlesForMission(id),
       this.store.listRunsForMission(id),
       this.store.listVerificationResultsForMission(id)
     ]);
@@ -32,15 +34,19 @@ export class MissionService {
         (attempt.handoffCardId && handoffCardIds.has(attempt.handoffCardId)) ||
         deliveryAttemptIds.has(attempt.id)
     );
+    const agentEvents = (await this.store.listAgentEvents()).filter((event) => event.payload.missionId === id);
 
     return {
       mission,
       handoffCards,
       captures,
       artifacts,
+      artifactFiles,
+      artifactBundles,
       deliveryAttempts,
       runs,
-      verificationResults
+      verificationResults,
+      agentEvents
     };
   }
 }

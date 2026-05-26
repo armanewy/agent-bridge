@@ -31,6 +31,7 @@ The provider layer must not replace the mission/task-card model. It adapts provi
 - `capabilities`: list of supported actions.
 - `authMode`: `apiKey`, `localApp`, `appServer`, `cli`, `none`, or `unknown`.
 - `status`: `available`, `needsAuth`, `unavailable`, or `unsupported`.
+- `artifactCapabilities`: what the provider can accept and return through the artifact broker.
 - `metadata`: provider-specific diagnostics.
 
 Profiles are safe to persist. They must not contain raw API keys or session secrets.
@@ -79,6 +80,24 @@ The first implementation is `codex`, wrapping Codex App Server and deep-link fal
 ### ReviewerProvider
 
 Used when review is not the same provider as planning. For the first integration, OpenAI Planner can also implement reviewer capability.
+
+## Artifact Capabilities
+
+`ProviderArtifactCapabilities` is intentionally conservative. It lets the UI and orchestration layer decide whether a provider can accept raw text artifacts, local files, file paths, staged bundles, or only summaries.
+
+The first providers expose text artifact support only:
+
+- OpenAI Planner can accept summarized/text artifacts and returns text artifacts.
+- Codex Executor can accept text prompts and returns text delivery artifacts.
+- File inputs, staged file paths, diffs, logs, and provider-returned files are disabled until the artifact exchange waves explicitly wire them.
+
+Provider requests can now carry `artifactBundleIds`, `fileIds`, and `includeFileSummaries`. Executor requests also support `stagedFilePaths`. A provider that does not support direct files should receive summaries from the orchestration layer rather than raw file paths or uploads.
+
+Provider adapter hooks:
+
+- `prepareArtifactsForInput(...)` converts AgentBridge artifact bundles into provider-ready input.
+- `extractArtifactsFromResult(...)` stores provider outputs as AgentBridge artifacts and returns their IDs.
+- `listProviderReturnedArtifacts(turnId)` returns stored artifacts produced by a provider turn.
 
 ## Request/Response Contracts
 

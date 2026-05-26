@@ -6,9 +6,12 @@ import { JsonFileStore } from "@agentbridge/local-store";
 import {
   OPENAI_PLANNER_PROVIDER_ID,
   OpenAIPlannerProvider,
+  type OpenAIPlannerResponseRequest,
   type OpenAIPlannerTransport
 } from "../src/services/providers/openai-planner-provider.js";
 import type { TaskSpec } from "@agentbridge/core";
+import { ArtifactBrokerService } from "../src/services/artifact-broker-service.js";
+import { PlatformService } from "../src/services/platform-service.js";
 
 let tempDir: string;
 let oldOpenAiKey: string | undefined;
@@ -118,11 +121,95 @@ describe("OpenAIPlannerProvider", () => {
     const raw = await readFile(join(tempDir, "agentbridge-store.json"), "utf8");
     expect(raw).not.toContain(secret);
   });
+
+  it("prepares small mission files as inline planner context", async () => {
+    const store = new JsonFileStore(tempDir);
+    const broker = new ArtifactBrokerService(store, testPlatformService(), fixedNow);
+    const file = await broker.importGeneratedTextAsFile("mission_4", "notes.md", "Use compact cards.", {
+      providerId: "test",
+      classification: "document"
+    });
+    const requests: OpenAIPlannerResponseRequest[] = [];
+    const provider = new OpenAIPlannerProvider(store, {
+      transport: mockTransport("Planner response with file context.", requests),
+      now: fixedNow
+    });
+
+    await provider.plan({
+      missionId: "mission_4",
+      prompt: "Use the attached notes.",
+      fileIds: [file.id],
+      includeFileSummaries: true,
+      metadata: {}
+    });
+
+    expect(requests[0]?.input).toContain("Attached file summaries:");
+    expect(requests[0]?.input).toContain("Inline file: notes.md");
+    expect(requests[0]?.input).toContain("Use compact cards.");
+  });
+
+  it("uploads larger supported files through the planner transport when enabled", async () => {
+    const store = new JsonFileStore(tempDir);
+    const broker = new ArtifactBrokerService(store, testPlatformService(), fixedNow);
+    const file = await broker.importGeneratedTextAsFile("mission_5", "large-notes.md", "A".repeat(128), {
+      providerId: "test",
+      classification: "document"
+    });
+    const provider = new OpenAIPlannerProvider(store, {
+      transport: {
+        async createResponse() {
+          return { responseId: "resp_mock", outputText: "ok" };
+        },
+        async uploadFile(request) {
+          expect(request.fileName).toBe("large-notes.md");
+          return { openaiFileId: "file_openai_1", purpose: "user_data" };
+        }
+      },
+      allowFileUploads: true,
+      maxInlineFileBytes: 16,
+      now: fixedNow
+    });
+
+    const prepared = await provider.prepareArtifactsForInput({
+      missionId: "mission_5",
+      prompt: "Use the file.",
+      fileIds: [file.id],
+      metadata: {}
+    });
+
+    expect(prepared.fileInputs).toEqual([{ type: "input_file", file_id: "file_openai_1" }]);
+    expect(await store.getOpenAIUploadedFileRef(file.id)).toMatchObject({
+      openaiFileId: "file_openai_1",
+      purpose: "user_data"
+    });
+  });
+
+  it("stores planner file blocks as local artifact files when an artifact broker is available", async () => {
+    const store = new JsonFileStore(tempDir);
+    const broker = new ArtifactBrokerService(store, testPlatformService(), fixedNow);
+    const provider = new OpenAIPlannerProvider(store, {
+      artifactBroker: broker,
+      transport: mockTransport(["Here is a file.", "```file:review.md", "Review output", "```"].join("\n")),
+      now: fixedNow
+    });
+
+    const response = await provider.plan({
+      missionId: "mission_6",
+      prompt: "Create a review file.",
+      metadata: {}
+    });
+
+    const files = await store.listArtifactFilesForMission("mission_6");
+    expect(files).toHaveLength(1);
+    expect(files[0]?.fileName).toBe("review.md");
+    expect(response.artifactIds).toContain(files[0]?.artifactId);
+  });
 });
 
-function mockTransport(outputText: string): OpenAIPlannerTransport {
+function mockTransport(outputText: string, requests: OpenAIPlannerResponseRequest[] = []): OpenAIPlannerTransport {
   return {
-    async createResponse() {
+    async createResponse(request) {
+      requests.push(request);
       return {
         responseId: "resp_mock",
         outputText,
@@ -130,6 +217,13 @@ function mockTransport(outputText: string): OpenAIPlannerTransport {
       };
     }
   };
+}
+
+function testPlatformService(): PlatformService {
+  return new PlatformService({
+    userDataDir: tempDir,
+    platform: "windows"
+  });
 }
 
 function fixedNow(): string {

@@ -2,6 +2,28 @@ import { z } from "zod";
 
 export const TimestampSchema = z.string().min(1);
 
+export const PlatformKindSchema = z.enum(["windows", "macos", "linux", "unknown"]);
+export type PlatformKind = z.infer<typeof PlatformKindSchema>;
+
+export const PlatformCapabilitiesSchema = z.object({
+  platform: PlatformKindSchema,
+  canPackageDesktopApp: z.boolean(),
+  canRunShellCommands: z.boolean(),
+  canOpenExternalLinks: z.boolean(),
+  canUseCodexDeepLinks: z.boolean(),
+  canUseCodexAppServer: z.boolean(),
+  canUseChromeNativeMessaging: z.boolean(),
+  canUseDesktopAutomation: z.boolean(),
+  canUseWindowsUia: z.boolean(),
+  canUseMacAccessibility: z.boolean(),
+  canUseAppleEvents: z.boolean(),
+  canUseGlobalShortcuts: z.boolean(),
+  canUseTray: z.boolean(),
+  canUseFilePicker: z.boolean(),
+  canUseUserSelectedRepoAccess: z.boolean()
+});
+export type PlatformCapabilities = z.infer<typeof PlatformCapabilitiesSchema>;
+
 export const LinkSchema = z.object({
   id: z.string().min(1),
   name: z.string().min(1),
@@ -379,6 +401,47 @@ export const ArtifactSchema = z.object({
 });
 export type Artifact = z.infer<typeof ArtifactSchema>;
 
+export const ArtifactFileClassificationSchema = z.enum([
+  "sourceCode",
+  "patch",
+  "diff",
+  "log",
+  "screenshot",
+  "document",
+  "archive",
+  "generatedAsset",
+  "unknown"
+]);
+export type ArtifactFileClassification = z.infer<typeof ArtifactFileClassificationSchema>;
+
+export const ArtifactFileSchema = z.object({
+  id: z.string().min(1),
+  artifactId: z.string().min(1),
+  missionId: z.string().min(1),
+  fileName: z.string().min(1),
+  localPath: z.string().min(1),
+  relativePath: z.string().optional(),
+  mimeType: z.string().optional(),
+  sizeBytes: z.number().int().nonnegative(),
+  sha256: z.string().min(1),
+  createdByProviderId: z.string().optional(),
+  sourceTurnId: z.string().optional(),
+  classification: ArtifactFileClassificationSchema,
+  createdAt: TimestampSchema
+});
+export type ArtifactFile = z.infer<typeof ArtifactFileSchema>;
+
+export const ArtifactBundleSchema = z.object({
+  id: z.string().min(1),
+  missionId: z.string().min(1),
+  name: z.string().min(1),
+  artifactIds: z.array(z.string()),
+  fileIds: z.array(z.string()),
+  purpose: z.enum(["plannerInput", "executorInput", "verificationInput", "reviewInput", "userDownload", "archive"]),
+  createdAt: TimestampSchema
+});
+export type ArtifactBundle = z.infer<typeof ArtifactBundleSchema>;
+
 export const HandoffCardSchema = z.object({
   id: z.string().min(1),
   missionId: z.string().min(1),
@@ -450,6 +513,30 @@ export type AgentProviderAuthMode = z.infer<typeof AgentProviderAuthModeSchema>;
 export const AgentProviderStatusSchema = z.enum(["available", "needsAuth", "unavailable", "unsupported"]);
 export type AgentProviderStatus = z.infer<typeof AgentProviderStatusSchema>;
 
+export const ProviderArtifactCapabilitiesSchema = z.object({
+  canAcceptTextArtifacts: z.boolean(),
+  canAcceptFileInputs: z.boolean(),
+  canAcceptFilePaths: z.boolean(),
+  canReturnTextArtifacts: z.boolean(),
+  canReturnFileArtifacts: z.boolean(),
+  canReturnDiffs: z.boolean(),
+  canReturnLogs: z.boolean(),
+  canReturnScreenshots: z.boolean(),
+  maxInputFileBytes: z.number().int().positive().optional(),
+  acceptedMimeTypes: z.array(z.string()).optional()
+});
+export type ProviderArtifactCapabilities = z.infer<typeof ProviderArtifactCapabilitiesSchema>;
+
+export const OpenAIUploadedFileRefSchema = z.object({
+  localFileId: z.string().min(1),
+  openaiFileId: z.string().min(1),
+  uploadedAt: TimestampSchema,
+  expiresAt: TimestampSchema.optional(),
+  purpose: z.string().min(1),
+  sha256: z.string().min(1)
+});
+export type OpenAIUploadedFileRef = z.infer<typeof OpenAIUploadedFileRefSchema>;
+
 export const AgentProviderProfileSchema = z.object({
   id: z.string().min(1),
   kind: AgentProviderKindSchema,
@@ -457,6 +544,7 @@ export const AgentProviderProfileSchema = z.object({
   capabilities: z.array(AgentProviderCapabilitySchema),
   authMode: AgentProviderAuthModeSchema,
   status: AgentProviderStatusSchema,
+  artifactCapabilities: ProviderArtifactCapabilitiesSchema.optional(),
   metadata: z.record(z.unknown()).default({})
 });
 export type AgentProviderProfile = z.infer<typeof AgentProviderProfileSchema>;
@@ -511,10 +599,13 @@ export const PlannerRequestSchema = z.object({
   prompt: z.string().min(1),
   repoContext: RepoContextPackSchema.optional(),
   contextArtifactIds: z.array(z.string()).default([]),
+  artifactBundleIds: z.array(z.string()).default([]),
+  fileIds: z.array(z.string()).default([]),
+  includeFileSummaries: z.boolean().default(false),
   createdAt: TimestampSchema.optional(),
   metadata: z.record(z.unknown()).default({})
 });
-export type PlannerRequest = z.infer<typeof PlannerRequestSchema>;
+export type PlannerRequest = z.input<typeof PlannerRequestSchema>;
 
 export const PlannerResponseSchema = z.object({
   id: z.string().optional(),
@@ -537,10 +628,14 @@ export const ExecutorTaskRequestSchema = z.object({
   taskSpec: TaskSpecSchema,
   generatedPrompt: z.string().optional(),
   repoContext: RepoContextPackSchema.optional(),
+  artifactBundleIds: z.array(z.string()).default([]),
+  fileIds: z.array(z.string()).default([]),
+  stagedFilePaths: z.array(z.string()).default([]),
+  includeFileSummaries: z.boolean().default(false),
   dryRun: z.boolean().default(false),
   metadata: z.record(z.unknown()).default({})
 });
-export type ExecutorTaskRequest = z.infer<typeof ExecutorTaskRequestSchema>;
+export type ExecutorTaskRequest = z.input<typeof ExecutorTaskRequestSchema>;
 
 export const ExecutorTaskResultSchema = z.object({
   id: z.string().optional(),
@@ -564,10 +659,14 @@ export const ReviewRequestSchema = z.object({
   verificationResult: VerificationResultSchema.optional(),
   verificationSummary: z.string().optional(),
   artifactIds: z.array(z.string()).default([]),
+  artifactBundleIds: z.array(z.string()).default([]),
+  fileIds: z.array(z.string()).default([]),
+  verificationResultIds: z.array(z.string()).default([]),
+  includeFileSummaries: z.boolean().default(false),
   createdAt: TimestampSchema.optional(),
   metadata: z.record(z.unknown()).default({})
 });
-export type ReviewRequest = z.infer<typeof ReviewRequestSchema>;
+export type ReviewRequest = z.input<typeof ReviewRequestSchema>;
 
 export const ReviewResultSchema = z.object({
   id: z.string().optional(),
@@ -583,6 +682,105 @@ export const ReviewResultSchema = z.object({
 });
 export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
+export const AutopilotPolicySchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  mode: z.enum(["manual", "supervised", "autonomous"]),
+  maxIterations: z.number().int().positive(),
+  maxRuntimeMinutes: z.number().int().positive().optional(),
+  allowPlannerTurnsWithoutApproval: z.boolean(),
+  allowCodexTurnsWithoutApproval: z.boolean(),
+  allowVerificationWithoutApproval: z.boolean(),
+  allowShellCommands: z.enum(["never", "configuredOnly", "askEachTime"]),
+  allowFileWrites: z.enum(["never", "repoOnly", "missionArtifactsOnly", "askEachTime"]),
+  allowNetworkAccess: z.boolean(),
+  allowProviderFileUpload: z.enum(["never", "askEachTime", "belowSizeLimit", "always"]).optional(),
+  maxProviderUploadBytes: z.number().int().positive().optional(),
+  allowStagedFilesToRepo: z.enum(["never", "askEachTime", "safeExtensionsOnly", "always"]).optional(),
+  allowedFileExtensions: z.array(z.string()).optional(),
+  blockedFilePatterns: z.array(z.string()).optional(),
+  redactBeforeUpload: z.boolean().optional(),
+  requireApprovalForBinaryFiles: z.boolean().optional(),
+  stopOnVerificationFailure: z.boolean(),
+  stopOnRedactionFinding: z.boolean(),
+  stopOnProviderWarning: z.boolean(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema
+});
+export type AutopilotPolicy = z.infer<typeof AutopilotPolicySchema>;
+
+export const AutopilotRunStatusSchema = z.enum([
+  "idle",
+  "planning",
+  "executing",
+  "verifying",
+  "reviewing",
+  "steering",
+  "blocked",
+  "passed",
+  "failed",
+  "cancelled"
+]);
+export type AutopilotRunStatus = z.infer<typeof AutopilotRunStatusSchema>;
+
+export const AutopilotRunSchema = z.object({
+  id: z.string().min(1),
+  missionId: z.string().min(1),
+  policyId: z.string().min(1),
+  status: AutopilotRunStatusSchema,
+  iteration: z.number().int().nonnegative(),
+  maxIterations: z.number().int().positive(),
+  currentStepId: z.string().optional(),
+  startedAt: TimestampSchema,
+  updatedAt: TimestampSchema,
+  completedAt: TimestampSchema.optional(),
+  stopReason: z.string().optional(),
+  pendingUserDecisionId: z.string().optional()
+});
+export type AutopilotRun = z.infer<typeof AutopilotRunSchema>;
+
+export const AutopilotStepSchema = z.object({
+  id: z.string().min(1),
+  autopilotRunId: z.string().min(1),
+  missionId: z.string().min(1),
+  kind: z.enum([
+    "plan",
+    "createTaskSpec",
+    "sendToExecutor",
+    "monitorExecutor",
+    "verify",
+    "review",
+    "createFollowUp",
+    "steer",
+    "requestApproval",
+    "stop"
+  ]),
+  status: z.enum(["pending", "running", "completed", "failed", "blocked", "skipped"]),
+  inputArtifactIds: z.array(z.string()),
+  outputArtifactIds: z.array(z.string()),
+  providerId: z.string().optional(),
+  sessionRefId: z.string().optional(),
+  turnId: z.string().optional(),
+  startedAt: TimestampSchema.optional(),
+  completedAt: TimestampSchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type AutopilotStep = z.infer<typeof AutopilotStepSchema>;
+
+export const UserDecisionSchema = z.object({
+  id: z.string().min(1),
+  missionId: z.string().min(1),
+  autopilotRunId: z.string().optional(),
+  decisionType: z.enum(["approveAction", "approveCommand", "choosePath", "resolveAmbiguity", "continue", "stop"]),
+  prompt: z.string().min(1),
+  options: z.array(z.string()),
+  selectedOption: z.string().optional(),
+  status: z.enum(["pending", "resolved", "cancelled"]),
+  createdAt: TimestampSchema,
+  resolvedAt: TimestampSchema.optional()
+});
+export type UserDecision = z.infer<typeof UserDecisionSchema>;
+
 export interface PlannerProvider {
   profile(): AgentProviderProfile;
   status(): Promise<AgentProviderProfile>;
@@ -591,6 +789,9 @@ export interface PlannerProvider {
   sendMessage(sessionRef: AgentSessionRef, message: string, context?: PlannerRequest): Promise<AgentTurn>;
   plan(input: PlannerRequest): Promise<PlannerResponse>;
   review(input: ReviewRequest): Promise<ReviewResult>;
+  prepareArtifactsForInput?(request: PlannerRequest | ReviewRequest, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
+  extractArtifactsFromResult?(result: PlannerResponse | ReviewResult, context?: Record<string, unknown>): Promise<string[]>;
+  listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;
 }
 
 export interface ExecutorProvider {
@@ -600,12 +801,19 @@ export interface ExecutorProvider {
   createSession(input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }): Promise<AgentSessionRef>;
   resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef>;
   sendTask(input: ExecutorTaskRequest): Promise<ExecutorTaskResult>;
+  steerTurn?(sessionRef: AgentSessionRef, text: string, context?: { missionId?: string; turnId?: string }): Promise<AgentTurn>;
+  prepareArtifactsForInput?(request: ExecutorTaskRequest, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
+  extractArtifactsFromResult?(result: ExecutorTaskResult, context?: Record<string, unknown>): Promise<string[]>;
+  listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;
 }
 
 export interface ReviewerProvider {
   profile(): AgentProviderProfile;
   status(): Promise<AgentProviderProfile>;
   review(input: ReviewRequest): Promise<ReviewResult>;
+  prepareArtifactsForInput?(request: ReviewRequest, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
+  extractArtifactsFromResult?(result: ReviewResult, context?: Record<string, unknown>): Promise<string[]>;
+  listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;
 }
 
 export interface ProviderRegistry {

@@ -4,10 +4,12 @@ AgentBridge MVP persistence is local-only. Wave 2 uses a JSON-file store because
 
 ## Default Data Location
 
-The store implementation accepts an explicit directory. Desktop integration should use an application data directory such as:
+The store implementation accepts an explicit directory. Desktop integration uses Electron `app.getPath("userData")` through `PlatformService`. Non-Electron fallback locations are:
 
 ```text
-%LOCALAPPDATA%\AgentBridge
+Windows: %LOCALAPPDATA%\AgentBridge
+macOS: ~/Library/Application Support/AgentBridge
+Linux: ${XDG_CONFIG_HOME:-~/.config}/AgentBridge
 ```
 
 Set `AGENTBRIDGE_STORE_DIR` to override this during development or tests.

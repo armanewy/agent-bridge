@@ -18,11 +18,17 @@ import { repoCommandSettingsKey } from "./repo-context-service.js";
 export type OpenExternal = (url: string) => Promise<void>;
 type CodexDeliveryMode = NonNullable<CodexDeliveryResult["deliveryMode"]>;
 
+export interface CodexTargetServiceOptions {
+  canUseCodexDeepLinks?: boolean;
+  platform?: string;
+}
+
 export class CodexTargetService {
   constructor(
     private readonly store: LocalStore,
     private readonly openExternal?: OpenExternal,
-    private readonly appServerClient?: CodexAppServerClient
+    private readonly appServerClient?: CodexAppServerClient,
+    private readonly options: CodexTargetServiceOptions = {}
   ) {}
 
   async configureTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget> {
@@ -145,6 +151,7 @@ export class CodexTargetService {
     route: ResolvedCodexRoute
   ): Promise<{ deepLink: string; codexTurnId?: string; warnings: string[]; markDelivered: boolean }> {
     if (route.openMode === "newThread") {
+      this.assertDeepLinksAvailable("New Codex thread delivery requires Codex deep-link support on this platform.");
       const deepLink = buildCodexNewThreadDeepLink({
         prompt: input.prompt,
         repoPath: input.target.repoPath,
@@ -179,6 +186,7 @@ export class CodexTargetService {
     }
 
     if (!input.dryRun) {
+      this.assertDeepLinksAvailable("Opening an existing Codex thread requires Codex deep-link support on this platform.");
       await this.openDeepLink(deepLink);
     }
 
@@ -194,6 +202,12 @@ export class CodexTargetService {
       throw new Error("No opener configured for Codex deep links.");
     }
     await this.openExternal(deepLink);
+  }
+
+  private assertDeepLinksAvailable(message: string): void {
+    if (this.options.canUseCodexDeepLinks === false) {
+      throw new Error(`${message} Platform: ${this.options.platform ?? "unknown"}.`);
+    }
   }
 
   private async attachAttemptToMissionGraph(input: CodexDeliveryRequest, attemptId: string, markDelivered: boolean): Promise<void> {

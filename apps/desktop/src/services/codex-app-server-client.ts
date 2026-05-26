@@ -30,6 +30,17 @@ export interface CodexTurnStartResult {
   metadata: Record<string, unknown>;
 }
 
+export interface CodexTurnSteerResult {
+  threadId: string;
+  turnId?: string;
+  metadata: Record<string, unknown>;
+}
+
+export interface CodexAppServerEvent {
+  type: string;
+  payload: Record<string, unknown>;
+}
+
 export interface CodexAppServerClientOptions {
   transport?: CodexAppServerTransport;
   endpoint?: string;
@@ -99,6 +110,34 @@ export class CodexAppServerClient {
     }
   }
 
+  async steerTurn(threadId: string, text: string, options: { turnId?: string } = {}): Promise<CodexTurnSteerResult> {
+    if (!text.trim()) {
+      throw new CodexAppServerError("turnStartFailed", "Cannot steer a Codex turn with an empty message.");
+    }
+
+    try {
+      const result = await this.request("turn/steer", {
+        threadId,
+        input: { type: "text", text },
+        ...(options.turnId ? { turnId: options.turnId } : {})
+      });
+      const record = isRecord(result) ? result : {};
+      const turnId = stringValue(record["turnId"]) ?? stringValue(record["id"]) ?? options.turnId;
+      return {
+        threadId,
+        ...(turnId ? { turnId } : {}),
+        metadata: record
+      };
+    } catch (error) {
+      throw normalizeAppServerError(error, "turnStartFailed", `Failed to steer Codex thread ${threadId}.`);
+    }
+  }
+
+  async listThreadEvents(threadId: string, turnId?: string): Promise<CodexAppServerEvent[]> {
+    const result = await this.readThread(threadId, true);
+    return normalizeEvents(result, turnId);
+  }
+
   async listLoadedThreads(): Promise<CodexAppServerThread[]> {
     const result = await this.request("thread/loaded/list", {});
     return normalizeThreads(result);
@@ -115,6 +154,28 @@ export class CodexAppServerClient {
       throw normalizeAppServerError(error, "appServerUnavailable", "Codex App Server is unavailable.");
     }
   }
+}
+
+function normalizeEvents(value: unknown, turnId?: string): CodexAppServerEvent[] {
+  const record = isRecord(value) ? value : {};
+  const items = Array.isArray(record["events"])
+    ? record["events"]
+    : Array.isArray(record["items"])
+      ? record["items"]
+      : Array.isArray(record["turns"])
+        ? record["turns"]
+        : [];
+  return items.flatMap((item) => {
+    if (!isRecord(item)) {
+      return [];
+    }
+    const itemTurnId = stringValue(item["turnId"]) ?? stringValue(item["id"]);
+    if (turnId && itemTurnId && itemTurnId !== turnId) {
+      return [];
+    }
+    const type = stringValue(item["type"]) ?? stringValue(item["event"]) ?? "codex.event";
+    return [{ type, payload: item }];
+  });
 }
 
 export class JsonRpcHttpTransport implements CodexAppServerTransport {

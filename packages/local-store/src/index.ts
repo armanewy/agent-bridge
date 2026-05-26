@@ -9,6 +9,12 @@ import {
   AgentSessionRefSchema,
   AgentTurnSchema,
   ArtifactSchema,
+  ArtifactBundleSchema,
+  ArtifactFileSchema,
+  OpenAIUploadedFileRefSchema,
+  AutopilotPolicySchema,
+  AutopilotRunSchema,
+  AutopilotStepSchema,
   CaptureSchema,
   CodexThreadRefSchema,
   HandoffSchema,
@@ -28,6 +34,13 @@ import {
   type AgentSessionRef,
   type AgentTurn,
   type Artifact,
+  type ArtifactBundle,
+  type ArtifactFile,
+  type OpenAIUploadedFileRef,
+  type AutopilotPolicy,
+  type AutopilotRun,
+  type AutopilotRunStatus,
+  type AutopilotStep,
   type AuditEvent,
   type Capture,
   type CodexThreadRef,
@@ -47,10 +60,12 @@ import {
   type SourceEndpoint,
   type TargetEndpoint,
   type VerificationResult,
-  type WorkflowLink
+  type WorkflowLink,
+  type UserDecision,
+  UserDecisionSchema
 } from "@agentbridge/core";
 
-export const CURRENT_STORE_VERSION = 5;
+export const CURRENT_STORE_VERSION = 8;
 
 export interface LocalStore {
   saveLink(link: Link): Promise<void>;
@@ -80,6 +95,19 @@ export interface LocalStore {
   listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
   appendAgentEvent(event: AgentEvent): Promise<void>;
   listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
+  saveAutopilotPolicy(policy: AutopilotPolicy): Promise<void>;
+  getAutopilotPolicy(id: string): Promise<AutopilotPolicy | undefined>;
+  listAutopilotPolicies(): Promise<AutopilotPolicy[]>;
+  saveAutopilotRun(run: AutopilotRun): Promise<void>;
+  getAutopilotRun(id: string): Promise<AutopilotRun | undefined>;
+  listAutopilotRunsForMission(missionId: string): Promise<AutopilotRun[]>;
+  updateAutopilotRunStatus(id: string, status: AutopilotRunStatus, patch?: Partial<AutopilotRun>): Promise<AutopilotRun | undefined>;
+  appendAutopilotStep(step: AutopilotStep): Promise<void>;
+  listAutopilotSteps(autopilotRunId: string): Promise<AutopilotStep[]>;
+  saveUserDecision(decision: UserDecision): Promise<void>;
+  getUserDecision(id: string): Promise<UserDecision | undefined>;
+  listPendingUserDecisions(missionId?: string): Promise<UserDecision[]>;
+  resolveUserDecision(id: string, selectedOption: string): Promise<UserDecision | undefined>;
   saveSource(source: SourceEndpoint): Promise<void>;
   getSource(id: string): Promise<SourceEndpoint | undefined>;
   listSources(): Promise<SourceEndpoint[]>;
@@ -107,6 +135,15 @@ export interface LocalStore {
   getArtifact(id: string): Promise<Artifact | undefined>;
   listArtifactsForMission(missionId: string): Promise<Artifact[]>;
   listArtifactsForHandoffCard(handoffCardId: string): Promise<Artifact[]>;
+  saveArtifactFile(file: ArtifactFile): Promise<void>;
+  getArtifactFile(id: string): Promise<ArtifactFile | undefined>;
+  listArtifactFilesForMission(missionId: string): Promise<ArtifactFile[]>;
+  saveArtifactBundle(bundle: ArtifactBundle): Promise<void>;
+  getArtifactBundle(id: string): Promise<ArtifactBundle | undefined>;
+  listArtifactBundlesForMission(missionId: string): Promise<ArtifactBundle[]>;
+  saveOpenAIUploadedFileRef(ref: OpenAIUploadedFileRef): Promise<void>;
+  getOpenAIUploadedFileRef(localFileId: string): Promise<OpenAIUploadedFileRef | undefined>;
+  listOpenAIUploadedFileRefs(): Promise<OpenAIUploadedFileRef[]>;
   saveRun(run: Run): Promise<void>;
   getRun(id: string): Promise<Run | undefined>;
   listRunsForMission(missionId: string): Promise<Run[]>;
@@ -140,6 +177,10 @@ interface StoreData {
   agentSessions: Record<string, AgentSessionRef>;
   agentTurns: Record<string, AgentTurn>;
   agentEvents: Record<string, AgentEvent>;
+  autopilotPolicies: Record<string, AutopilotPolicy>;
+  autopilotRuns: Record<string, AutopilotRun>;
+  autopilotSteps: Record<string, AutopilotStep>;
+  userDecisions: Record<string, UserDecision>;
   sources: Record<string, SourceEndpoint>;
   targets: Record<string, TargetEndpoint>;
   captures: Record<string, Capture>;
@@ -148,6 +189,9 @@ interface StoreData {
   missions: Record<string, Mission>;
   handoffCards: Record<string, HandoffCard>;
   artifacts: Record<string, Artifact>;
+  artifactFiles: Record<string, ArtifactFile>;
+  artifactBundles: Record<string, ArtifactBundle>;
+  openAIUploadedFileRefs: Record<string, OpenAIUploadedFileRef>;
   runs: Record<string, Run>;
   runSteps: Record<string, RunStep>;
   verificationResults: Record<string, VerificationResult>;
@@ -320,6 +364,111 @@ export class JsonFileStore implements LocalStore {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async saveAutopilotPolicy(policy: AutopilotPolicy): Promise<void> {
+    AutopilotPolicySchema.parse(policy);
+    await this.update((data) => {
+      data.autopilotPolicies[policy.id] = policy;
+    });
+  }
+
+  async getAutopilotPolicy(id: string): Promise<AutopilotPolicy | undefined> {
+    return (await this.read()).autopilotPolicies[id];
+  }
+
+  async listAutopilotPolicies(): Promise<AutopilotPolicy[]> {
+    return Object.values((await this.read()).autopilotPolicies).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async saveAutopilotRun(run: AutopilotRun): Promise<void> {
+    AutopilotRunSchema.parse(run);
+    await this.update((data) => {
+      data.autopilotRuns[run.id] = run;
+    });
+  }
+
+  async getAutopilotRun(id: string): Promise<AutopilotRun | undefined> {
+    return (await this.read()).autopilotRuns[id];
+  }
+
+  async listAutopilotRunsForMission(missionId: string): Promise<AutopilotRun[]> {
+    return Object.values((await this.read()).autopilotRuns)
+      .filter((run) => run.missionId === missionId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async updateAutopilotRunStatus(
+    id: string,
+    status: AutopilotRunStatus,
+    patch: Partial<AutopilotRun> = {}
+  ): Promise<AutopilotRun | undefined> {
+    let updated: AutopilotRun | undefined;
+    await this.update((data) => {
+      const run = data.autopilotRuns[id];
+      if (!run) {
+        return;
+      }
+      updated = {
+        ...run,
+        ...patch,
+        status,
+        updatedAt: new Date().toISOString()
+      };
+      AutopilotRunSchema.parse(updated);
+      data.autopilotRuns[id] = updated;
+    });
+    return updated;
+  }
+
+  async appendAutopilotStep(step: AutopilotStep): Promise<void> {
+    AutopilotStepSchema.parse(step);
+    await this.update((data) => {
+      data.autopilotSteps[step.id] = step;
+    });
+  }
+
+  async listAutopilotSteps(autopilotRunId: string): Promise<AutopilotStep[]> {
+    return Object.values((await this.read()).autopilotSteps)
+      .filter((step) => step.autopilotRunId === autopilotRunId)
+      .sort((a, b) => (a.startedAt ?? "").localeCompare(b.startedAt ?? ""));
+  }
+
+  async saveUserDecision(decision: UserDecision): Promise<void> {
+    UserDecisionSchema.parse(decision);
+    await this.update((data) => {
+      data.userDecisions[decision.id] = decision;
+    });
+  }
+
+  async getUserDecision(id: string): Promise<UserDecision | undefined> {
+    return (await this.read()).userDecisions[id];
+  }
+
+  async listPendingUserDecisions(missionId?: string): Promise<UserDecision[]> {
+    return Object.values((await this.read()).userDecisions)
+      .filter((decision) => decision.status === "pending")
+      .filter((decision) => !missionId || decision.missionId === missionId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async resolveUserDecision(id: string, selectedOption: string): Promise<UserDecision | undefined> {
+    let updated: UserDecision | undefined;
+    await this.update((data) => {
+      const decision = data.userDecisions[id];
+      if (!decision) {
+        return;
+      }
+      updated = {
+        ...decision,
+        selectedOption,
+        status: "resolved",
+        resolvedAt: new Date().toISOString()
+      };
+      UserDecisionSchema.parse(updated);
+      data.userDecisions[id] = updated;
+    });
+    return updated;
+  }
+
   async saveSource(source: SourceEndpoint): Promise<void> {
     SourceEndpointSchema.parse(source);
     await this.update((data) => {
@@ -487,6 +636,55 @@ export class JsonFileStore implements LocalStore {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
+  async saveArtifactFile(file: ArtifactFile): Promise<void> {
+    ArtifactFileSchema.parse(file);
+    await this.update((data) => {
+      data.artifactFiles[file.id] = file;
+    });
+  }
+
+  async getArtifactFile(id: string): Promise<ArtifactFile | undefined> {
+    return (await this.read()).artifactFiles[id];
+  }
+
+  async listArtifactFilesForMission(missionId: string): Promise<ArtifactFile[]> {
+    return Object.values((await this.read()).artifactFiles)
+      .filter((file) => file.missionId === missionId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async saveArtifactBundle(bundle: ArtifactBundle): Promise<void> {
+    ArtifactBundleSchema.parse(bundle);
+    await this.update((data) => {
+      data.artifactBundles[bundle.id] = bundle;
+    });
+  }
+
+  async getArtifactBundle(id: string): Promise<ArtifactBundle | undefined> {
+    return (await this.read()).artifactBundles[id];
+  }
+
+  async listArtifactBundlesForMission(missionId: string): Promise<ArtifactBundle[]> {
+    return Object.values((await this.read()).artifactBundles)
+      .filter((bundle) => bundle.missionId === missionId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async saveOpenAIUploadedFileRef(ref: OpenAIUploadedFileRef): Promise<void> {
+    OpenAIUploadedFileRefSchema.parse(ref);
+    await this.update((data) => {
+      data.openAIUploadedFileRefs[ref.localFileId] = ref;
+    });
+  }
+
+  async getOpenAIUploadedFileRef(localFileId: string): Promise<OpenAIUploadedFileRef | undefined> {
+    return (await this.read()).openAIUploadedFileRefs[localFileId];
+  }
+
+  async listOpenAIUploadedFileRefs(): Promise<OpenAIUploadedFileRef[]> {
+    return Object.values((await this.read()).openAIUploadedFileRefs).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+  }
+
   async saveRun(run: Run): Promise<void> {
     RunSchema.parse(run);
     await this.update((data) => {
@@ -607,6 +805,10 @@ export function createEmptyStore(): StoreData {
     agentSessions: {},
     agentTurns: {},
     agentEvents: {},
+    autopilotPolicies: {},
+    autopilotRuns: {},
+    autopilotSteps: {},
+    userDecisions: {},
     sources: {},
     targets: {},
     captures: {},
@@ -615,6 +817,9 @@ export function createEmptyStore(): StoreData {
     missions: {},
     handoffCards: {},
     artifacts: {},
+    artifactFiles: {},
+    artifactBundles: {},
+    openAIUploadedFileRefs: {},
     runs: {},
     runSteps: {},
     verificationResults: {},
@@ -629,7 +834,16 @@ export function defaultAgentBridgeDataDir(): string {
     return process.env.AGENTBRIDGE_STORE_DIR;
   }
 
-  const base = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+  if (process.platform === "win32") {
+    const base = process.env.LOCALAPPDATA ?? join(homedir(), "AppData", "Local");
+    return join(base, "AgentBridge");
+  }
+
+  if (process.platform === "darwin") {
+    return join(homedir(), "Library", "Application Support", "AgentBridge");
+  }
+
+  const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
   return join(base, "AgentBridge");
 }
 

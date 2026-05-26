@@ -2,6 +2,8 @@ import { randomUUID } from "node:crypto";
 import {
   renderTaskSpecForTarget,
   TaskSpecSchema,
+  type AgentSessionRef,
+  type AgentTurn,
   type Artifact,
   type ExecutorProvider,
   type ExecutorTaskResult,
@@ -268,6 +270,35 @@ export class WorkbenchService {
     return result;
   }
 
+  async steerExecutor(missionId: string, text: string): Promise<{ artifactIds: string[]; turn?: AgentTurn }> {
+    const mission = await this.requireMission(missionId);
+    const artifact: Artifact = {
+      id: `artifact_${randomUUID()}`,
+      missionId,
+      kind: "reviewNote",
+      title: "User steering note",
+      content: text,
+      metadata: { source: "autopilotSteering" },
+      createdAt: this.now()
+    };
+    await this.store.saveArtifact(artifact);
+
+    const session = await this.latestExecutorSession(mission);
+    if (session && hasSteerTurn(this.executor)) {
+      const turns = await this.store.listAgentTurns(session.id);
+      const latestTurn = [...turns].reverse().find((turn) => turn.providerId === this.executor.profile().id);
+      const turn = await this.executor.steerTurn(session, text, {
+        missionId,
+        ...(latestTurn?.externalTurnId ? { turnId: latestTurn.externalTurnId } : {})
+      });
+      await this.appendRunStep(missionId, "followUp", "Steer Codex", "passed", [artifact.id, ...turn.artifactIds]);
+      return { artifactIds: [artifact.id, ...turn.artifactIds], turn };
+    }
+
+    await this.appendRunStep(missionId, "followUp", "Record steering note", "needs_review", [artifact.id]);
+    return { artifactIds: [artifact.id] };
+  }
+
   private async requireMission(missionId: string): Promise<Mission> {
     const mission = await this.store.getMission(missionId);
     if (!mission) {
@@ -300,6 +331,15 @@ export class WorkbenchService {
     };
     await this.store.saveArtifact(artifact);
     return artifact;
+  }
+
+  private async latestExecutorSession(mission: Mission): Promise<AgentSessionRef | undefined> {
+    const sessions = await this.store.listAgentSessions(this.executor.profile().id);
+    if (!mission.repoContext?.repoPath) {
+      return sessions[0];
+    }
+    const repoPath = normalizePath(mission.repoContext.repoPath);
+    return sessions.find((session) => session.repoPath && normalizePath(session.repoPath) === repoPath) ?? sessions[0];
   }
 
   private async appendRunStep(
@@ -434,4 +474,12 @@ function firstLine(content: string): string | undefined {
 
 function unique(values: string[]): string[] {
   return [...new Set(values)];
+}
+
+function normalizePath(path: string): string {
+  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
+}
+
+function hasSteerTurn(provider: ExecutorProvider): provider is ExecutorProvider & Required<Pick<ExecutorProvider, "steerTurn">> {
+  return typeof provider.steerTurn === "function";
 }

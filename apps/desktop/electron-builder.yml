@@ -13,10 +13,6 @@ files:
 extraResources:
   - from: ../native-host/dist-bundle/native-host.mjs
     to: native-host/native-host.mjs
-  - from: ../win-uia-helper/dist/win-x64
-    to: win-uia-helper
-    filter:
-      - "**/*"
 win:
   icon: build/icon.ico
   target:
@@ -27,8 +23,24 @@ win:
       arch:
         - x64
   executableName: AgentBridge
+  extraResources:
+    - from: ../win-uia-helper/dist/win-x64
+      to: win-uia-helper
+      filter:
+        - "**/*"
   signtoolOptions:
     publisherName: AgentBridge
+mac:
+  category: public.app-category.developer-tools
+  target:
+    - target: dmg
+      arch:
+        - x64
+        - arm64
+    - target: zip
+      arch:
+        - x64
+        - arm64
 nsis:
   oneClick: false
   perMachine: false

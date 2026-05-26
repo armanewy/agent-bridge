@@ -7,6 +7,8 @@ import type {
   CodexThreadRef,
   DeliveryAttempt,
   Artifact,
+  ArtifactBundle,
+  ArtifactFile,
   HandoffCard,
   Handoff,
   Link,
@@ -26,6 +28,7 @@ import type {
   ExecutorTaskResult,
   PlannerRequest,
   PlannerResponse,
+  PlatformCapabilities,
   ReviewResult,
   VerificationResult,
   WorkflowLink
@@ -33,6 +36,8 @@ import type {
 import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 import type { CreateWorkbenchMissionInput } from "./workbench-service.js";
+import type { AutopilotStatus } from "./autopilot-service.js";
+export type { AutopilotStatus } from "./autopilot-service.js";
 
 export interface WindowRevalidation {
   status: "available" | "changed" | "unavailable";
@@ -109,14 +114,26 @@ export interface CodexAppServerStatus {
   checkedAt: string;
 }
 
+export interface PlatformStatus {
+  capabilities: PlatformCapabilities;
+  userDataDir: string;
+  artifactRoot: string;
+  stagingRoot: string;
+  logsDir: string;
+  defaultShell: string;
+}
+
 export interface MissionDetail {
   mission: Mission;
   handoffCards: HandoffCard[];
   captures: Capture[];
   artifacts: Artifact[];
+  artifactFiles?: ArtifactFile[];
+  artifactBundles?: ArtifactBundle[];
   deliveryAttempts: DeliveryAttempt[];
   runs: Run[];
   verificationResults: VerificationResult[];
+  agentEvents?: AgentEvent[];
 }
 
 export interface VerificationRunRequest {
@@ -212,6 +229,12 @@ export interface AgentBridgeApi {
   sendVerificationToPlannerForReview(missionId: string): Promise<ReviewResult>;
   createFollowUpFromPlannerReview(missionId: string): Promise<HandoffCard>;
   sendFollowUpToExecutor(missionId: string, sessionRefId?: string): Promise<ExecutorTaskResult>;
+  startAutopilot(missionId: string, policyId?: string): Promise<AutopilotStatus>;
+  stopAutopilot(autopilotRunId: string): Promise<AutopilotStatus>;
+  continueAutopilot(autopilotRunId: string): Promise<AutopilotStatus>;
+  steerAutopilot(autopilotRunId: string, text: string): Promise<AutopilotStatus>;
+  getAutopilotStatus(missionId: string): Promise<AutopilotStatus>;
+  resolvePendingDecision(decisionId: string, selectedOption: string): Promise<AutopilotStatus>;
   listCaptures(): Promise<Capture[]>;
   listMissions(): Promise<Mission[]>;
   getMissionDetail(id: string): Promise<MissionDetail | undefined>;
@@ -223,6 +246,7 @@ export interface AgentBridgeApi {
   deliverHandoffCardToCodex(input: HandoffCardDeliveryRequest): Promise<CodexDeliveryResult>;
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   getSetupStatus(): Promise<SetupStatus>;
+  getPlatformStatus(): Promise<PlatformStatus>;
   getCodexAppServerStatus(): Promise<CodexAppServerStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
   connectChrome(input?: ConfigureNativeHostRequest): Promise<SetupStatus>;

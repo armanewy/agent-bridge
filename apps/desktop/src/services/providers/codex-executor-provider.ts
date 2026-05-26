@@ -13,12 +13,19 @@ import {
   type ExecutorTaskRequest,
   type ExecutorTaskResult
 } from "@agentbridge/core";
+import { ExecutorTaskRequestSchema } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { CodexTargetService } from "../codex-target-service.js";
 import type { CodexSessionService } from "../codex-session-service.js";
 import type { CodexAppServerClient } from "../codex-app-server-client.js";
+import type { ArtifactBrokerService } from "../artifact-broker-service.js";
 
 export const CODEX_EXECUTOR_PROVIDER_ID = "codex";
+
+export interface CodexExecutorProviderOptions {
+  platform?: string;
+  canUseCodexDeepLinks?: boolean;
+}
 
 export class CodexExecutorProvider implements ExecutorProvider {
   constructor(
@@ -26,7 +33,9 @@ export class CodexExecutorProvider implements ExecutorProvider {
     private readonly codexSessionService: CodexSessionService,
     private readonly codexTargetService: CodexTargetService,
     private readonly appServerClient?: CodexAppServerClient,
-    private readonly now: () => string = () => new Date().toISOString()
+    private readonly now: () => string = () => new Date().toISOString(),
+    private readonly options: CodexExecutorProviderOptions = {},
+    private readonly artifactBroker?: ArtifactBrokerService
   ) {}
 
   profile(): AgentProviderProfile {
@@ -40,10 +49,22 @@ export class CodexExecutorProvider implements ExecutorProvider {
         "canListSessions",
         "canCreateSession",
         "canResumeSession",
-        "canSendMessage"
+        "canSendMessage",
+        "canStreamEvents"
       ],
       authMode: "appServer",
       status: "unavailable",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: true,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: true,
+        canReturnLogs: true,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
       metadata: {
         adapter: "codex-executor",
         reason: "Status requires async Codex target and App Server checks."
@@ -57,16 +78,21 @@ export class CodexExecutorProvider implements ExecutorProvider {
       this.appServerClient?.healthCheck() ?? Promise.resolve({ available: false, message: "Codex App Server is not configured." })
     ]);
     const codexTargets = targets.filter((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
-    const available = codexTargets.length > 0 || appServerStatus.available;
+    const deepLinkFallbackAvailable = codexTargets.length > 0 && this.options.canUseCodexDeepLinks !== false;
+    const available = deepLinkFallbackAvailable || appServerStatus.available;
     return {
       ...this.profile(),
       status: available ? "available" : "unavailable",
       metadata: {
         adapter: "codex-executor",
+        platform: this.options.platform ?? "unknown",
         deepLinkTargetCount: codexTargets.length,
         appServerAvailable: appServerStatus.available,
         appServerMessage: appServerStatus.message,
-        fallbackAvailable: codexTargets.length > 0
+        fallbackAvailable: deepLinkFallbackAvailable,
+        deepLinkFallbackAvailable,
+        canUseCodexDeepLinks: this.options.canUseCodexDeepLinks !== false,
+        canStreamEvents: appServerStatus.available
       }
     };
   }
@@ -117,30 +143,59 @@ export class CodexExecutorProvider implements ExecutorProvider {
   }
 
   async sendTask(input: ExecutorTaskRequest): Promise<ExecutorTaskResult> {
-    const session = input.sessionRefId
-      ? await this.resolveSession(input.sessionRefId)
+    const request = ExecutorTaskRequestSchema.parse(input);
+    const session = request.sessionRefId
+      ? await this.resolveSession(request.sessionRefId)
       : await this.createSession({
-          title: input.taskSpec.title,
-          ...(input.repoContext?.repoPath ? { repoPath: input.repoContext.repoPath } : {})
+          title: request.taskSpec.title,
+          ...(request.repoContext?.repoPath ? { repoPath: request.repoContext.repoPath } : {})
         });
-    const repoPath = input.repoContext?.repoPath ?? session.repoPath;
+    const repoPath = request.repoContext?.repoPath ?? session.repoPath;
     if (!repoPath) {
       throw new Error("Codex Executor requires a repo path.");
     }
     const target = await this.resolveCodexTarget(repoPath, session);
-    const prompt = input.generatedPrompt ?? renderTaskSpecForTarget(input.taskSpec, target, input.repoContext);
-    const artifactIds = await this.saveExecutorPromptArtifact(input, prompt, session);
-    const result = await this.codexTargetService.deliver({
-      target,
-      prompt,
-      dryRun: input.dryRun,
-      missionId: input.missionId,
-      handoffCardId: input.handoffCardId ?? `provider_card_${randomUUID()}`,
-      handoffId: stringFromMetadata(input.metadata.handoffId) ?? `provider_handoff_${randomUUID()}`,
-      ...(target.existingThreadId ? { codexThreadId: target.existingThreadId } : {}),
-      codexOpenMode: target.openMode,
-      codexIntegrationMode: target.integrationMode ?? "deepLink"
+    const preparedArtifacts = await this.prepareArtifactsForInput(request);
+    const prompt = [
+      request.generatedPrompt ?? renderTaskSpecForTarget(request.taskSpec, target, request.repoContext),
+      renderCodexArtifactManifest(preparedArtifacts)
+    ]
+      .filter((section) => section.trim())
+      .join("\n\n");
+    const artifactIds = await this.saveExecutorPromptArtifact(request, prompt, session);
+    await this.appendAgentEvent("turn.started", {
+      sessionRefId: session.id,
+      payload: {
+        missionId: request.missionId,
+        openMode: target.openMode,
+        integrationMode: target.integrationMode ?? "deepLink",
+        dryRun: request.dryRun,
+        stagedFilePaths: preparedArtifacts.stagedFilePaths
+      }
     });
+    let result;
+    try {
+      result = await this.codexTargetService.deliver({
+        target,
+        prompt,
+        dryRun: request.dryRun,
+        missionId: request.missionId,
+        handoffCardId: request.handoffCardId ?? `provider_card_${randomUUID()}`,
+        handoffId: stringFromMetadata(request.metadata.handoffId) ?? `provider_handoff_${randomUUID()}`,
+        ...(target.existingThreadId ? { codexThreadId: target.existingThreadId } : {}),
+        codexOpenMode: target.openMode,
+        codexIntegrationMode: target.integrationMode ?? "deepLink"
+      });
+    } catch (error) {
+      await this.appendAgentEvent("turn.error", {
+        sessionRefId: session.id,
+        payload: {
+          missionId: request.missionId,
+          message: error instanceof Error ? error.message : String(error)
+        }
+      });
+      throw error;
+    }
     const completedAt = this.now();
     const turn: AgentTurn = {
       id: `agent_turn_${randomUUID()}`,
@@ -172,13 +227,24 @@ export class CodexExecutorProvider implements ExecutorProvider {
         ...(result.codexTurnId ? { codexTurnId: result.codexTurnId } : {})
       }
     });
+    await this.appendAgentEvent(result.success ? "turn.completed" : "turn.failed", {
+      sessionRefId: session.id,
+      turnId: turn.id,
+      payload: {
+        missionId: request.missionId,
+        deliveryMode: result.deliveryMode,
+        codexThreadId: result.codexThreadId,
+        codexTurnId: result.codexTurnId,
+        warnings: result.warnings ?? []
+      }
+    });
 
     return {
       id: `executor_result_${randomUUID()}`,
       providerId: CODEX_EXECUTOR_PROVIDER_ID,
       sessionRef: session,
       turnId: turn.id,
-      deliveryMode: executorDeliveryMode(result.deliveryMode, input.dryRun),
+      deliveryMode: executorDeliveryMode(result.deliveryMode, request.dryRun),
       success: result.success,
       warnings: result.warnings ?? [],
       artifactIds,
@@ -187,9 +253,116 @@ export class CodexExecutorProvider implements ExecutorProvider {
         codexThreadId: result.codexThreadId,
         codexTurnId: result.codexTurnId,
         rawDeliveryMode: result.deliveryMode,
-        deepLink: result.deepLink
+        deepLink: result.deepLink,
+        stagedFilePaths: preparedArtifacts.stagedFilePaths
       }
     };
+  }
+
+  async steerTurn(sessionRef: AgentSessionRef, text: string, context: { missionId?: string; turnId?: string } = {}): Promise<AgentTurn> {
+    const session = (await this.store.getAgentSession(sessionRef.id)) ?? sessionRef;
+    if (codexIntegrationModeFromSession(session) !== "appServer" || !this.appServerClient) {
+      throw new Error("Codex steering requires an existing Codex App Server session.");
+    }
+    const startedAt = this.now();
+    const requestedTurnId = context.turnId ?? stringFromMetadata(session.metadata.codexTurnId);
+    const result = await this.appServerClient.steerTurn(session.externalSessionId, text, {
+      ...(requestedTurnId ? { turnId: requestedTurnId } : {})
+    });
+    const completedAt = this.now();
+    const turn: AgentTurn = {
+      id: `agent_turn_${randomUUID()}`,
+      providerId: CODEX_EXECUTOR_PROVIDER_ID,
+      sessionRefId: session.id,
+      ...(result.turnId ? { externalTurnId: result.turnId } : {}),
+      role: "user",
+      content: text,
+      status: "completed",
+      artifactIds: [],
+      createdAt: startedAt,
+      completedAt,
+      metadata: {
+        source: "autopilotSteering",
+        codexThreadId: session.externalSessionId,
+        codexTurnId: result.turnId,
+        appServerMetadata: result.metadata
+      }
+    };
+    await this.store.saveAgentTurn(turn);
+    await this.store.saveAgentSession({
+      ...session,
+      status: "active",
+      lastSeenAt: completedAt,
+      metadata: {
+        ...session.metadata,
+        ...(result.turnId ? { codexTurnId: result.turnId } : {})
+      }
+    });
+    await this.appendAgentEvent("turn.steer", {
+      sessionRefId: session.id,
+      turnId: turn.id,
+      payload: {
+        missionId: context.missionId,
+        codexThreadId: session.externalSessionId,
+        codexTurnId: result.turnId
+      }
+    });
+    return turn;
+  }
+
+  async prepareArtifactsForInput(request: ExecutorTaskRequest): Promise<Record<string, unknown>> {
+    const parsed = ExecutorTaskRequestSchema.parse(request);
+    const fileIds = await this.resolveRequestFileIds(parsed);
+    const stagedFilePaths = [...parsed.stagedFilePaths];
+    const manifestEntries: Array<Record<string, unknown>> = [];
+
+    if (this.artifactBroker && fileIds.length) {
+      const stagedFiles = await this.artifactBroker.stageFilesForMission(parsed.missionId, fileIds, "executorInput");
+      for (const file of stagedFiles) {
+        stagedFilePaths.push(file.stagedPath);
+        manifestEntries.push({
+          fileId: file.fileId,
+          fileName: file.fileName,
+          stagedPath: file.stagedPath,
+          relativePath: file.relativePath,
+          sha256: file.sha256,
+          sizeBytes: file.sizeBytes,
+          classification: file.classification
+        });
+      }
+    } else {
+      for (const fileId of fileIds) {
+        const file = await this.store.getArtifactFile(fileId);
+        if (file) {
+          manifestEntries.push({
+            fileId: file.id,
+            fileName: file.fileName,
+            localPath: file.localPath,
+            sha256: file.sha256,
+            sizeBytes: file.sizeBytes,
+            classification: file.classification,
+            staged: false
+          });
+        }
+      }
+    }
+
+    return {
+      fileIds,
+      stagedFilePaths,
+      manifestEntries
+    };
+  }
+
+  private async resolveRequestFileIds(request: { fileIds: string[]; artifactBundleIds: string[] }): Promise<string[]> {
+    const bundleFileIds: string[] = [];
+    for (const bundleId of request.artifactBundleIds) {
+      const bundle = await this.store.getArtifactBundle(bundleId);
+      if (bundle) {
+        bundleFileIds.push(...bundle.fileIds);
+      }
+    }
+    return [...new Set([...request.fileIds, ...bundleFileIds])];
   }
 
   private async resolveSession(sessionRefId: string): Promise<AgentSessionRef> {
@@ -251,6 +424,21 @@ export class CodexExecutorProvider implements ExecutorProvider {
     await this.store.saveArtifact(artifact);
     return [artifact.id];
   }
+
+  private async appendAgentEvent(
+    type: string,
+    input: { sessionRefId?: string; turnId?: string; payload: Record<string, unknown> }
+  ): Promise<void> {
+    await this.store.appendAgentEvent({
+      id: `agent_event_${randomUUID()}`,
+      providerId: CODEX_EXECUTOR_PROVIDER_ID,
+      ...(input.sessionRefId ? { sessionRefId: input.sessionRefId } : {}),
+      ...(input.turnId ? { turnId: input.turnId } : {}),
+      type,
+      payload: input.payload,
+      createdAt: this.now()
+    });
+  }
 }
 
 function codexThreadRefToSession(ref: CodexThreadRef, now: string): AgentSessionRef {
@@ -297,6 +485,33 @@ function executorDeliveryMode(mode: unknown, dryRun: boolean): ExecutorTaskResul
     return "openOnlyFallback";
   }
   return "newSession";
+}
+
+function renderCodexArtifactManifest(preparedArtifacts: Record<string, unknown>): string {
+  const entries = Array.isArray(preparedArtifacts.manifestEntries) ? preparedArtifacts.manifestEntries : [];
+  if (!entries.length) {
+    return "";
+  }
+  const lines = [
+    "AgentBridge staged artifacts:",
+    "Inspect these files before deciding whether to copy or modify them. Do not assume they belong in the repo unless the task requires it."
+  ];
+  for (const entry of entries) {
+    const record = entry as Record<string, unknown>;
+    lines.push(
+      [
+        `- ${String(record.fileName ?? record.fileId ?? "artifact")}`,
+        record.stagedPath ? `  stagedPath: ${String(record.stagedPath)}` : undefined,
+        record.localPath ? `  localPath: ${String(record.localPath)}` : undefined,
+        record.relativePath ? `  relativePath: ${String(record.relativePath)}` : undefined,
+        record.classification ? `  classification: ${String(record.classification)}` : undefined,
+        record.sha256 ? `  sha256: ${String(record.sha256)}` : undefined
+      ]
+        .filter((line): line is string => Boolean(line))
+        .join("\n")
+    );
+  }
+  return lines.join("\n");
 }
 
 function sessionSearchText(ref: CodexThreadRef): string {

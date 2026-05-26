@@ -22,6 +22,16 @@ Commands may come from:
 
 AgentBridge must not run commands suggested by a model response unless the user explicitly configures or enters them.
 
+## Cross-Platform Runner
+
+Verification uses a platform-aware command runner:
+
+- Windows: explicit shell from `ComSpec` or `cmd.exe`.
+- macOS: `/bin/zsh`.
+- Linux: `$SHELL` or `/bin/bash`.
+
+Each command artifact records the platform, shell, working directory, exit code, stdout, stderr, and duration. Commands still run only from configured verification settings by default.
+
 ## Result Status
 
 - `passed`: at least one configured command ran and all commands exited with code 0.

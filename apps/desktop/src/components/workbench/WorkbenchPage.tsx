@@ -1,14 +1,16 @@
-import { Bot, CheckCircle2, FileText, GitBranch, Play, Send, Wrench } from "lucide-react";
+import { Bot, CheckCircle2, FileText, GitBranch, Play, Send, Square, Wrench } from "lucide-react";
 import { useMemo, useState } from "react";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
+  Artifact,
+  ArtifactFile,
   CodexDeepLinkTarget,
   CodexThreadRef,
   HandoffCard,
   Mission
 } from "@agentbridge/core";
-import type { CodexAppServerStatus, MissionDetail } from "../../services/bridge-contract.js";
+import type { AutopilotStatus, CodexAppServerStatus, MissionDetail } from "../../services/bridge-contract.js";
 
 interface WorkbenchPageProps {
   missions: Mission[];
@@ -19,6 +21,7 @@ interface WorkbenchPageProps {
   agentSessions: AgentSessionRef[];
   providerProfiles: AgentProviderProfile[];
   codexAppServerStatus?: CodexAppServerStatus | undefined;
+  autopilotStatus?: AutopilotStatus | undefined;
   error?: string | undefined;
   onChooseRepo(): void;
   onSelectMission(id: string): void;
@@ -30,6 +33,11 @@ interface WorkbenchPageProps {
   onAskPlannerToReview(): void;
   onCreateFollowUp(): void;
   onSendFollowUp(sessionRefId?: string): void;
+  onStartMission(intent: string, mode: "manual" | "supervised" | "autonomous"): void;
+  onStopAutopilot(runId: string): void;
+  onContinueAutopilot(runId: string): void;
+  onSteerAutopilot(runId: string, text: string): void;
+  onResolvePendingDecision(decisionId: string, selectedOption: string): void;
 }
 
 export function WorkbenchPage({
@@ -41,6 +49,7 @@ export function WorkbenchPage({
   agentSessions,
   providerProfiles,
   codexAppServerStatus,
+  autopilotStatus,
   error,
   onChooseRepo,
   onSelectMission,
@@ -51,9 +60,17 @@ export function WorkbenchPage({
   onRunVerification,
   onAskPlannerToReview,
   onCreateFollowUp,
-  onSendFollowUp
+  onSendFollowUp,
+  onStartMission,
+  onStopAutopilot,
+  onContinueAutopilot,
+  onSteerAutopilot,
+  onResolvePendingDecision
 }: WorkbenchPageProps): JSX.Element {
   const [plannerText, setPlannerText] = useState("");
+  const [intentText, setIntentText] = useState("");
+  const [steeringText, setSteeringText] = useState("");
+  const [autopilotMode, setAutopilotMode] = useState<"manual" | "supervised" | "autonomous">("supervised");
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
   const planner = providerProfiles.find((profile) => profile.id === "openai-planner");
   const codex = providerProfiles.find((profile) => profile.id === "codex");
@@ -62,6 +79,7 @@ export function WorkbenchPage({
   const verification = missionDetail?.verificationResults[0];
   const plannerResponses = missionDetail?.artifacts.filter((artifact) => artifact.kind === "modelResponse") ?? [];
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
+  const latestProviderEvent = missionDetail?.agentEvents?.[0];
   const codexSessionRows = useMemo(() => {
     const fromThreads: AgentSessionRef[] = codexThreads.map((thread) => ({
       id: `codex_session_${thread.threadId}`,
@@ -89,9 +107,96 @@ export function WorkbenchPage({
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard);
+  const canStartMission = Boolean(codexTarget && intentText.trim());
+  const activeRun = autopilotStatus?.run;
 
   return (
     <div className="workbench-layout">
+      <section className="panel intent-panel">
+        <div className="panel-heading compact-heading">
+          <div>
+            <span className="eyebrow">Mission</span>
+            <h2>What do you want done?</h2>
+            <p>Choose a repo, describe the outcome once, then let AgentBridge plan, send, verify, and review.</p>
+          </div>
+          <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} />
+        </div>
+        <textarea
+          className="planner-input intent-input"
+          value={intentText}
+          onChange={(event) => setIntentText(event.target.value)}
+          placeholder="Example: Simplify the Workbench UI and remove irrelevant panels."
+        />
+        <div className="intent-actions">
+          <label className="field-label">
+            Mode
+            <select value={autopilotMode} onChange={(event) => setAutopilotMode(event.target.value as typeof autopilotMode)}>
+              <option value="manual">Manual</option>
+              <option value="supervised">Supervised</option>
+              <option value="autonomous">Autonomous</option>
+            </select>
+          </label>
+          <button type="button" className="primary-button" disabled={!canStartMission} onClick={() => onStartMission(intentText, autopilotMode)}>
+            <Play size={16} />
+            Start Mission
+          </button>
+          {activeRun && activeRun.status !== "cancelled" && activeRun.status !== "passed" && activeRun.status !== "failed" ? (
+            <button type="button" className="secondary-button" onClick={() => onStopAutopilot(activeRun.id)}>
+              <Square size={16} />
+              Stop
+            </button>
+          ) : null}
+        </div>
+        <MissionTimeline status={autopilotStatus} />
+        {latestProviderEvent ? (
+          <p className="latest-provider-event">
+            Latest provider event: <strong>{latestProviderEvent.type}</strong>
+          </p>
+        ) : null}
+        {autopilotStatus?.pendingDecision ? (
+          <div className="pending-decision">
+            <strong>{autopilotStatus.pendingDecision.prompt}</strong>
+            <div className="button-row">
+              {autopilotStatus.pendingDecision.options.map((option) => (
+                <button
+                  key={option}
+                  type="button"
+                  className={option === "Approve" ? "primary-button" : "secondary-button"}
+                  onClick={() => onResolvePendingDecision(autopilotStatus.pendingDecision?.id ?? "", option)}
+                >
+                  {option}
+                </button>
+              ))}
+            </div>
+          </div>
+        ) : null}
+        {activeRun ? (
+          <div className="steering-row">
+            <input
+              value={steeringText}
+              onChange={(event) => setSteeringText(event.target.value)}
+              placeholder="Steer this mission..."
+            />
+            <button
+              type="button"
+              className="secondary-button"
+              disabled={!steeringText.trim()}
+              onClick={() => {
+                onSteerAutopilot(activeRun.id, steeringText);
+                setSteeringText("");
+              }}
+            >
+              Steer
+            </button>
+            {activeRun.status === "blocked" ? (
+              <button type="button" className="secondary-button" onClick={() => onContinueAutopilot(activeRun.id)}>
+                Continue
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+      </section>
+
       <section className="panel workbench-repo-strip">
         <div>
           <span className="eyebrow">Repo</span>
@@ -105,6 +210,8 @@ export function WorkbenchPage({
 
       {error ? <div className="error-banner">{error}</div> : null}
 
+      <details className="workbench-details">
+        <summary>Show planner, Codex, and task details</summary>
       <div className="workbench-grid">
         <section className="panel workbench-pane">
           <div className="panel-heading compact-heading">
@@ -204,6 +311,8 @@ export function WorkbenchPage({
         {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
         {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
       </section>
+      <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} />
+      </details>
 
       {missions.length > 0 ? (
         <section className="panel recent-workbench-tasks">
@@ -229,6 +338,62 @@ export function WorkbenchPage({
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function ArtifactTray({ artifacts, files }: { artifacts: Artifact[]; files: ArtifactFile[] }): JSX.Element {
+  const fileByArtifact = new Map(files.map((file) => [file.artifactId, file]));
+  const rows = artifacts.slice(0, 10);
+  return (
+    <section className="panel artifact-tray">
+      <div className="panel-heading compact-heading">
+        <div>
+          <span className="eyebrow">Artifacts</span>
+          <h2>Mission files and records</h2>
+          <p>Prompts, diffs, logs, generated files, and provider messages stay local unless policy allows sending them.</p>
+        </div>
+      </div>
+      {rows.length === 0 ? (
+        <p>No artifacts yet.</p>
+      ) : (
+        <div className="artifact-tray-list">
+          {rows.map((artifact) => {
+            const file = fileByArtifact.get(artifact.id);
+            return (
+              <div key={artifact.id} className="artifact-tray-row">
+                <div>
+                  <strong>{artifact.title}</strong>
+                  <span>{artifact.kind} · {artifact.metadata.providerId ? String(artifact.metadata.providerId) : "local"} · {file ? formatBytes(file.sizeBytes) : "text"}</span>
+                </div>
+                <em>{artifactTransferStatus(artifact, file)}</em>
+                <div className="artifact-actions">
+                  <button type="button" className="secondary-button" disabled={!artifact.content} onClick={() => void navigator.clipboard?.writeText(artifact.content ?? "")}>
+                    Copy
+                  </button>
+                  <button type="button" className="secondary-button" disabled>
+                    Reveal
+                  </button>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </section>
+  );
+}
+
+function MissionTimeline({ status }: { status?: AutopilotStatus | undefined }): JSX.Element {
+  const steps = status?.steps ?? [];
+  const labels = ["Planning", "TaskSpec", "Codex execution", "Verification", "Planner review", "Follow-up", "Done"];
+  return (
+    <div className="mission-timeline">
+      {labels.map((label, index) => (
+        <span key={label} className={index <= steps.length ? "timeline-step active" : "timeline-step"}>
+          {label}
+        </span>
+      ))}
     </div>
   );
 }
@@ -301,4 +466,27 @@ function repoName(path: string): string {
 
 function shortId(value: string): string {
   return value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
+}
+
+function artifactTransferStatus(artifact: Artifact, file?: ArtifactFile): string {
+  if (artifact.metadata.uploadedToProvider) {
+    return "uploaded";
+  }
+  if (artifact.metadata.stagedForPlanner) {
+    return "staged for planner";
+  }
+  if (artifact.metadata.stagedForCodex || file?.localPath.includes("staging")) {
+    return "staged for codex";
+  }
+  return "local only";
+}
+
+function formatBytes(value: number): string {
+  if (value < 1024) {
+    return `${value} B`;
+  }
+  if (value < 1024 * 1024) {
+    return `${Math.round(value / 1024)} KB`;
+  }
+  return `${(value / (1024 * 1024)).toFixed(1)} MB`;
 }

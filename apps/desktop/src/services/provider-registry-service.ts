@@ -116,6 +116,17 @@ export function defaultProviderProfiles(): AgentProviderProfile[] {
       capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
       authMode: "apiKey",
       status: plannerHasKey ? "unavailable" : "needsAuth",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: false,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: false,
+        canReturnLogs: false,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
       metadata: {
         adapter: "placeholder",
         reason: plannerHasKey ? "Planner adapter is not implemented yet." : "Set AGENTBRIDGE_OPENAI_API_KEY or OPENAI_API_KEY."
@@ -128,6 +139,17 @@ export function defaultProviderProfiles(): AgentProviderProfile[] {
       capabilities: ["canExecuteCode", "canUseRepo", "canListSessions", "canCreateSession", "canResumeSession", "canSendMessage"],
       authMode: "appServer",
       status: "unavailable",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: false,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: false,
+        canReturnLogs: false,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
       metadata: {
         adapter: "placeholder",
         reason: "Codex Executor provider wrapper is not implemented yet; legacy Codex services remain available."

@@ -26,6 +26,7 @@ capabilities:
 - canCreateSession
 - canResumeSession
 - canSendMessage
+- canStreamEvents
 ```
 
 Status is `available` when AgentBridge has at least one Codex deep-link target or the Codex App Server health check succeeds.
@@ -77,4 +78,37 @@ metadata.integrationMode = deepLink
 
 Each executor send stores a `generatedPrompt` artifact titled `Codex executor prompt`.
 
+When task requests include artifact bundles or file IDs, Codex Executor can stage those local artifact files under the AgentBridge staging root and append a manifest to the Codex prompt:
+
+```text
+AgentBridge staged artifacts:
+- notes.md
+  stagedPath: ...
+  sha256: ...
+```
+
+The staged files remain outside the repository by default. Codex receives the repo `cwd` plus a manifest instructing it to inspect staged files before deciding whether anything should be copied or modified. AgentBridge does not pre-write staged files into the repo.
+
 When the existing-thread fallback is open-only, UI must still warn clearly that AgentBridge opened the Codex thread but did not inject the prompt.
+
+## Events And Steering
+
+Codex Executor writes provider events into the local store for:
+
+```text
+turn.started
+turn.completed
+turn.failed
+turn.error
+turn.steer
+```
+
+These events are mission-scoped when the request includes a mission ID, so the Workbench can show the latest provider event without exposing raw App Server messages by default.
+
+When an existing Codex session uses the App Server integration, steering uses:
+
+```text
+turn/steer
+```
+
+The steering text is also stored as a mission artifact. If the selected Codex session is deep-link only, steering remains a local artifact/follow-up path rather than pretending the message was injected.

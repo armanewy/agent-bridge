@@ -1,10 +1,14 @@
 import OpenAI from "openai";
 import { randomUUID } from "node:crypto";
+import { createReadStream } from "node:fs";
+import { readFile } from "node:fs/promises";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
   AgentTurn,
   Artifact,
+  ArtifactFile,
+  OpenAIUploadedFileRef,
   PlannerProvider,
   PlannerRequest,
   PlannerResponse,
@@ -14,6 +18,7 @@ import type {
 } from "@agentbridge/core";
 import { PlannerRequestSchema, ReviewRequestSchema, TaskSpecSchema } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
+import type { ArtifactBrokerService } from "../artifact-broker-service.js";
 
 export const OPENAI_PLANNER_PROVIDER_ID = "openai-planner";
 
@@ -24,6 +29,7 @@ export interface OpenAIPlannerResponseRequest {
   model: string;
   instructions: string;
   input: string;
+  fileInputs?: OpenAIPlannerFileInput[];
   previousResponseId?: string;
 }
 
@@ -33,14 +39,37 @@ export interface OpenAIPlannerResponsePayload {
   metadata?: Record<string, unknown>;
 }
 
+export interface OpenAIPlannerFileInput {
+  type: "input_file";
+  file_id: string;
+}
+
+export interface OpenAIPlannerUploadFileRequest {
+  localPath: string;
+  fileName: string;
+  mimeType?: string;
+  purpose: "user_data";
+  sha256: string;
+}
+
+export interface OpenAIPlannerUploadFileResponse {
+  openaiFileId: string;
+  purpose: string;
+  expiresAt?: string;
+}
+
 export interface OpenAIPlannerTransport {
   createResponse(request: OpenAIPlannerResponseRequest): Promise<OpenAIPlannerResponsePayload>;
+  uploadFile?(request: OpenAIPlannerUploadFileRequest): Promise<OpenAIPlannerUploadFileResponse>;
 }
 
 export interface OpenAIPlannerProviderOptions {
   apiKey?: string;
   model?: string;
   transport?: OpenAIPlannerTransport;
+  artifactBroker?: ArtifactBrokerService;
+  maxInlineFileBytes?: number;
+  allowFileUploads?: boolean;
   now?: () => string;
 }
 
@@ -48,12 +77,18 @@ export class OpenAIPlannerProvider implements PlannerProvider {
   private readonly apiKey: string | undefined;
   private readonly model: string;
   private readonly transport: OpenAIPlannerTransport | undefined;
+  private readonly artifactBroker: ArtifactBrokerService | undefined;
+  private readonly maxInlineFileBytes: number;
+  private readonly allowFileUploads: boolean;
   private readonly now: () => string;
 
   constructor(private readonly store: LocalStore, options: OpenAIPlannerProviderOptions = {}) {
     this.apiKey = options.apiKey ?? process.env.AGENTBRIDGE_OPENAI_API_KEY ?? process.env.OPENAI_API_KEY;
     this.model = options.model ?? process.env.AGENTBRIDGE_OPENAI_PLANNER_MODEL ?? "gpt-4.1-mini";
     this.transport = options.transport;
+    this.artifactBroker = options.artifactBroker;
+    this.maxInlineFileBytes = options.maxInlineFileBytes ?? 64 * 1024;
+    this.allowFileUploads = options.allowFileUploads ?? false;
     this.now = options.now ?? (() => new Date().toISOString());
   }
 
@@ -65,6 +100,17 @@ export class OpenAIPlannerProvider implements PlannerProvider {
       capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
       authMode: "apiKey",
       status: this.hasTransport() ? "available" : "needsAuth",
+      artifactCapabilities: {
+        canAcceptTextArtifacts: true,
+        canAcceptFileInputs: false,
+        canAcceptFilePaths: false,
+        canReturnTextArtifacts: true,
+        canReturnFileArtifacts: false,
+        canReturnDiffs: false,
+        canReturnLogs: false,
+        canReturnScreenshots: false,
+        acceptedMimeTypes: ["text/plain", "text/markdown", "application/json"]
+      },
       metadata: {
         model: this.model,
         systemPromptVersion: "agentbridge-planner-v1",
@@ -183,6 +229,56 @@ export class OpenAIPlannerProvider implements PlannerProvider {
     };
   }
 
+  async prepareArtifactsForInput(
+    request: PlannerRequest | ReviewRequest,
+    _context: Record<string, unknown> = {}
+  ): Promise<Record<string, unknown>> {
+    const fileIds = await this.resolveRequestFileIds(request);
+    const inlineFileTexts: Array<{ fileId: string; fileName: string; content: string }> = [];
+    const fileSummaries: string[] = [];
+    const uploadedFiles: OpenAIUploadedFileRef[] = [];
+    const fileInputs: OpenAIPlannerFileInput[] = [];
+    const transport = this.transport;
+
+    for (const fileId of fileIds) {
+      const file = await this.store.getArtifactFile(fileId);
+      if (!file) {
+        fileSummaries.push(`- ${fileId}: missing local file metadata`);
+        continue;
+      }
+
+      const summary = `${file.fileName} (${file.classification}, ${file.sizeBytes} bytes, sha256 ${file.sha256})`;
+      if (isTextLikeFile(file) && file.sizeBytes <= this.maxInlineFileBytes) {
+        const content = await readFile(file.localPath, "utf8");
+        inlineFileTexts.push({ fileId: file.id, fileName: file.fileName, content });
+        fileSummaries.push(`- ${summary}: included inline`);
+        continue;
+      }
+
+      if (this.allowFileUploads && transport?.uploadFile && isProviderUploadCandidate(file)) {
+        const existing = await this.store.getOpenAIUploadedFileRef(file.id);
+        const uploaded =
+          existing && existing.sha256 === file.sha256
+            ? existing
+            : await this.uploadOpenAIFile(file, transport);
+        uploadedFiles.push(uploaded);
+        fileInputs.push({ type: "input_file", file_id: uploaded.openaiFileId });
+        fileSummaries.push(`- ${summary}: uploaded to OpenAI file ${uploaded.openaiFileId}`);
+        continue;
+      }
+
+      fileSummaries.push(`- ${summary}: summarized only`);
+    }
+
+    return {
+      fileIds,
+      fileSummaries,
+      inlineFileTexts,
+      uploadedFiles,
+      fileInputs
+    };
+  }
+
   private async resolvePlannerSession(
     sessionRefId: string | undefined,
     fallback: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }
@@ -226,6 +322,14 @@ export class OpenAIPlannerProvider implements PlannerProvider {
       instructions: SYSTEM_PROMPT,
       input: renderPlannerInput(message, context)
     };
+    if (context && hasArtifactInputs(context)) {
+      const preparedArtifacts = await this.prepareArtifactsForInput(context);
+      responseRequest.input = renderPlannerInput(message, context, preparedArtifacts);
+      const fileInputs = preparedArtifacts.fileInputs;
+      if (Array.isArray(fileInputs) && fileInputs.length) {
+        responseRequest.fileInputs = fileInputs as OpenAIPlannerFileInput[];
+      }
+    }
     const previousResponseId = stringFromMetadata(sessionRef.metadata.previousResponseId);
     if (previousResponseId) {
       responseRequest.previousResponseId = previousResponseId;
@@ -237,8 +341,10 @@ export class OpenAIPlannerProvider implements PlannerProvider {
       responseId: response.responseId,
       model: this.model,
       taskSpecParsed: Boolean(taskSpec),
+      ...(context?.metadata?.source ? { source: context.metadata.source } : {}),
       ...(response.metadata ?? {})
     });
+    const generatedFileIds = await this.saveGeneratedFileBlocks(context?.missionId, response.outputText, response.responseId);
     const assistantTurn: AgentTurn = {
       id: `agent_turn_${randomUUID()}`,
       providerId: OPENAI_PLANNER_PROVIDER_ID,
@@ -247,12 +353,13 @@ export class OpenAIPlannerProvider implements PlannerProvider {
       role: "assistant",
       content: response.outputText,
       status: "completed",
-      artifactIds: responseArtifactIds,
+      artifactIds: [...responseArtifactIds, ...generatedFileIds],
       createdAt,
       completedAt,
       metadata: {
         model: this.model,
         taskSpecParsed: Boolean(taskSpec),
+        ...(context?.metadata?.source ? { source: context.metadata.source } : {}),
         ...(response.metadata ?? {})
       }
     };
@@ -281,9 +388,48 @@ export class OpenAIPlannerProvider implements PlannerProvider {
       createdAt: completedAt
     });
     return {
-      assistantTurn,
+      assistantTurn: {
+        ...assistantTurn,
+        artifactIds: [...responseArtifactIds, ...generatedFileIds]
+      },
       ...(taskSpec ? { taskSpec } : {})
     };
+  }
+
+  private async resolveRequestFileIds(request: PlannerRequest | ReviewRequest): Promise<string[]> {
+    const directFileIds = Array.isArray(request.fileIds) ? request.fileIds : [];
+    const bundleIds = Array.isArray(request.artifactBundleIds) ? request.artifactBundleIds : [];
+    const bundleFileIds: string[] = [];
+    for (const bundleId of bundleIds) {
+      const bundle = await this.store.getArtifactBundle(bundleId);
+      if (bundle) {
+        bundleFileIds.push(...bundle.fileIds);
+      }
+    }
+    return [...new Set([...directFileIds, ...bundleFileIds])];
+  }
+
+  private async uploadOpenAIFile(file: ArtifactFile, transport: OpenAIPlannerTransport): Promise<OpenAIUploadedFileRef> {
+    if (!transport.uploadFile) {
+      throw new Error("OpenAI Planner transport does not support file uploads.");
+    }
+    const uploaded = await transport.uploadFile({
+      localPath: file.localPath,
+      fileName: file.fileName,
+      purpose: "user_data",
+      sha256: file.sha256,
+      ...(file.mimeType ? { mimeType: file.mimeType } : {})
+    });
+    const ref: OpenAIUploadedFileRef = {
+      localFileId: file.id,
+      openaiFileId: uploaded.openaiFileId,
+      uploadedAt: this.now(),
+      purpose: uploaded.purpose,
+      sha256: file.sha256,
+      ...(uploaded.expiresAt ? { expiresAt: uploaded.expiresAt } : {})
+    };
+    await this.store.saveOpenAIUploadedFileRef(ref);
+    return ref;
   }
 
   private async savePromptArtifacts(
@@ -333,6 +479,24 @@ export class OpenAIPlannerProvider implements PlannerProvider {
     return [artifact.id];
   }
 
+  private async saveGeneratedFileBlocks(missionId: string | undefined, content: string, responseId: string): Promise<string[]> {
+    if (!missionId || !this.artifactBroker) {
+      return [];
+    }
+    const fileBlocks = extractFileBlocks(content);
+    const fileIds: string[] = [];
+    for (const fileBlock of fileBlocks) {
+      const file = await this.artifactBroker.importGeneratedTextAsFile(missionId, fileBlock.fileName, fileBlock.content, {
+        providerId: OPENAI_PLANNER_PROVIDER_ID,
+        sourceTurnId: responseId,
+        artifactTitle: `Planner generated file: ${fileBlock.fileName}`,
+        classification: "generatedAsset"
+      });
+      fileIds.push(file.artifactId);
+    }
+    return fileIds;
+  }
+
   private hasTransport(): boolean {
     return Boolean(this.transport || this.apiKey);
   }
@@ -369,10 +533,21 @@ class OpenAISdkPlannerTransport implements OpenAIPlannerTransport {
   }
 
   async createResponse(request: OpenAIPlannerResponseRequest): Promise<OpenAIPlannerResponsePayload> {
+    const input: unknown = request.fileInputs?.length
+      ? [
+          {
+            role: "user",
+            content: [
+              { type: "input_text", text: request.input },
+              ...request.fileInputs
+            ]
+          }
+        ]
+      : request.input;
     const payload: Record<string, unknown> = {
       model: request.model,
       instructions: request.instructions,
-      input: request.input
+      input
     };
     if (request.previousResponseId) {
       payload.previous_response_id = request.previousResponseId;
@@ -390,9 +565,28 @@ class OpenAISdkPlannerTransport implements OpenAIPlannerTransport {
       }
     };
   }
+
+  async uploadFile(request: OpenAIPlannerUploadFileRequest): Promise<OpenAIPlannerUploadFileResponse> {
+    const createFile = this.client.files.create.bind(this.client.files) as unknown as (
+      body: Record<string, unknown>
+    ) => Promise<unknown>;
+    const response = await createFile({
+      file: createReadStream(request.localPath),
+      purpose: request.purpose
+    });
+    const record = asRecord(response);
+    const openaiFileId = typeof record.id === "string" ? record.id : undefined;
+    if (!openaiFileId) {
+      throw new Error(`OpenAI file upload for ${request.fileName} did not return a file id.`);
+    }
+    return {
+      openaiFileId,
+      purpose: typeof record.purpose === "string" ? record.purpose : request.purpose
+    };
+  }
 }
 
-function renderPlannerInput(message: string, context?: PlannerRequest): string {
+function renderPlannerInput(message: string, context?: PlannerRequest, preparedArtifacts?: Record<string, unknown>): string {
   const sections = [message.trim()];
   if (context?.repoContext) {
     const repo = context.repoContext;
@@ -413,6 +607,17 @@ function renderPlannerInput(message: string, context?: PlannerRequest): string {
   }
   if (context?.contextArtifactIds?.length) {
     sections.push(`Context artifact IDs: ${context.contextArtifactIds.join(", ")}`);
+  }
+  const fileSummaries = Array.isArray(preparedArtifacts?.fileSummaries) ? preparedArtifacts.fileSummaries : [];
+  if (fileSummaries.length) {
+    sections.push(["Attached file summaries:", ...fileSummaries.map(String)].join("\n"));
+  }
+  const inlineFileTexts = Array.isArray(preparedArtifacts?.inlineFileTexts) ? preparedArtifacts.inlineFileTexts : [];
+  for (const value of inlineFileTexts) {
+    const inline = asRecord(value);
+    if (typeof inline.fileName === "string" && typeof inline.content === "string") {
+      sections.push([`Inline file: ${inline.fileName}`, "```", inline.content, "```"].join("\n"));
+    }
   }
   return sections.join("\n\n");
 }
@@ -466,6 +671,40 @@ function parseTaskSpec(content: string): TaskSpec | undefined {
 function extractJsonBlock(content: string): string | undefined {
   const match = content.match(/```(?:json)?\s*([\s\S]*?)```/i);
   return match?.[1]?.trim();
+}
+
+function extractFileBlocks(content: string): Array<{ fileName: string; content: string }> {
+  const blocks: Array<{ fileName: string; content: string }> = [];
+  const pattern = /```file:([^\n\r]+)\r?\n([\s\S]*?)```/g;
+  for (const match of content.matchAll(pattern)) {
+    const fileName = match[1]?.trim();
+    const fileContent = match[2] ?? "";
+    if (fileName) {
+      blocks.push({ fileName, content: fileContent.replace(/\s+$/, "") });
+    }
+  }
+  return blocks;
+}
+
+function hasArtifactInputs(context: PlannerRequest): boolean {
+  return Boolean(
+    context.includeFileSummaries ||
+      context.fileIds?.length ||
+      context.artifactBundleIds?.length
+  );
+}
+
+function isTextLikeFile(file: ArtifactFile): boolean {
+  if (file.mimeType?.startsWith("text/")) {
+    return true;
+  }
+  return [".ts", ".tsx", ".js", ".jsx", ".json", ".md", ".txt", ".css", ".html", ".py", ".cs", ".yml", ".yaml"].some((suffix) =>
+    file.fileName.toLowerCase().endsWith(suffix)
+  );
+}
+
+function isProviderUploadCandidate(file: ArtifactFile): boolean {
+  return Boolean(file.mimeType?.startsWith("text/") || file.classification === "document" || file.classification === "sourceCode");
 }
 
 function textArtifact(input: Omit<Artifact, "id">): Artifact {

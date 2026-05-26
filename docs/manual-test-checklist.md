@@ -37,6 +37,13 @@
 - With no `OPENAI_API_KEY`/`AGENTBRIDGE_OPENAI_API_KEY`, Workbench shows OpenAI Planner as `needsAuth`.
 - With no repo selected, Workbench asks the user to choose a repo before Codex delivery.
 - User can choose repo, create a Workbench task, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
+- User can enter one intent, choose Supervised mode, click `Start Mission`, and see the mission timeline advance.
+- If Supervised mode reaches Codex delivery, a pending approval card appears before sending to Codex.
+- Resolving an approval with `Approve` continues the same Autopilot run.
+- `Stop` cancels an active Autopilot run and records the stop reason.
+- Steering text creates a mission artifact; with Codex App Server and an active existing session it sends `turn/steer`.
+- Latest provider event appears in the Workbench after Codex delivery or steering.
+- The artifact tray lists local planner/Codex/verification artifacts and file records.
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
 - Demo capture tools are only under Advanced.
@@ -59,11 +66,22 @@
 - Save a manual Codex thread ID from `/status` and select it on Start.
 - Existing-thread dry run opens/stages `codex://threads/<thread-id>` and warns that the prompt is not injected without App Server.
 - With `CODEX_APP_SERVER_URL` configured, existing-thread delivery resumes the selected thread and starts a turn.
+- With `CODEX_APP_SERVER_URL` configured, Codex provider events are stored for turn start/completion and steering.
 - Settings shows Codex App Server status and whether existing-thread delivery is send-capable or open-only fallback.
 - Task Card Preview shows the exact Codex delivery mode before sending.
 - New-thread delivery still uses `codex://threads/new?prompt=...&path=...`.
 - Tasks view shows timeline, next action, artifacts, delivery attempts, and verification state.
 - Advanced Audit view lists local events and can clear them.
+
+## Hands-off Mission Runner
+
+- Start a mission from one intent in Supervised mode.
+- Confirm no Chrome extension, clipboard capture, manual capture, or ChatGPT Desktop probe is required.
+- Confirm Autopilot pauses before Codex delivery unless the policy allows Codex turns.
+- Confirm verification runs only configured commands.
+- Confirm failed verification can ask Planner for review and draft a follow-up.
+- Confirm no provider file upload happens unless policy allows it.
+- Confirm local artifact files are staged under the AgentBridge staging root, not written directly into the repo.
 
 ## Windows UIA Helper
 

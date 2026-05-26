@@ -11,7 +11,9 @@ import type {
   VerificationRunResponse,
   SetupStatus,
   CodexAppServerStatus,
-  WindowRevalidation
+  PlatformStatus,
+  WindowRevalidation,
+  AutopilotStatus
 } from "../services/bridge-contract.js";
 import type {
   BrowserTabSource,
@@ -100,6 +102,30 @@ let mockCodexAppServerStatus: CodexAppServerStatus = {
   canSendIntoExistingThreads: false,
   message: "Codex App Server endpoint is not configured.",
   checkedAt: now()
+};
+const mockPlatformStatus: PlatformStatus = {
+  capabilities: {
+    platform: "windows",
+    canPackageDesktopApp: true,
+    canRunShellCommands: true,
+    canOpenExternalLinks: true,
+    canUseCodexDeepLinks: true,
+    canUseCodexAppServer: true,
+    canUseChromeNativeMessaging: true,
+    canUseDesktopAutomation: true,
+    canUseWindowsUia: true,
+    canUseMacAccessibility: false,
+    canUseAppleEvents: false,
+    canUseGlobalShortcuts: true,
+    canUseTray: true,
+    canUseFilePicker: true,
+    canUseUserSelectedRepoAccess: true
+  },
+  userDataDir: "mock://AgentBridge",
+  artifactRoot: "mock://AgentBridge/artifacts",
+  stagingRoot: "mock://AgentBridge/staging",
+  logsDir: "mock://AgentBridge/logs",
+  defaultShell: "cmd.exe"
 };
 
 export function getAgentBridgeApi(): AgentBridgeApi {
@@ -326,6 +352,50 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         artifactIds: [],
         createdAt: now(),
         metadata: { mock: true, followUp: true }
+      };
+    },
+    async startAutopilot(missionId, policyId) {
+      return mockAutopilotStatus(missionId, policyId);
+    },
+    async stopAutopilot(autopilotRunId) {
+      return mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "cancelled");
+    },
+    async continueAutopilot(autopilotRunId) {
+      return mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "planning");
+    },
+    async steerAutopilot(autopilotRunId, text) {
+      const status = mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "steering");
+      status.steps.push({
+        id: `autopilot_step_${status.steps.length + 1}`,
+        autopilotRunId,
+        missionId: "mission_mock",
+        kind: "steer",
+        status: "completed",
+        inputArtifactIds: [],
+        outputArtifactIds: [],
+        startedAt: now(),
+        completedAt: now(),
+        metadata: { text }
+      });
+      return status;
+    },
+    async getAutopilotStatus(missionId) {
+      void missionId;
+      return { steps: [] };
+    },
+    async resolvePendingDecision(decisionId, selectedOption) {
+      return {
+        steps: [],
+        run: {
+          id: `autopilot_run_${decisionId}`,
+          missionId: "mission_mock",
+          policyId: "policy_mock",
+          status: selectedOption === "Approve" ? "planning" : "cancelled",
+          iteration: 0,
+          maxIterations: 3,
+          startedAt: now(),
+          updatedAt: now()
+        }
       };
     },
     async createWorkflowLink(input) {
@@ -684,6 +754,9 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async getSetupStatus(): Promise<SetupStatus> {
       return mockSetupStatus(mockExtensionConnected);
     },
+    async getPlatformStatus(): Promise<PlatformStatus> {
+      return mockPlatformStatus;
+    },
     async getCodexAppServerStatus(): Promise<CodexAppServerStatus> {
       mockCodexAppServerStatus = { ...mockCodexAppServerStatus, checkedAt: now() };
       return mockCodexAppServerStatus;
@@ -899,6 +972,40 @@ function updateMockMission(missionId: string, patch: Partial<Mission>): void {
       updatedAt: now()
     };
   }
+}
+
+function mockAutopilotStatus(
+  missionId: string,
+  policyId = "policy_mock",
+  runId = `autopilot_run_${Date.now()}`,
+  status: "idle" | "planning" | "executing" | "verifying" | "reviewing" | "steering" | "blocked" | "passed" | "failed" | "cancelled" = "planning"
+): AutopilotStatus {
+  return {
+    run: {
+      id: runId,
+      missionId,
+      policyId,
+      status,
+      iteration: 0,
+      maxIterations: 3,
+      startedAt: now(),
+      updatedAt: now()
+    },
+    steps: [
+      {
+        id: `autopilot_step_${Date.now()}`,
+        autopilotRunId: runId,
+        missionId,
+        kind: "plan" as const,
+        status: "completed" as const,
+        inputArtifactIds: [],
+        outputArtifactIds: [],
+        startedAt: now(),
+        completedAt: now(),
+        metadata: { title: "Mock autopilot step" }
+      }
+    ]
+  };
 }
 
 function mockTaskSpec(): TaskSpec {
