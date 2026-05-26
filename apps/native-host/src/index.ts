@@ -39,6 +39,10 @@ async function persistResponse(response: Awaited<ReturnType<typeof handleNativeH
     return;
   }
 
+  if (response.heartbeat) {
+    await store.saveExtensionHeartbeat(response.heartbeat);
+  }
+
   if (response.source) {
     await store.saveSource(response.source);
     await store.appendAuditEvent({

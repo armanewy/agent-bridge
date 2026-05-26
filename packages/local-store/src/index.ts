@@ -29,10 +29,12 @@ import {
   type LinkableComponent,
   type DeliveryAttempt,
   DeliveryAttemptSchema,
+  ExtensionHeartbeatSchema,
   type Mission,
   type MissionStatus,
   type Run,
   type RunStep,
+  type ExtensionHeartbeat,
   type Setting,
   type SourceEndpoint,
   type TargetEndpoint,
@@ -57,6 +59,8 @@ export interface LocalStore {
   saveCodexThreadRef(ref: CodexThreadRef): Promise<void>;
   getCodexThreadRef(threadId: string): Promise<CodexThreadRef | undefined>;
   listCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]>;
+  saveExtensionHeartbeat(heartbeat: ExtensionHeartbeat): Promise<void>;
+  getExtensionHeartbeat(): Promise<ExtensionHeartbeat | undefined>;
   saveSource(source: SourceEndpoint): Promise<void>;
   getSource(id: string): Promise<SourceEndpoint | undefined>;
   listSources(): Promise<SourceEndpoint[]>;
@@ -117,6 +121,7 @@ interface StoreData {
   runs: Record<string, Run>;
   runSteps: Record<string, RunStep>;
   verificationResults: Record<string, VerificationResult>;
+  extensionHeartbeat?: ExtensionHeartbeat;
   approvals: Record<string, Approval>;
   auditEvents: AuditEvent[];
   settings: Record<string, Setting>;
@@ -207,6 +212,17 @@ export class JsonFileStore implements LocalStore {
     return Object.values((await this.read()).codexThreadRefs)
       .filter((ref) => !repoPath || normalizePath(ref.repoPath) === normalizePath(repoPath))
       .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
+  }
+
+  async saveExtensionHeartbeat(heartbeat: ExtensionHeartbeat): Promise<void> {
+    ExtensionHeartbeatSchema.parse(heartbeat);
+    await this.update((data) => {
+      data.extensionHeartbeat = heartbeat;
+    });
+  }
+
+  async getExtensionHeartbeat(): Promise<ExtensionHeartbeat | undefined> {
+    return (await this.read()).extensionHeartbeat;
   }
 
   async saveSource(source: SourceEndpoint): Promise<void> {

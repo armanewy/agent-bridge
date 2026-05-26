@@ -257,11 +257,6 @@ export function App(): JSX.Element {
     }
   }
 
-  async function useCurrentChatGptTab(): Promise<void> {
-    setLinkError("In Chrome, open ChatGPT, select text, then press Ctrl+Shift+Y or use the AgentBridge extension.");
-    await refresh();
-  }
-
   async function createLink(): Promise<void> {
     const source = sources.find((item) => item.id === selectedSourceId);
     const target = targets.find((item) => item.id === selectedTargetId);
@@ -475,8 +470,30 @@ export function App(): JSX.Element {
   async function configureNativeHost(): Promise<void> {
     setSetupError(undefined);
     try {
-      const nextStatus = await api.configureNativeHost({ extensionId });
+      const nextStatus = await api.configureNativeHost({ ...(extensionId.trim() ? { extensionId } : {}) });
       setSetupStatus(nextStatus);
+    } catch (error) {
+      setSetupError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function connectChrome(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      const nextStatus = await api.connectChrome();
+      setSetupStatus(nextStatus);
+      await refresh();
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      setSetupError(message);
+      setLinkError(message);
+    }
+  }
+
+  async function openChromeExtensionInstall(): Promise<void> {
+    setSetupError(undefined);
+    try {
+      await api.openChromeExtensionInstall();
     } catch (error) {
       setSetupError(error instanceof Error ? error.message : String(error));
     }
@@ -543,6 +560,7 @@ export function App(): JSX.Element {
               targets={targets}
               codexThreads={codexThreads}
               missions={missions}
+              setupStatus={setupStatus}
               selectedSourceComponentId={selectedSourceComponentId}
               selectedWorkspaceComponentId={selectedWorkspaceComponentId}
               selectedTargetComponentId={selectedTargetComponentId}
@@ -553,13 +571,14 @@ export function App(): JSX.Element {
               onSelectCodexThread={setSelectedCodexThreadId}
               onManualCodexThreadIdChange={setManualCodexThreadId}
               onSaveManualCodexThread={() => void saveManualCodexThread()}
-              onUseCurrentTab={() => void useCurrentChatGptTab()}
               onChooseRepo={() => void chooseRepoFolder()}
               onCreateWorkflowLink={() => void createWorkflowLink()}
               onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
               onOpenTasks={() => setView("tasks")}
               onOpenAdvanced={() => setView("advanced")}
               onOpenSettings={() => setView("settings")}
+              onConnectChrome={() => void connectChrome()}
+              onCheckChromeConnection={() => void refresh()}
             />
             {preview ? (
               <HandoffPreview
@@ -608,6 +627,8 @@ export function App(): JSX.Element {
               setupError={setupError}
               onExtensionIdChange={setExtensionId}
               onConfigureNativeHost={() => void configureNativeHost()}
+              onConnectChrome={() => void connectChrome()}
+              onOpenChromeExtensionInstall={() => void openChromeExtensionInstall()}
               onRefresh={() => void refresh()}
               onGoToConnect={() => setView("start")}
             />

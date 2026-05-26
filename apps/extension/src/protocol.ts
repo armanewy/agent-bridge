@@ -5,8 +5,15 @@ export type ExtensionMessage =
   | { type: "ui.captureLatestMessage" }
   | { type: "ui.healthCheck" };
 
+export interface NativeHostMessageMetadata {
+  extensionId?: string;
+  extensionVersion?: string;
+  messageSource: "agentbridge-extension";
+}
+
 export type NativeHostMessage =
-  | {
+  NativeHostMessageMetadata &
+    ({
       type: "healthCheck";
       sentAt: string;
     }
@@ -52,7 +59,7 @@ export type NativeHostMessage =
       };
       text: string;
       userTriggered: true;
-    };
+    });
 
 export interface ActiveTabSnapshot {
   id?: number | undefined;
@@ -62,12 +69,30 @@ export interface ActiveTabSnapshot {
   favIconUrl?: string | undefined;
 }
 
+export function buildExtensionMetadata(): NativeHostMessageMetadata {
+  const runtime = typeof chrome !== "undefined" ? chrome.runtime : undefined;
+  return {
+    messageSource: "agentbridge-extension",
+    ...(runtime?.id ? { extensionId: runtime.id } : {}),
+    ...(runtime?.getManifest().version ? { extensionVersion: runtime.getManifest().version } : {})
+  };
+}
+
+export function buildHealthCheckMessage(sentAt = new Date().toISOString()): NativeHostMessage {
+  return {
+    ...buildExtensionMetadata(),
+    type: "healthCheck",
+    sentAt
+  };
+}
+
 export function buildBindSourceMessage(tab: ActiveTabSnapshot, sentAt = new Date().toISOString()): NativeHostMessage {
   if (!tab.url) {
     throw new Error("Active tab does not have a URL.");
   }
 
   return {
+    ...buildExtensionMetadata(),
     type: "bindSource",
     sentAt,
     source: {
@@ -97,6 +122,7 @@ export function buildCaptureMessage(
   }
 
   return {
+    ...buildExtensionMetadata(),
     type: "capture",
     sentAt,
     captureType,
@@ -132,6 +158,7 @@ export function buildBrowserTabsDiscoveredMessage(
     }));
 
   return {
+    ...buildExtensionMetadata(),
     type: "browserTabsDiscovered",
     sentAt,
     permissionMode,

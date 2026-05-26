@@ -118,6 +118,22 @@ describe("JsonFileStore", () => {
     expect(await store.listCodexThreadRefs("C:/other")).toEqual([]);
   });
 
+  it("roundtrips extension heartbeat", async () => {
+    const store = new JsonFileStore(tempDir);
+    const heartbeat = {
+      extensionId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      extensionVersion: "0.1.0",
+      receivedAt: new Date().toISOString(),
+      messageType: "healthCheck" as const,
+      permissionMode: "activeTab" as const,
+      messageSource: "agentbridge-extension" as const
+    };
+
+    await store.saveExtensionHeartbeat(heartbeat);
+
+    expect(await store.getExtensionHeartbeat()).toEqual(heartbeat);
+  });
+
   it("saves handoffs and audit events", async () => {
     const store = new JsonFileStore(tempDir);
     const now = new Date().toISOString();

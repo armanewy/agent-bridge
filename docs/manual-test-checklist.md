@@ -9,14 +9,19 @@
 ## Browser Extension
 
 - Extension loads unpacked without broad host permissions.
-- `Bind current tab as source` sends a native host message.
+- Popup says `Desktop app: connected` after a successful health check.
+- On ChatGPT, `Sync this ChatGPT tab` sends a native host message.
+- On non-ChatGPT tabs, popup says to open ChatGPT.
+- `Show all ChatGPT tabs` requests optional `tabs` permission only after click.
 - `Capture selected text` requires selected text.
+- `Capture latest answer` remains user-triggered.
 - Native host unavailable shows a visible popup error.
 - No capture happens on page load, tab update, or timer.
 
 ## Native Host
 
 - `healthCheck` returns a framed success response.
+- `healthCheck`, `bindSource`, `browserTabsDiscovered`, and `capture` update extension heartbeat.
 - `bindSource` converts tab metadata into a `BrowserTabSource`.
 - `capture` rejects empty text.
 - Converted captures persist to `%LOCALAPPDATA%\AgentBridge` unless `AGENTBRIDGE_STORE_DIR` is set.
@@ -28,6 +33,9 @@
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
 - Demo capture tools are only under Advanced.
+- Simple Mode does not show clipboard/manual/mock capture as a production path.
+- If no ChatGPT tabs are synced, Start shows `No ChatGPT tabs found` and `Connect Chrome`.
+- `Connect Chrome` registers or repairs the native host and opens the configured Chrome Web Store URL.
 - Codex target rejects invalid paths in Electron mode.
 - Task Card Preview shows task title, repo/agent, acceptance criteria, verification steps, redaction warnings, and expandable raw prompt/source details.
 - Dry-run Codex delivery creates a local delivery attempt.

@@ -7,6 +7,8 @@ interface SetupPanelProps {
   setupError?: string | undefined;
   onExtensionIdChange(value: string): void;
   onConfigureNativeHost(): void;
+  onConnectChrome(): void;
+  onOpenChromeExtensionInstall(): void;
   onRefresh(): void;
   onGoToConnect(): void;
 }
@@ -17,6 +19,8 @@ export function SetupPanel({
   setupError,
   onExtensionIdChange,
   onConfigureNativeHost,
+  onConnectChrome,
+  onOpenChromeExtensionInstall,
   onRefresh,
   onGoToConnect
 }: SetupPanelProps): JSX.Element {
@@ -53,18 +57,15 @@ export function SetupPanel({
           ))}
         </div>
 
-        <label className="field-label" htmlFor="extension-id">
-          Chrome extension ID
-        </label>
-        <input
-          id="extension-id"
-          value={extensionId}
-          onChange={(event) => onExtensionIdChange(event.currentTarget.value)}
-          placeholder={status?.extensionId ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
-        />
         <div className="setup-actions">
           <button type="button" className="primary-button" onClick={onConfigureNativeHost}>
-            Connect Chrome extension
+            Connect Chrome
+          </button>
+          <button type="button" className="secondary-button" onClick={onConnectChrome}>
+            Install or repair Chrome connection
+          </button>
+          <button type="button" className="secondary-button" disabled={!status?.webStoreUrl} onClick={onOpenChromeExtensionInstall}>
+            Open Chrome Web Store
           </button>
           <button type="button" className="secondary-button" onClick={onRefresh}>
             Refresh status
@@ -88,6 +89,20 @@ export function SetupPanel({
         </div>
         <details className="advanced-details" open={false}>
           <summary>Show diagnostics</summary>
+          {status?.extensionIdentityMode === "developmentManual" ? (
+            <div className="diagnostic-form">
+              <label className="field-label" htmlFor="extension-id">
+                Development extension ID
+              </label>
+              <input
+                id="extension-id"
+                value={extensionId}
+                onChange={(event) => onExtensionIdChange(event.currentTarget.value)}
+                placeholder={status?.extensionId ?? "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa"}
+              />
+              <p className="muted-help">Manual IDs are only for unpacked development extensions.</p>
+            </div>
+          ) : null}
           <div className="setup-checks">
             {(status?.checks ?? []).map((check) => (
               <article className={`setup-check ${check.status}`} key={check.id}>

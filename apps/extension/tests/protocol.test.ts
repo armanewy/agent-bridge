@@ -14,6 +14,7 @@ describe("extension protocol", () => {
     );
 
     expect(message).toEqual({
+      messageSource: "agentbridge-extension",
       type: "bindSource",
       sentAt: "2026-01-01T00:00:00.000Z",
       source: {

@@ -5,11 +5,12 @@
 - Chrome Manifest V3 extension.
 - Service worker owns command routing, active tab lookup, native messaging, and error handling.
 - Content script handles explicit selected-text reads and page-adapter extraction when invoked.
-- Popup/action UI exposes user-triggered commands:
-  - bind current tab as source
-  - discover browser tabs for the Link Center
-  - capture selected text
-  - capture latest message where a page adapter supports it
+- Popup/action UI exposes production commands:
+  - Sync this ChatGPT tab
+  - Capture selected text
+  - Capture latest answer where the ChatGPT page adapter supports it
+  - Show all ChatGPT tabs
+  - Check desktop connection
 - Native messaging client sends structured events to the local AgentBridge host over Chrome native messaging.
 
 ## Permission Strategy
@@ -18,12 +19,12 @@
 - Use `scripting` only when needed to inject/read selection on explicit actions.
 - Use `nativeMessaging` for local companion communication.
 - Do not request broad host permissions by default.
-- Optional all-tab discovery uses Chrome's optional `tabs` permission only after the user clicks "Discover browser tabs". If the user declines, AgentBridge falls back to the active tab path.
+- Optional all-tab discovery uses Chrome's optional `tabs` permission only after the user clicks "Show all ChatGPT tabs". If the user declines, AgentBridge falls back to the active tab path.
 - Request host permissions only for specific supported AI/web apps and only when a page adapter needs them.
 
 ## Source Binding Behavior
 
-- On "Bind current tab as source", query the active tab and create a `BrowserTabSource` with title, URL, tab/window IDs, browser, and timestamp.
+- On "Sync this ChatGPT tab", query the active tab and create a `BrowserTabSource` with title, URL, tab/window IDs, browser, and timestamp.
 - Send source metadata to the native host for local persistence.
 - Do not register broad all-page content scripts for MVP capture; inject capture code with `chrome.scripting.executeScript` only after a user action.
 - Treat tab reload, URL change, or tab close as status changes rather than automatic capture triggers.
@@ -109,6 +110,18 @@ No background polling, repeated harvesting, or silent extraction is allowed.
 ```
 
 Discovery stores tab metadata as `LinkableComponent` records. It does not read page content.
+
+Every extension-to-native-host message includes extension metadata where available:
+
+```json
+{
+  "messageSource": "agentbridge-extension",
+  "extensionId": "<chrome-runtime-id>",
+  "extensionVersion": "0.1.0"
+}
+```
+
+The native host stores the latest heartbeat so the desktop app can show Chrome connected/not connected without exposing native-host terminology in Simple Mode.
 
 ### `getSourceStatus`
 

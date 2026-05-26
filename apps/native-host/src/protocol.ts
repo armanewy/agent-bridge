@@ -1,8 +1,16 @@
 import { createHash, randomUUID } from "node:crypto";
 import { browserTabComponent } from "@agentbridge/core";
-import type { BrowserTabSource, Capture, LinkableComponent } from "@agentbridge/core";
+import type { BrowserTabSource, Capture, ExtensionHeartbeat, LinkableComponent } from "@agentbridge/core";
 
-export type NativeHostRequest =
+interface NativeHostMessageMetadata {
+  extensionId?: string;
+  extensionVersion?: string;
+  messageSource?: "agentbridge-extension";
+  permissionMode?: "allTabs" | "activeTab";
+}
+
+export type NativeHostRequest = NativeHostMessageMetadata &
+  (
   | { type: "healthCheck"; sentAt?: string }
   | {
       type: "bindSource";
@@ -46,7 +54,8 @@ export type NativeHostRequest =
       };
       text: string;
       userTriggered: true;
-    };
+    }
+  );
 
 export interface NativeHostResponse {
   ok: boolean;
@@ -55,6 +64,7 @@ export interface NativeHostResponse {
   source?: BrowserTabSource;
   capture?: Capture;
   components?: LinkableComponent[];
+  heartbeat?: ExtensionHeartbeat;
   receivedAt: string;
 }
 
@@ -72,25 +82,41 @@ export async function handleNativeHostMessage(
   switch (message.type) {
     case "healthCheck":
       await options.appendLog?.({ type: "healthCheck", receivedAt });
-      return { ok: true, type: "healthCheck", receivedAt };
+      return { ok: true, type: "healthCheck", heartbeat: createHeartbeat(message, receivedAt), receivedAt };
     case "bindSource": {
       const source = createBrowserTabSource(message, receivedAt);
       await options.appendLog?.({ type: "bindSource", source, receivedAt });
-      return { ok: true, type: "bindSource", source, receivedAt };
+      return { ok: true, type: "bindSource", source, heartbeat: createHeartbeat(message, receivedAt), receivedAt };
     }
     case "browserTabsDiscovered": {
       const components = createBrowserTabComponents(message, receivedAt);
       await options.appendLog?.({ type: "browserTabsDiscovered", count: components.length, receivedAt });
-      return { ok: true, type: "browserTabsDiscovered", components, receivedAt };
+      return { ok: true, type: "browserTabsDiscovered", components, heartbeat: createHeartbeat(message, receivedAt), receivedAt };
     }
     case "capture": {
       const capture = createCapture(message, receivedAt);
       await options.appendLog?.({ type: "capture", capture, receivedAt });
-      return { ok: true, type: "capture", capture, receivedAt };
+      return { ok: true, type: "capture", capture, heartbeat: createHeartbeat(message, receivedAt), receivedAt };
     }
     default:
       return { ok: false, type: message.type, error: `Unsupported message type: ${message.type}`, receivedAt };
   }
+}
+
+function createHeartbeat(message: Record<string, unknown>, receivedAt: string): ExtensionHeartbeat {
+  return {
+    ...(typeof message.extensionId === "string" && message.extensionId ? { extensionId: message.extensionId } : {}),
+    ...(typeof message.extensionVersion === "string" && message.extensionVersion ? { extensionVersion: message.extensionVersion } : {}),
+    receivedAt,
+    messageType:
+      message.type === "bindSource" || message.type === "browserTabsDiscovered" || message.type === "capture"
+        ? message.type
+        : "healthCheck",
+    ...(message.permissionMode === "allTabs" || message.permissionMode === "activeTab"
+      ? { permissionMode: message.permissionMode }
+      : {}),
+    ...(message.messageSource === "agentbridge-extension" ? { messageSource: "agentbridge-extension" } : {})
+  };
 }
 
 function createBrowserTabComponents(message: Record<string, unknown>, discoveredAt: string): LinkableComponent[] {

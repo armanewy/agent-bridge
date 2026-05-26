@@ -33,8 +33,61 @@ describe("SetupService", () => {
     const manifest = JSON.parse(await readFile(manifestPath ?? "", "utf8")) as { allowed_origins: string[] };
 
     expect(status.extensionId).toBe("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa");
+    expect(status.extensionIdentityMode).toBe("developmentManual");
+    expect(status.nativeHostRegistered).toBe(true);
+    expect(status.nativeHostPathValid).toBe(true);
+    expect(status.allowedOriginMatches).toBe(true);
+    expect(status.repairNeeded).toBe(false);
     expect(status.checks).toEqual(expect.arrayContaining([expect.objectContaining({ id: "allowedOrigin", status: "ready" })]));
     expect(manifest.allowed_origins).toContain("chrome-extension://aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa/");
+  });
+
+  it("uses a configured production extension ID without manual input", async () => {
+    const registry = new MemoryRegistry();
+    const service = new SetupService(new JsonFileStore(tempDir), registry, tempDir, tempDir, {
+      extensionId: "bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb",
+      webStoreUrl: "https://chrome.google.com/webstore/detail/agentbridge/example"
+    });
+
+    const status = await service.configureNativeHost({});
+
+    expect(status.extensionId).toBe("bbbbbbbbbbbbbbbbbbbbbbbbbbbbbbbb");
+    expect(status.webStoreUrl).toBe("https://chrome.google.com/webstore/detail/agentbridge/example");
+    expect(status.extensionIdentityMode).toBe("production");
+    expect(status.extensionIdKnown).toBe(true);
+  });
+
+  it("reports fresh extension heartbeat as connected", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveExtensionHeartbeat({
+      extensionId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      extensionVersion: "0.1.0",
+      messageSource: "agentbridge-extension",
+      messageType: "healthCheck",
+      receivedAt: new Date().toISOString()
+    });
+    const service = new SetupService(store, new MemoryRegistry(), tempDir, tempDir);
+
+    const status = await service.getStatus();
+
+    expect(status.extensionConnected).toBe(true);
+    expect(status.lastExtensionMessageType).toBe("healthCheck");
+    expect(status.extensionVersion).toBe("0.1.0");
+  });
+
+  it("marks stale extension heartbeat as disconnected", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveExtensionHeartbeat({
+      extensionId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
+      messageType: "capture",
+      receivedAt: "2020-01-01T00:00:00.000Z"
+    });
+    const service = new SetupService(store, new MemoryRegistry(), tempDir, tempDir);
+
+    const status = await service.getStatus();
+
+    expect(status.extensionConnected).toBe(false);
+    expect(status.lastExtensionMessageType).toBe("capture");
   });
 
   it("resolves development helper paths from the repo root", () => {

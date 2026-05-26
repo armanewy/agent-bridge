@@ -123,6 +123,17 @@ export interface SetupCheck {
 export interface SetupStatus {
   checks: SetupCheck[];
   extensionId?: string;
+  webStoreUrl?: string;
+  extensionIdentityMode: "production" | "preproductionStableKey" | "developmentManual";
+  extensionIdKnown: boolean;
+  extensionConnected: boolean;
+  lastExtensionHeartbeatAt?: string;
+  lastExtensionMessageType?: string;
+  extensionVersion?: string;
+  nativeHostRegistered: boolean;
+  nativeHostPathValid: boolean;
+  allowedOriginMatches: boolean;
+  repairNeeded: boolean;
   nativeHostManifestPath?: string;
   nativeHostLauncherPath?: string;
   nativeHostScriptPath?: string;
@@ -133,7 +144,7 @@ export interface SetupStatus {
 }
 
 export interface ConfigureNativeHostRequest {
-  extensionId: string;
+  extensionId?: string;
 }
 
 export interface AgentBridgeApi {
@@ -170,6 +181,8 @@ export interface AgentBridgeApi {
   runVerification(input: VerificationRunRequest): Promise<VerificationRunResponse>;
   getSetupStatus(): Promise<SetupStatus>;
   configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus>;
+  connectChrome(): Promise<SetupStatus>;
+  openChromeExtensionInstall(): Promise<void>;
   selectRepoFolder(): Promise<string | undefined>;
   openDataFolder(): Promise<void>;
   openNativeHostLog(): Promise<void>;

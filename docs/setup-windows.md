@@ -67,19 +67,38 @@ Code signing and auto-update are future production requirements.
 
 ## First-Run Setup
 
-Open Settings in the desktop app. The guided setup walks through:
+Open AgentBridge and use Start first. If no ChatGPT tabs are synced, click **Connect Chrome**.
 
-1. Choose repo.
-2. Connect Chrome extension.
-3. Capture a test selection.
-4. Send a dry-run task to Codex.
-5. Optional verification commands.
+The desktop app will:
 
-The setup screen presents this as desktop-app onboarding. Registry, native-host, local bridge, and helper paths stay behind diagnostics. After setup is ready, go back to Start, create the ChatGPT -> repo -> Codex link, and create Task Cards from captured browser text.
+1. Register or repair the native messaging host for the configured extension ID.
+2. Open the Chrome Web Store listing when `AGENTBRIDGE_CHROME_WEB_STORE_URL` is configured.
+3. Show Chrome connection status from the last extension heartbeat.
+
+Then:
+
+1. Open ChatGPT in Chrome.
+2. Open the AgentBridge extension.
+3. Click **Sync this ChatGPT tab**.
+4. Choose a repo in AgentBridge.
+5. Create the ChatGPT -> repo -> Codex link.
+6. Capture selected text with Ctrl+Shift+Y.
+7. Create a Task Card.
+
+Settings still has setup diagnostics, but registry, native-host, local bridge, and helper paths stay behind details.
 
 ## Register Native Host
 
-The desktop Settings view can generate and register the development Chrome connection after you paste the unpacked Chrome extension ID.
+Production builds should set:
+
+```powershell
+$env:AGENTBRIDGE_CHROME_EXTENSION_ID="<stable-extension-id>"
+$env:AGENTBRIDGE_CHROME_WEB_STORE_URL="https://chromewebstore.google.com/detail/..."
+```
+
+The desktop app uses that ID for native-host registration and does not ask the user to paste it.
+
+Development builds can still generate and register the Chrome connection after you paste the unpacked Chrome extension ID in Settings diagnostics.
 
 Manual setup is also available:
 
@@ -114,10 +133,10 @@ Set `AGENTBRIDGE_STORE_DIR` to override it.
 
 ## Known Limitations
 
-- Native host registration requires the unpacked extension ID.
-- Chrome Web Store publishing is needed for a stable production extension ID.
+- Production native host registration requires `AGENTBRIDGE_CHROME_EXTENSION_ID`.
+- Chrome Web Store publishing is needed for a stable production install flow.
 - Packaged native-host launch currently assumes Node is available on the machine.
-- The extension popup Health check is still the source of truth for extension-to-native-host connectivity.
+- Extension heartbeat is the desktop source of truth for Chrome connection state.
 - Electron packaging is not signed.
-- Codex deep links create new threads only.
+- Existing Codex threads can be opened by deep link; sending into existing threads requires Codex App Server or SDK.
 - Windows UI Automation support varies by target app.

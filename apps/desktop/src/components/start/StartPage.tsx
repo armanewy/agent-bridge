@@ -8,6 +8,7 @@ import type {
   TargetEndpoint,
   WorkflowLink
 } from "@agentbridge/core";
+import type { SetupStatus } from "../../services/bridge-contract.js";
 
 interface StartPageProps {
   components: LinkableComponent[];
@@ -16,6 +17,7 @@ interface StartPageProps {
   targets: TargetEndpoint[];
   codexThreads: CodexThreadRef[];
   missions: Mission[];
+  setupStatus?: SetupStatus | undefined;
   selectedSourceComponentId?: string | undefined;
   selectedWorkspaceComponentId?: string | undefined;
   selectedTargetComponentId?: string | undefined;
@@ -26,13 +28,14 @@ interface StartPageProps {
   onSelectCodexThread(threadId?: string): void;
   onManualCodexThreadIdChange(value: string): void;
   onSaveManualCodexThread(): void;
-  onUseCurrentTab(): void;
   onChooseRepo(): void;
   onCreateWorkflowLink(): void;
   onCreateTaskFromWorkflowLink(id: string): void;
   onOpenTasks(): void;
   onOpenAdvanced(): void;
   onOpenSettings(): void;
+  onConnectChrome(): void;
+  onCheckChromeConnection(): void;
 }
 
 export function StartPage({
@@ -42,6 +45,7 @@ export function StartPage({
   targets,
   codexThreads,
   missions,
+  setupStatus,
   selectedSourceComponentId,
   selectedWorkspaceComponentId,
   selectedTargetComponentId,
@@ -52,13 +56,14 @@ export function StartPage({
   onSelectCodexThread,
   onManualCodexThreadIdChange,
   onSaveManualCodexThread,
-  onUseCurrentTab,
   onChooseRepo,
   onCreateWorkflowLink,
   onCreateTaskFromWorkflowLink,
   onOpenTasks,
   onOpenAdvanced,
-  onOpenSettings
+  onOpenSettings,
+  onConnectChrome,
+  onCheckChromeConnection
 }: StartPageProps): JSX.Element {
   const activeLink = workflowLinks.find((link) => {
     const linkedSource = components.find((component) => component.id === link.sourceComponentId);
@@ -102,11 +107,11 @@ export function StartPage({
           <StartStep
             icon={<Chrome size={20} />}
             label="Browser tab"
-            title={sourceComponent?.label ?? "Connect a ChatGPT tab"}
-            detail={sourceComponent ? sourceComponent.subtitle : "In ChatGPT, select text and press Ctrl+Shift+Y."}
+            title={sourceComponent?.label ?? "No ChatGPT tabs found"}
+            detail={sourceComponent ? sourceComponent.subtitle : chromeConnectDetail(setupStatus)}
             status={sourceComponent ? "ready" : "missing"}
-            actionLabel={sourceComponent ? "Change tab" : "Use current ChatGPT tab"}
-            onAction={sourceComponent ? onOpenAdvanced : onUseCurrentTab}
+            actionLabel={sourceComponent ? "Change tab" : "Connect Chrome"}
+            onAction={sourceComponent ? onOpenAdvanced : onConnectChrome}
           />
           <StartStep
             icon={<FolderOpen size={20} />}
@@ -127,6 +132,15 @@ export function StartPage({
             onAction={codexTarget ? onOpenSettings : onChooseRepo}
           />
         </div>
+
+        {!sourceComponent ? (
+          <div className="warning-band">
+            <span>Install/connect Chrome, open ChatGPT, then use the AgentBridge extension to sync this tab. Ctrl+Shift+Y captures selected text.</span>
+            <button type="button" className="secondary-button" onClick={onCheckChromeConnection}>
+              Check connection
+            </button>
+          </div>
+        ) : null}
 
         {codexTarget ? (
           <CodexSessionChooser
@@ -393,6 +407,16 @@ function codexSessionDetail(thread?: CodexThreadRef): string {
     return `Will send into existing session ${shortThread(thread.threadId)} through Codex App Server.`;
   }
   return `Will open existing session ${shortThread(thread.threadId)}; prompt injection needs Codex App Server.`;
+}
+
+function chromeConnectDetail(status?: SetupStatus): string {
+  if (status?.extensionConnected) {
+    return `Chrome connected. Last seen ${status.lastExtensionHeartbeatAt ?? "recently"}. Open ChatGPT and sync this tab from the extension.`;
+  }
+  if (status?.extensionIdKnown) {
+    return "Chrome bridge is configured. Install/open the extension, then sync this ChatGPT tab.";
+  }
+  return "Connect Chrome to install the local bridge and use the AgentBridge extension.";
 }
 
 function shortThread(threadId: string): string {

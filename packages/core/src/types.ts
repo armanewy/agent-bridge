@@ -128,6 +128,24 @@ export const CodexThreadRefSchema = z.object({
 });
 export type CodexThreadRef = z.infer<typeof CodexThreadRefSchema>;
 
+export const ExtensionHeartbeatMessageTypeSchema = z.enum([
+  "healthCheck",
+  "bindSource",
+  "browserTabsDiscovered",
+  "capture"
+]);
+export type ExtensionHeartbeatMessageType = z.infer<typeof ExtensionHeartbeatMessageTypeSchema>;
+
+export const ExtensionHeartbeatSchema = z.object({
+  extensionId: z.string().optional(),
+  extensionVersion: z.string().optional(),
+  receivedAt: TimestampSchema,
+  messageType: ExtensionHeartbeatMessageTypeSchema,
+  permissionMode: z.enum(["allTabs", "activeTab"]).optional(),
+  messageSource: z.literal("agentbridge-extension").optional()
+});
+export type ExtensionHeartbeat = z.infer<typeof ExtensionHeartbeatSchema>;
+
 export const CodexDeepLinkTargetSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("codexDeepLink"),

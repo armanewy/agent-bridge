@@ -83,6 +83,9 @@ app.whenReady().then(async () => {
     isPackaged: app.isPackaged,
     resourcesPath: process.resourcesPath,
     appPath: app.getAppPath(),
+    ...(process.env.AGENTBRIDGE_CHROME_EXTENSION_ID ? { extensionId: process.env.AGENTBRIDGE_CHROME_EXTENSION_ID } : {}),
+    ...(process.env.AGENTBRIDGE_CHROME_WEB_STORE_URL ? { webStoreUrl: process.env.AGENTBRIDGE_CHROME_WEB_STORE_URL } : {}),
+    ...(process.env.AGENTBRIDGE_CHROME_EXTENSION_PUBLIC_KEY ? { extensionPublicKey: process.env.AGENTBRIDGE_CHROME_EXTENSION_PUBLIC_KEY } : {}),
     ...(process.env.VITE_DEV_SERVER_URL ? { devServerUrl: process.env.VITE_DEV_SERVER_URL } : {})
   });
   const windowsTargetService = new WindowsTargetService();
@@ -137,8 +140,22 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle("agentbridge:getSetupStatus", () => setupService.getStatus());
   ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
-    setupService.configureNativeHost(input)
+    setupService.configureNativeHost(input ?? {})
   );
+  ipcMain.handle("agentbridge:connectChrome", async () => {
+    const status = await setupService.configureNativeHost({});
+    if (status.webStoreUrl) {
+      await shell.openExternal(status.webStoreUrl);
+    }
+    return status;
+  });
+  ipcMain.handle("agentbridge:openChromeExtensionInstall", async () => {
+    const status = await setupService.getStatus();
+    if (!status.webStoreUrl) {
+      throw new Error("Chrome Web Store URL is not configured.");
+    }
+    await shell.openExternal(status.webStoreUrl);
+  });
   ipcMain.handle("agentbridge:selectRepoFolder", () => selectRepoFolder());
   ipcMain.handle("agentbridge:openDataFolder", () => openDataFolder(dataDir));
   ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(dataDir, nativeHostLogPath));

@@ -9,6 +9,7 @@ const execFileAsync = promisify(execFile);
 const HOST_NAME = "com.agentbridge.native_host";
 const EXTENSION_ID_SETTING = "setup:chromeExtensionId";
 const REGISTRY_KEY = `HKCU\\Software\\Google\\Chrome\\NativeMessagingHosts\\${HOST_NAME}`;
+const HEARTBEAT_STALE_MS = 5 * 60 * 1000;
 
 export interface NativeHostRegistry {
   readManifestPath(): Promise<string | undefined>;
@@ -21,6 +22,9 @@ export interface HelperPathOptions {
   appPath?: string;
   repoRoot?: string;
   devServerUrl?: string;
+  extensionId?: string;
+  webStoreUrl?: string;
+  extensionPublicKey?: string;
 }
 
 export interface HelperPaths {
@@ -34,6 +38,9 @@ export interface HelperPaths {
 
 export class SetupService {
   private readonly helperPaths: HelperPaths;
+  private readonly configuredExtensionId: string | undefined;
+  private readonly webStoreUrl: string | undefined;
+  private readonly extensionPublicKey: string | undefined;
 
   constructor(
     private readonly store: LocalStore,
@@ -43,43 +50,73 @@ export class SetupService {
     helperPathOptions: HelperPathOptions = {}
   ) {
     this.helperPaths = resolveHelperPaths({ ...helperPathOptions, repoRoot });
+    this.configuredExtensionId = helperPathOptions.extensionId ?? process.env.AGENTBRIDGE_CHROME_EXTENSION_ID;
+    this.webStoreUrl = helperPathOptions.webStoreUrl ?? process.env.AGENTBRIDGE_CHROME_WEB_STORE_URL;
+    this.extensionPublicKey = helperPathOptions.extensionPublicKey ?? process.env.AGENTBRIDGE_CHROME_EXTENSION_PUBLIC_KEY;
   }
 
   async getStatus(): Promise<SetupStatus> {
-    const extensionId = await this.store.getSetting<string>(EXTENSION_ID_SETTING);
+    const manualExtensionId = await this.store.getSetting<string>(EXTENSION_ID_SETTING);
+    const extensionId = this.resolveExtensionId(manualExtensionId);
+    const extensionIdentityMode = this.resolveExtensionIdentityMode(manualExtensionId);
     const manifestPath = await this.registry.readManifestPath();
     const manifestInfo = manifestPath ? await readManifestInfo(manifestPath) : undefined;
     const storeWritable = await isStoreWritable(this.dataDir);
     const codexTargetConfigured = (await this.store.listTargets()).some((target) => target.kind === "codexDeepLink");
+    const heartbeat = await this.store.getExtensionHeartbeat();
+    const extensionConnected = Boolean(heartbeat && Date.now() - Date.parse(heartbeat.receivedAt) < HEARTBEAT_STALE_MS);
+    const expectedOrigin = extensionId ? `chrome-extension://${extensionId}/` : undefined;
+    const nativeHostRegistered = Boolean(manifestPath && manifestInfo?.manifestExists);
+    const nativeHostPathValid = Boolean(manifestInfo?.hostPathExists);
+    const allowedOriginMatches = Boolean(expectedOrigin && manifestInfo?.allowedOrigins.includes(expectedOrigin));
+    const repairNeeded = Boolean(extensionId && (!nativeHostRegistered || !nativeHostPathValid || !allowedOriginMatches));
+    const productionMissingExtensionId = this.helperPaths.mode === "packaged" && !extensionId;
 
     return {
       checks: [
         check("storeWritable", "Local store writable", storeWritable, this.dataDir),
-        check("extensionId", "Chrome extension ID configured", Boolean(extensionId), extensionId ?? "No extension ID saved."),
+        check(
+          "extensionId",
+          "Chrome extension ID configured",
+          Boolean(extensionId),
+          extensionId ?? "Production extension ID is missing. Configure AGENTBRIDGE_CHROME_EXTENSION_ID."
+        ),
         check(
           "nativeHostManifest",
           "Native host manifest registered",
-          Boolean(manifestPath && manifestInfo?.manifestExists),
+          nativeHostRegistered,
           manifestPath ?? "No registry entry found."
         ),
         check(
           "nativeHostPath",
           "Native host launcher path valid",
-          Boolean(manifestInfo?.hostPathExists),
+          nativeHostPathValid,
           manifestInfo?.hostPath ?? "No launcher path found."
         ),
         check(
           "allowedOrigin",
           "Manifest allows extension",
-          Boolean(extensionId && manifestInfo?.allowedOrigins.includes(`chrome-extension://${extensionId}/`)),
-          extensionId ? `chrome-extension://${extensionId}/` : "No extension ID to validate."
+          allowedOriginMatches,
+          expectedOrigin ?? "No extension ID to validate."
         ),
         {
           id: "extensionHealth",
           label: "Extension health check",
-          status: "warning",
-          details: "Run Health check from the extension popup after registration."
+          status: extensionConnected ? "ready" : "warning",
+          details: heartbeat
+            ? `Last extension message: ${heartbeat.messageType} at ${heartbeat.receivedAt}.`
+            : "Open the AgentBridge Chrome extension and check the desktop connection."
         },
+        ...(productionMissingExtensionId
+          ? [
+              {
+                id: "productionExtensionId",
+                label: "Production extension ID",
+                status: "missing" as const,
+                details: "Production extension ID is missing. Configure AGENTBRIDGE_CHROME_EXTENSION_ID."
+              }
+            ]
+          : []),
         check(
           "codexTarget",
           "Codex target configured",
@@ -87,7 +124,18 @@ export class SetupService {
           codexTargetConfigured ? "At least one Codex target is saved." : "Configure a Codex repo path in Settings."
         )
       ],
+      extensionIdentityMode,
+      extensionIdKnown: Boolean(extensionId),
+      extensionConnected,
+      ...(heartbeat?.receivedAt ? { lastExtensionHeartbeatAt: heartbeat.receivedAt } : {}),
+      ...(heartbeat?.messageType ? { lastExtensionMessageType: heartbeat.messageType } : {}),
+      ...(heartbeat?.extensionVersion ? { extensionVersion: heartbeat.extensionVersion } : {}),
+      nativeHostRegistered,
+      nativeHostPathValid,
+      allowedOriginMatches,
+      repairNeeded,
       ...(extensionId ? { extensionId } : {}),
+      ...(this.webStoreUrl ? { webStoreUrl: this.webStoreUrl } : {}),
       ...(manifestPath ? { nativeHostManifestPath: manifestPath } : {}),
       ...(manifestInfo?.hostPath ? { nativeHostLauncherPath: manifestInfo.hostPath } : {}),
       nativeHostScriptPath: this.helperPaths.nativeHostScriptPath,
@@ -99,7 +147,13 @@ export class SetupService {
   }
 
   async configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus> {
-    const extensionId = input.extensionId.trim();
+    const extensionId = this.resolveExtensionId(input.extensionId?.trim() || (await this.store.getSetting<string>(EXTENSION_ID_SETTING)));
+    if (!extensionId && this.helperPaths.mode === "packaged") {
+      throw new Error("Production extension ID is missing. Configure AGENTBRIDGE_CHROME_EXTENSION_ID.");
+    }
+    if (!extensionId) {
+      throw new Error("Chrome extension ID is required in development. Configure it under Advanced diagnostics.");
+    }
     if (!/^[a-p]{32}$/.test(extensionId)) {
       throw new Error("Chrome extension ID must be 32 lowercase letters from a-p.");
     }
@@ -110,8 +164,24 @@ export class SetupService {
     await writeFile(launcherPath, renderLauncher(this.helperPaths.nativeHostScriptPath), "utf8");
     await writeFile(manifestPath, renderManifest(launcherPath, extensionId), "utf8");
     await this.registry.writeManifestPath(manifestPath);
-    await this.store.saveSetting(EXTENSION_ID_SETTING, extensionId);
+    if (!this.configuredExtensionId) {
+      await this.store.saveSetting(EXTENSION_ID_SETTING, extensionId);
+    }
     return this.getStatus();
+  }
+
+  private resolveExtensionId(manualExtensionId?: string): string | undefined {
+    return this.configuredExtensionId || manualExtensionId || undefined;
+  }
+
+  private resolveExtensionIdentityMode(manualExtensionId?: string): SetupStatus["extensionIdentityMode"] {
+    if (this.configuredExtensionId) {
+      return "production";
+    }
+    if (this.extensionPublicKey && manualExtensionId) {
+      return "preproductionStableKey";
+    }
+    return "developmentManual";
   }
 }
 

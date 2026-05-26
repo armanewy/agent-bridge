@@ -60,6 +60,7 @@ let mockAuditEvents: AuditEvent[] = [];
 let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
 let mockExtensionId = "";
+let mockExtensionConnected = false;
 
 export function getAgentBridgeApi(): AgentBridgeApi {
   return window.agentBridge ?? createMockAgentBridgeApi();
@@ -467,11 +468,19 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       return { run, result, artifacts: [artifact] };
     },
     async getSetupStatus(): Promise<SetupStatus> {
-      return mockSetupStatus();
+      return mockSetupStatus(mockExtensionConnected);
     },
     async configureNativeHost(input: ConfigureNativeHostRequest): Promise<SetupStatus> {
-      mockExtensionId = input.extensionId.trim();
-      return mockSetupStatus();
+      mockExtensionId = input.extensionId?.trim() || mockExtensionId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      return mockSetupStatus(mockExtensionConnected);
+    },
+    async connectChrome(): Promise<SetupStatus> {
+      mockExtensionId = mockExtensionId || "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+      mockExtensionConnected = true;
+      return mockSetupStatus(mockExtensionConnected);
+    },
+    async openChromeExtensionInstall() {
+      return undefined;
     },
     async selectRepoFolder() {
       return "C:\\Users\\aoztu\\Documents\\Agent Bridge";
@@ -493,6 +502,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockAuditEvents = [];
       mockMissions = [];
       mockMissionDetails = new Map<string, MissionDetail>();
+      mockExtensionConnected = false;
     },
     async listAuditEvents() {
       return mockAuditEvents;
@@ -616,9 +626,18 @@ function mockRepoComponent(repoContext: RepoContextPack, idSuffix: string): Link
   };
 }
 
-function mockSetupStatus(): SetupStatus {
+function mockSetupStatus(extensionConnected = false): SetupStatus {
   return {
     ...(mockExtensionId ? { extensionId: mockExtensionId } : {}),
+    webStoreUrl: "https://chrome.google.com/webstore/detail/agentbridge/mock",
+    extensionIdentityMode: mockExtensionId ? "developmentManual" : "developmentManual",
+    extensionIdKnown: Boolean(mockExtensionId),
+    extensionConnected,
+    ...(extensionConnected ? { lastExtensionHeartbeatAt: now(), lastExtensionMessageType: "healthCheck", extensionVersion: "0.1.0" } : {}),
+    nativeHostRegistered: Boolean(mockExtensionId),
+    nativeHostPathValid: Boolean(mockExtensionId),
+    allowedOriginMatches: Boolean(mockExtensionId),
+    repairNeeded: !mockExtensionId,
     ...(mockExtensionId ? { nativeHostManifestPath: "mock://com.agentbridge.native_host.json" } : {}),
     ...(mockExtensionId ? { nativeHostLauncherPath: "mock://agentbridge-native-host.cmd" } : {}),
     nativeHostScriptPath: "mock://native-host/native-host.mjs",

@@ -3,9 +3,13 @@ import { handleNativeHostMessage } from "../src/protocol.js";
 
 describe("native host protocol", () => {
   it("handles health checks", async () => {
-    await expect(handleNativeHostMessage({ type: "healthCheck" })).resolves.toMatchObject({
+    await expect(handleNativeHostMessage({ type: "healthCheck", extensionVersion: "0.1.0" })).resolves.toMatchObject({
       ok: true,
-      type: "healthCheck"
+      type: "healthCheck",
+      heartbeat: {
+        messageType: "healthCheck",
+        extensionVersion: "0.1.0"
+      }
     });
   });
 

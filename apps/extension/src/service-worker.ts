@@ -2,6 +2,7 @@ import {
   buildBindSourceMessage,
   buildBrowserTabsDiscoveredMessage,
   buildCaptureMessage,
+  buildHealthCheckMessage,
   type ExtensionMessage,
   type NativeHostMessage
 } from "./protocol.js";
@@ -30,7 +31,7 @@ chrome.commands.onCommand.addListener((command) => {
 async function handleMessage(message: ExtensionMessage): Promise<unknown> {
   switch (message.type) {
     case "ui.healthCheck":
-      return sendNative({ type: "healthCheck", sentAt: new Date().toISOString() });
+      return sendNative(buildHealthCheckMessage());
     case "ui.bindCurrentTab": {
       const tab = await getActiveTab();
       return sendNative(buildBindSourceMessage(tab));
@@ -64,13 +65,13 @@ async function discoverTabs(): Promise<{ tabs: chrome.tabs.Tab[]; permissionMode
 
   if (granted) {
     return {
-      tabs: await chrome.tabs.query({}),
+      tabs: (await chrome.tabs.query({})).filter(isChatGptTab),
       permissionMode: "allTabs"
     };
   }
 
   return {
-    tabs: [await getActiveTab()],
+    tabs: [await getActiveTab()].filter(isChatGptTab),
     permissionMode: "activeTab"
   };
 }
@@ -123,4 +124,16 @@ async function sendNative(message: NativeHostMessage): Promise<unknown> {
       resolve(response ?? { ok: true });
     });
   });
+}
+
+function isChatGptTab(tab: chrome.tabs.Tab): boolean {
+  if (!tab.url) {
+    return false;
+  }
+  try {
+    const host = new URL(tab.url).hostname.toLowerCase();
+    return host === "chatgpt.com" || host === "chat.openai.com" || host.endsWith(".chatgpt.com");
+  } catch {
+    return false;
+  }
 }

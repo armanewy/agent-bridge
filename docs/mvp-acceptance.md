@@ -2,7 +2,11 @@
 
 ## Pass Criteria
 
-- A Chrome extension can bind the active tab as a source.
+- Simple Mode production capture requires the Chrome extension; clipboard/manual/mock capture is not the production path.
+- The desktop Start page offers `Connect Chrome` when no ChatGPT tabs are synced.
+- The desktop app registers or repairs the native messaging host for the configured production extension ID.
+- Extension heartbeat shows whether Chrome is connected and when it last contacted the desktop app.
+- A Chrome extension can sync an existing ChatGPT tab as a source.
 - A Chrome extension can explicitly capture selected text.
 - The native host persists browser sources and captures locally.
 - The desktop app lists real native-host captures by default; mock capture remains an explicit development action.
@@ -28,6 +32,7 @@
 
 - Capture happens without a user gesture.
 - Extension requests broad host permissions or registers all-page content scripts by default.
+- Simple Mode recommends clipboard/manual/mock capture.
 - Delivery happens without an approval preview.
 - Clipboard fallback runs without explicit approval.
 - Suspected secrets are sent without warning.
@@ -35,7 +40,8 @@
 
 ## Known Limitations
 
-- The browser-to-desktop flow still depends on development native-host registration.
+- Production builds need a stable Chrome extension ID and Web Store listing URL.
+- Development builds can still use manual extension ID entry under diagnostics.
 - The Tasks detail view shows source capture excerpt, TaskSpec, artifacts, delivery attempts, timeline, next action, and verification status.
 - The desktop renderer uses mock data when running outside Electron.
 - Generic Windows app delivery is available at the helper/service level but not yet a polished UI flow.
