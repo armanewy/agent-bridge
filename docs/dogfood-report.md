@@ -5,7 +5,7 @@
 - Desktop defaults to Workbench: choose repo -> ask OpenAI Planner -> generate TaskSpec -> send to Codex -> verify -> ask Planner to review.
 - Workbench now also supports an intent-first Autopilot path: choose repo -> write intent -> pick Manual/Supervised/Autonomous -> start mission.
 - Codex delivery uses the Codex Executor provider, backed by the existing deep-link/App Server services.
-- Codex provider events are stored for turn start, completion/failure, errors, and steering.
+- Codex provider events are stored for turn start, progress/tool events where available, completion/failure, errors, and steering.
 - Verification captures git diff and command outputs, stores a VerificationResult, and can be sent back to Planner for review.
 - Follow-up TaskSpecs can be drafted from Planner review and sent back to Codex.
 - Mission artifacts and generated files are stored locally through the Artifact Broker and can be staged for provider turns.
@@ -21,7 +21,7 @@
 - Artifact memory is inspectable in Task detail.
 - Autopilot records durable planning, delivery, verification, review, follow-up, approval, and steering steps.
 - Steering is stored as an artifact and can use Codex App Server `turn/steer` when an active App Server session exists.
-- File transfer is policy-gated and local-first: generated files stay under AgentBridge artifacts/staging unless explicitly moved.
+- File transfer is policy-gated and local-first: generated files stay under AgentBridge artifacts/staging unless explicitly moved, and risky files pause Autopilot before provider transfer.
 - The extension no longer registers broad all-page content scripts.
 - The Workbench keeps the default route narrow; the Link Center remains in Advanced for diagnostics.
 
@@ -37,7 +37,7 @@
 - Generic Windows delivery still needs stronger visible target revalidation before it should be a daily-driver path.
 - Verification commands are user-confirmed, but command configuration still deserves careful UX.
 - ChatGPT latest-message capture remains selector-fragile and must stay in Advanced.
-- Codex event monitoring is still lightweight; full streamed event rendering and provider approval mapping need more dogfood.
+- Codex event monitoring is still lightweight and App Server-backed; full streamed event rendering and provider approval mapping need more dogfood.
 
 ## Useful Tomorrow
 

@@ -44,6 +44,8 @@
 - Steering text creates a mission artifact; with Codex App Server and an active existing session it sends `turn/steer`.
 - Latest provider event appears in the Workbench after Codex delivery or steering.
 - The artifact tray lists local planner/Codex/verification artifacts and file records.
+- Artifact tray actions can mark files for Planner review, Codex follow-up, or exclusion.
+- Artifact tray `Reveal` opens the local artifact file folder when the file exists.
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
 - Demo capture tools are only under Advanced.
@@ -67,6 +69,7 @@
 - Existing-thread dry run opens/stages `codex://threads/<thread-id>` and warns that the prompt is not injected without App Server.
 - With `CODEX_APP_SERVER_URL` configured, existing-thread delivery resumes the selected thread and starts a turn.
 - With `CODEX_APP_SERVER_URL` configured, Codex provider events are stored for turn start/completion and steering.
+- With `CODEX_APP_SERVER_URL` configured, Codex monitoring records thread events before verification.
 - Settings shows Codex App Server status and whether existing-thread delivery is send-capable or open-only fallback.
 - Task Card Preview shows the exact Codex delivery mode before sending.
 - New-thread delivery still uses `codex://threads/new?prompt=...&path=...`.
@@ -81,6 +84,7 @@
 - Confirm verification runs only configured commands.
 - Confirm failed verification can ask Planner for review and draft a follow-up.
 - Confirm no provider file upload happens unless policy allows it.
+- Add a secret-looking `.env` artifact and confirm Autopilot pauses for approval before provider transfer.
 - Confirm local artifact files are staged under the AgentBridge staging root, not written directly into the repo.
 
 ## Windows UIA Helper

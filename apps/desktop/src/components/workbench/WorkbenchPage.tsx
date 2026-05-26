@@ -38,6 +38,7 @@ interface WorkbenchPageProps {
   onContinueAutopilot(runId: string): void;
   onSteerAutopilot(runId: string, text: string): void;
   onResolvePendingDecision(decisionId: string, selectedOption: string): void;
+  onRevealArtifactFile(fileId: string): void;
 }
 
 export function WorkbenchPage({
@@ -65,7 +66,8 @@ export function WorkbenchPage({
   onStopAutopilot,
   onContinueAutopilot,
   onSteerAutopilot,
-  onResolvePendingDecision
+  onResolvePendingDecision,
+  onRevealArtifactFile
 }: WorkbenchPageProps): JSX.Element {
   const [plannerText, setPlannerText] = useState("");
   const [intentText, setIntentText] = useState("");
@@ -311,7 +313,7 @@ export function WorkbenchPage({
         {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
         {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
       </section>
-      <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} />
+      <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} onRevealFile={onRevealArtifactFile} />
       </details>
 
       {missions.length > 0 ? (
@@ -342,9 +344,13 @@ export function WorkbenchPage({
   );
 }
 
-function ArtifactTray({ artifacts, files }: { artifacts: Artifact[]; files: ArtifactFile[] }): JSX.Element {
+function ArtifactTray({ artifacts, files, onRevealFile }: { artifacts: Artifact[]; files: ArtifactFile[]; onRevealFile(fileId: string): void }): JSX.Element {
+  const [transferSelections, setTransferSelections] = useState<Record<string, "planner" | "codex" | "excluded" | undefined>>({});
   const fileByArtifact = new Map(files.map((file) => [file.artifactId, file]));
   const rows = artifacts.slice(0, 10);
+  const transferHistory = rows
+    .map((artifact) => ({ artifact, transfer: transferSelections[artifact.id] }))
+    .filter((item): item is { artifact: Artifact; transfer: "planner" | "codex" | "excluded" } => Boolean(item.transfer));
   return (
     <section className="panel artifact-tray">
       <div className="panel-heading compact-heading">
@@ -360,19 +366,29 @@ function ArtifactTray({ artifacts, files }: { artifacts: Artifact[]; files: Arti
         <div className="artifact-tray-list">
           {rows.map((artifact) => {
             const file = fileByArtifact.get(artifact.id);
+            const transfer = transferSelections[artifact.id];
             return (
               <div key={artifact.id} className="artifact-tray-row">
                 <div>
                   <strong>{artifact.title}</strong>
                   <span>{artifact.kind} · {artifact.metadata.providerId ? String(artifact.metadata.providerId) : "local"} · {file ? formatBytes(file.sizeBytes) : "text"}</span>
                 </div>
-                <em>{artifactTransferStatus(artifact, file)}</em>
+                <em>{transfer ? transferStatusCopy(transfer) : artifactTransferStatus(artifact, file)}</em>
                 <div className="artifact-actions">
                   <button type="button" className="secondary-button" disabled={!artifact.content} onClick={() => void navigator.clipboard?.writeText(artifact.content ?? "")}>
                     Copy
                   </button>
-                  <button type="button" className="secondary-button" disabled>
+                  <button type="button" className="secondary-button" disabled={!file} onClick={() => file && onRevealFile(file.id)}>
                     Reveal
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => setTransferSelections((current) => ({ ...current, [artifact.id]: "planner" }))}>
+                    Planner
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => setTransferSelections((current) => ({ ...current, [artifact.id]: "codex" }))}>
+                    Codex
+                  </button>
+                  <button type="button" className="secondary-button" onClick={() => setTransferSelections((current) => ({ ...current, [artifact.id]: "excluded" }))}>
+                    Exclude
                   </button>
                 </div>
               </div>
@@ -380,6 +396,14 @@ function ArtifactTray({ artifacts, files }: { artifacts: Artifact[]; files: Arti
           })}
         </div>
       )}
+      {transferHistory.length ? (
+        <div className="artifact-transfer-history">
+          <strong>Transfer history</strong>
+          {transferHistory.map(({ artifact, transfer }) => (
+            <span key={`${artifact.id}-${transfer}`}>{artifact.title}: {transferStatusCopy(transfer)}</span>
+          ))}
+        </div>
+      ) : null}
     </section>
   );
 }
@@ -479,6 +503,16 @@ function artifactTransferStatus(artifact: Artifact, file?: ArtifactFile): string
     return "staged for codex";
   }
   return "local only";
+}
+
+function transferStatusCopy(value: "planner" | "codex" | "excluded"): string {
+  if (value === "planner") {
+    return "staged for planner";
+  }
+  if (value === "codex") {
+    return "staged for codex";
+  }
+  return "excluded";
 }
 
 function formatBytes(value: number): string {

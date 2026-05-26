@@ -299,6 +299,17 @@ nav {
 .artifact-actions {
   display: flex;
   gap: 6px;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
+.artifact-transfer-history {
+  border-top: 1px solid #dce3e9;
+  display: grid;
+  gap: 4px;
+  padding-top: 10px;
+  color: #526270;
+  font-size: 13px;
 }
 
 .workbench-details {

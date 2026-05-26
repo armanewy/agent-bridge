@@ -11,7 +11,8 @@ import {
   type CodexThreadRef,
   type ExecutorProvider,
   type ExecutorTaskRequest,
-  type ExecutorTaskResult
+  type ExecutorTaskResult,
+  type ExecutorTurnMonitorResult
 } from "@agentbridge/core";
 import { ExecutorTaskRequestSchema } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
@@ -310,6 +311,48 @@ export class CodexExecutorProvider implements ExecutorProvider {
     return turn;
   }
 
+  async monitorTurn(sessionRef: AgentSessionRef, context: { missionId?: string; turnId?: string } = {}): Promise<ExecutorTurnMonitorResult> {
+    const session = (await this.store.getAgentSession(sessionRef.id)) ?? sessionRef;
+    const requestedTurnId = context.turnId ?? stringFromMetadata(session.metadata.codexTurnId);
+    if (codexIntegrationModeFromSession(session) !== "appServer" || !this.appServerClient) {
+      return {
+        providerId: CODEX_EXECUTOR_PROVIDER_ID,
+        sessionRefId: session.id,
+        ...(requestedTurnId ? { turnId: requestedTurnId } : {}),
+        status: "unknown",
+        eventCount: 0,
+        needsApproval: false,
+        artifactIds: [],
+        warnings: ["Codex App Server is not available; deep-link delivery cannot be observed."],
+        metadata: { mode: "unobserved" }
+      };
+    }
+    const events = await this.appServerClient.listThreadEvents(session.externalSessionId, requestedTurnId);
+    for (const event of events) {
+      await this.appendAgentEvent(event.type, {
+        sessionRefId: session.id,
+        payload: {
+          missionId: context.missionId,
+          codexThreadId: session.externalSessionId,
+          codexTurnId: requestedTurnId,
+          ...event.payload
+        }
+      });
+    }
+    const status = inferMonitorStatus(events);
+    return {
+      providerId: CODEX_EXECUTOR_PROVIDER_ID,
+      sessionRefId: session.id,
+      ...(requestedTurnId ? { turnId: requestedTurnId } : {}),
+      status,
+      eventCount: events.length,
+      needsApproval: status === "blocked",
+      artifactIds: [],
+      warnings: [],
+      metadata: { eventTypes: events.map((event) => event.type) }
+    };
+  }
+
   async prepareArtifactsForInput(request: ExecutorTaskRequest): Promise<Record<string, unknown>> {
     const parsed = ExecutorTaskRequestSchema.parse(request);
     const fileIds = await this.resolveRequestFileIds(parsed);
@@ -524,4 +567,21 @@ function normalizePath(path: string): string {
 
 function stringFromMetadata(value: unknown): string | undefined {
   return typeof value === "string" && value.trim() ? value : undefined;
+}
+
+function inferMonitorStatus(events: Array<{ type: string; payload: Record<string, unknown> }>): ExecutorTurnMonitorResult["status"] {
+  const haystack = events.map((event) => `${event.type} ${JSON.stringify(event.payload)}`).join("\n").toLowerCase();
+  if (!events.length) {
+    return "unknown";
+  }
+  if (haystack.includes("approval") || haystack.includes("user decision")) {
+    return "blocked";
+  }
+  if (haystack.includes("error") || haystack.includes("failed")) {
+    return "failed";
+  }
+  if (haystack.includes("completed") || haystack.includes("turn.done") || haystack.includes("done")) {
+    return "completed";
+  }
+  return "running";
 }

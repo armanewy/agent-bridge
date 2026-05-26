@@ -651,6 +651,19 @@ export const ExecutorTaskResultSchema = z.object({
 });
 export type ExecutorTaskResult = z.infer<typeof ExecutorTaskResultSchema>;
 
+export const ExecutorTurnMonitorResultSchema = z.object({
+  providerId: z.string().min(1),
+  sessionRefId: z.string().optional(),
+  turnId: z.string().optional(),
+  status: z.enum(["running", "completed", "failed", "blocked", "unknown"]),
+  eventCount: z.number().int().nonnegative(),
+  needsApproval: z.boolean().default(false),
+  artifactIds: z.array(z.string()).default([]),
+  warnings: z.array(z.string()).default([]),
+  metadata: z.record(z.unknown()).default({})
+});
+export type ExecutorTurnMonitorResult = z.infer<typeof ExecutorTurnMonitorResultSchema>;
+
 export const ReviewRequestSchema = z.object({
   id: z.string().optional(),
   missionId: z.string().min(1),
@@ -802,6 +815,7 @@ export interface ExecutorProvider {
   resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef>;
   sendTask(input: ExecutorTaskRequest): Promise<ExecutorTaskResult>;
   steerTurn?(sessionRef: AgentSessionRef, text: string, context?: { missionId?: string; turnId?: string }): Promise<AgentTurn>;
+  monitorTurn?(sessionRef: AgentSessionRef, context?: { missionId?: string; turnId?: string }): Promise<ExecutorTurnMonitorResult>;
   prepareArtifactsForInput?(request: ExecutorTaskRequest, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
   extractArtifactsFromResult?(result: ExecutorTaskResult, context?: Record<string, unknown>): Promise<string[]>;
   listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;

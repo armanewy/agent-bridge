@@ -806,6 +806,9 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async openDataFolder() {
       return undefined;
     },
+    async revealArtifactFile() {
+      return undefined;
+    },
     async openNativeHostLog() {
       return undefined;
     },

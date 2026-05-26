@@ -4,7 +4,9 @@ import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type { Artifact, AutopilotPolicy, HandoffCard, Mission, Run, TaskSpec, VerificationResult } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
+import { ArtifactBrokerService } from "../src/services/artifact-broker-service.js";
 import { AutopilotService } from "../src/services/autopilot-service.js";
+import { PlatformService } from "../src/services/platform-service.js";
 import type { WorkbenchService } from "../src/services/workbench-service.js";
 
 let tempDir: string;
@@ -61,6 +63,23 @@ describe("AutopilotService", () => {
 
     expect(status.run?.status).toBe("passed");
     expect(status.run?.stopReason).toBe("Verification passed.");
+    await expect(store.listAutopilotSteps(status.run?.id ?? "")).resolves.toEqual(
+      expect.arrayContaining([expect.objectContaining({ kind: "monitorExecutor", status: "completed" })])
+    );
+  });
+
+  it("pauses before provider transfer when mission files look risky", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    const broker = new ArtifactBrokerService(store, new PlatformService({ platform: "win32", userDataDir: tempDir }), fixedNow);
+    await broker.importGeneratedTextAsFile("mission_1", ".env", "OPENAI_API_KEY=secret", { classification: "document" });
+    const service = new AutopilotService(store, fakeWorkbench(store), broker, fixedNow);
+
+    const status = await service.startAutopilot("mission_1");
+
+    expect(status.run?.status).toBe("blocked");
+    expect(status.pendingDecision?.prompt).toContain("Approve risky mission files");
+    expect(status.pendingDecision?.prompt).toContain("Environment-style secret");
   });
 
   it("stores steering notes as mission artifacts", async () => {
@@ -129,6 +148,7 @@ function fakeWorkbench(store: JsonFileStore): WorkbenchService {
     },
     async sendTaskSpecToExecutor(missionId: string) {
       const artifact = textArtifact(missionId, "deliveryResult", "Delivered");
+      artifact.title = "Executor delivery result";
       await store.saveArtifact(artifact);
       return {
         providerId: "codex",

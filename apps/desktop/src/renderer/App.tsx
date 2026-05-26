@@ -547,6 +547,9 @@ export function App(): JSX.Element {
 
   async function stopAutopilot(runId: string): Promise<void> {
     setAutopilotStatus(await api.stopAutopilot(runId));
+    if (selectedMissionIdRef.current) {
+      await refreshMission(selectedMissionIdRef.current);
+    }
   }
 
   async function continueAutopilot(runId: string): Promise<void> {
@@ -558,6 +561,9 @@ export function App(): JSX.Element {
 
   async function steerAutopilot(runId: string, text: string): Promise<void> {
     setAutopilotStatus(await api.steerAutopilot(runId, text));
+    if (selectedMissionIdRef.current) {
+      await refreshMission(selectedMissionIdRef.current);
+    }
   }
 
   async function resolvePendingDecision(decisionId: string, selectedOption: string): Promise<void> {
@@ -800,6 +806,7 @@ export function App(): JSX.Element {
             onContinueAutopilot={(runId) => void continueAutopilot(runId)}
             onSteerAutopilot={(runId, text) => void steerAutopilot(runId, text)}
             onResolvePendingDecision={(decisionId, selectedOption) => void resolvePendingDecision(decisionId, selectedOption)}
+            onRevealArtifactFile={(fileId) => void api.revealArtifactFile(fileId)}
           />
         ) : null}
 
@@ -1211,6 +1218,12 @@ function ProviderSettingsPanel({
           <span>{platformStatus?.capabilities.platform ?? "unknown"}</span>
           <small>Shell: {platformStatus?.defaultShell ?? "unknown"}</small>
           <small>Codex deep links: {platformStatus?.capabilities.canUseCodexDeepLinks ? "available" : "unavailable"}</small>
+        </article>
+        <article className="setup-check">
+          <strong>File exchange policy</strong>
+          <span>Local-first</span>
+          <small>Provider uploads pause for approval by default.</small>
+          <small>Staged files are not written into the repo automatically.</small>
         </article>
       </div>
       {!codexAppServerStatus?.available ? (

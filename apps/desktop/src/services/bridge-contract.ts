@@ -257,6 +257,7 @@ export interface AgentBridgeApi {
   captureEmbeddedChatGptSelection(): Promise<Capture>;
   selectRepoFolder(): Promise<string | undefined>;
   openDataFolder(): Promise<void>;
+  revealArtifactFile(fileId: string): Promise<void>;
   openNativeHostLog(): Promise<void>;
   clearLocalData(): Promise<void>;
   bindMockBrowserSource(): Promise<BrowserTabSource>;

@@ -136,7 +136,7 @@ app.whenReady().then(async () => {
   providerRegistryService.registerProvider(openAiPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
   const workbenchService = new WorkbenchService(store, openAiPlannerProvider, codexExecutorProvider, verificationService);
-  const autopilotService = new AutopilotService(store, workbenchService);
+  const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
@@ -299,6 +299,13 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("agentbridge:selectRepoFolder", () => platformService.selectRepoFolder());
   ipcMain.handle("agentbridge:openDataFolder", () => platformService.openFolder(dataDir));
+  ipcMain.handle("agentbridge:revealArtifactFile", async (_event, fileId: string) => {
+    const file = await store.getArtifactFile(fileId);
+    if (!file) {
+      throw new Error(`Artifact file ${fileId} was not found.`);
+    }
+    await platformService.openFolder(dirname(file.localPath));
+  });
   ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(platformService, dataDir, nativeHostLogPath));
   ipcMain.handle("agentbridge:clearLocalData", () => clearLocalData(dataDir));
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());

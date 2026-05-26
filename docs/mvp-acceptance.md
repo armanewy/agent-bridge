@@ -14,10 +14,11 @@
 - Autopilot creates durable steps for planning, TaskSpec creation, Codex delivery, verification, Planner review, follow-up, steering, and approval requests.
 - Autopilot stops when verification passes, max iterations are reached, the user stops it, a provider fails, or an approval/risk boundary is hit.
 - Steering text is stored as a mission artifact and is sent to Codex through App Server `turn/steer` when an active App Server session is available.
-- Codex provider events are stored locally for turn start, turn completion/failure, errors, and steering.
+- Codex provider events are stored locally for turn start, progress/tool events, turn completion/failure, errors, and steering when App Server event data is available.
 - The Workbench shows the current timeline, pending approval cards, latest provider event, and a steering input without expanding raw provider details.
 - Mission artifacts include planner responses, TaskSpec, Codex prompt, delivery result, verification logs, git diff, Planner review, follow-up prompt, and local artifact files where produced.
 - Artifact file exchange is local-first: files are stored under the AgentBridge artifact root, staged separately for Codex, and never written into the repo or uploaded without policy support.
+- Artifact file exchange is policy-gated: risky files pause Autopilot for approval before provider transfer, and artifact tray actions can stage/exclude files for Planner/Codex follow-up.
 - WorkflowLink, LinkableComponent, browser captures, ChatGPT Desktop, extension setup, and demo tools are hidden under Advanced.
 - If Chrome is connected but no ChatGPT tab has been synced, only the Advanced legacy link center discusses syncing external ChatGPT tabs.
 - The desktop app registers or repairs the native messaging host for the configured production extension ID.
@@ -72,5 +73,5 @@
 - The desktop renderer uses mock data when running outside Electron.
 - Generic Windows app delivery is available at the helper/service level but not yet a polished UI flow.
 - Codex App Server transport is optional and must be configured in development with `CODEX_APP_SERVER_URL`.
-- Existing-thread observation is not implemented yet.
+- Existing-thread observation is lightweight and App Server-backed; deep-link-only Codex delivery remains open-only and cannot be observed.
 - ChatGPT Desktop UIA quality depends on the app's accessibility tree. If only a generic WebView shell is exposed, desktop source support is detection-only.

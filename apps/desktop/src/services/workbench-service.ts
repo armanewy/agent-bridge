@@ -7,6 +7,7 @@ import {
   type Artifact,
   type ExecutorProvider,
   type ExecutorTaskResult,
+  type ExecutorTurnMonitorResult,
   type HandoffCard,
   type Mission,
   type PlannerProvider,
@@ -270,6 +271,42 @@ export class WorkbenchService {
     return result;
   }
 
+  async monitorExecutor(missionId: string): Promise<ExecutorTurnMonitorResult> {
+    const mission = await this.requireMission(missionId);
+    const session = await this.latestExecutorSession(mission);
+    if (!session || !hasMonitorTurn(this.executor)) {
+      const artifact = await this.saveResultArtifact(missionId, "Executor monitor result", {
+        status: "unknown",
+        warning: "Executor monitoring is not available for this delivery mode."
+      }, "reviewNote");
+      await this.appendRunStep(missionId, "delivery", "Monitor Codex", "needs_review", [artifact.id]);
+      return {
+        providerId: this.executor.profile().id,
+        status: "unknown",
+        eventCount: 0,
+        needsApproval: false,
+        artifactIds: [artifact.id],
+        warnings: ["Executor monitoring is not available for this delivery mode."],
+        metadata: {}
+      };
+    }
+    const turns = await this.store.listAgentTurns(session.id);
+    const latestTurn = [...turns].reverse().find((turn) => turn.providerId === this.executor.profile().id);
+    const result = await this.executor.monitorTurn(session, {
+      missionId,
+      ...(latestTurn?.externalTurnId ? { turnId: latestTurn.externalTurnId } : {})
+    });
+    const artifact = await this.saveResultArtifact(missionId, "Executor monitor result", result, "reviewNote");
+    await this.appendRunStep(
+      missionId,
+      "delivery",
+      "Monitor Codex",
+      result.status === "failed" ? "failed" : result.status === "blocked" ? "needs_review" : "passed",
+      [artifact.id, ...result.artifactIds]
+    );
+    return { ...result, artifactIds: [artifact.id, ...result.artifactIds] };
+  }
+
   async steerExecutor(missionId: string, text: string): Promise<{ artifactIds: string[]; turn?: AgentTurn }> {
     const mission = await this.requireMission(missionId);
     const artifact: Artifact = {
@@ -319,11 +356,16 @@ export class WorkbenchService {
     return (await this.store.listArtifactsForMission(missionId)).find(predicate);
   }
 
-  private async saveResultArtifact(missionId: string, title: string, result: unknown): Promise<Artifact> {
+  private async saveResultArtifact(
+    missionId: string,
+    title: string,
+    result: unknown,
+    kind: Artifact["kind"] = "deliveryResult"
+  ): Promise<Artifact> {
     const artifact: Artifact = {
       id: `artifact_${randomUUID()}`,
       missionId,
-      kind: "deliveryResult",
+      kind,
       title,
       content: JSON.stringify(result, null, 2),
       metadata: { generatedBy: "workbench-service" },
@@ -482,4 +524,8 @@ function normalizePath(path: string): string {
 
 function hasSteerTurn(provider: ExecutorProvider): provider is ExecutorProvider & Required<Pick<ExecutorProvider, "steerTurn">> {
   return typeof provider.steerTurn === "function";
+}
+
+function hasMonitorTurn(provider: ExecutorProvider): provider is ExecutorProvider & Required<Pick<ExecutorProvider, "monitorTurn">> {
+  return typeof provider.monitorTurn === "function";
 }

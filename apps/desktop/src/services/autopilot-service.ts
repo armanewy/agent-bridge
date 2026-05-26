@@ -8,6 +8,7 @@ import type {
   UserDecision
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
+import type { ArtifactBrokerService, FileRiskFinding } from "./artifact-broker-service.js";
 import type { WorkbenchService } from "./workbench-service.js";
 
 export interface AutopilotStatus {
@@ -17,11 +18,18 @@ export interface AutopilotStatus {
 }
 
 export class AutopilotService {
+  private readonly artifactBroker: ArtifactBrokerService | undefined;
+  private readonly now: () => string;
+
   constructor(
     private readonly store: LocalStore,
     private readonly workbenchService: WorkbenchService,
-    private readonly now: () => string = () => new Date().toISOString()
-  ) {}
+    artifactBrokerOrNow?: ArtifactBrokerService | (() => string),
+    now?: () => string
+  ) {
+    this.artifactBroker = typeof artifactBrokerOrNow === "function" ? undefined : artifactBrokerOrNow;
+    this.now = typeof artifactBrokerOrNow === "function" ? artifactBrokerOrNow : now ?? (() => new Date().toISOString());
+  }
 
   async startAutopilot(missionId: string, policyId?: string): Promise<AutopilotStatus> {
     const policy = policyId ? await this.requirePolicy(policyId) : await this.ensureDefaultPolicy();
@@ -53,7 +61,7 @@ export class AutopilotService {
     let run = await this.requireRun(autopilotRunId);
     const policy = await this.requirePolicy(run.policyId);
     while (run.iteration < run.maxIterations) {
-      const action = await this.nextAction(run);
+      const action = await this.nextAction(run, policy);
       if (isStopAction(action)) {
         run = await this.updateRun(run.id, action.status, {
           completedAt: this.now(),
@@ -121,6 +129,20 @@ export class AutopilotService {
     }
     if (/approve|continue/i.test(selectedOption)) {
       const run = await this.requireRun(decision.autopilotRunId);
+      await this.store.saveArtifact({
+        id: `artifact_${randomUUID()}`,
+        missionId: run.missionId,
+        kind: "reviewNote",
+        title: "User decision",
+        content: `${decision.prompt}\n\nSelected: ${selectedOption}`,
+        metadata: {
+          source: "userDecision",
+          decisionId: decision.id,
+          decisionType: decision.decisionType,
+          approvedRisk: /approve/i.test(selectedOption)
+        },
+        createdAt: this.now()
+      });
       await this.store.updateAutopilotRunStatus(run.id, "idle", {
         pendingUserDecisionId: undefined,
         stopReason: undefined
@@ -134,7 +156,7 @@ export class AutopilotService {
     return this.statusForRunId(decision.autopilotRunId);
   }
 
-  private async nextAction(run: AutopilotRun): Promise<AutopilotAction> {
+  private async nextAction(run: AutopilotRun, policy: AutopilotPolicy): Promise<AutopilotAction> {
     const mission = await this.store.getMission(run.missionId);
     if (!mission) {
       return { kind: "stop", status: "failed", reason: `Mission ${run.missionId} was not found.` };
@@ -164,7 +186,23 @@ export class AutopilotService {
         }
       };
     }
-    if (!artifacts.some((artifact) => artifact.kind === "deliveryResult")) {
+    const deliveryResultCount = artifacts.filter(
+      (artifact) => artifact.kind === "deliveryResult" && artifact.title === "Executor delivery result"
+    ).length;
+    if (!deliveryResultCount) {
+      const fileRiskFindings = await this.findMissionFileRiskFindings(run.missionId, policy);
+      const riskApproved = artifacts.some((artifact) => artifact.metadata.source === "userDecision" && artifact.metadata.approvedRisk === true);
+      if (fileRiskFindings.length && !riskApproved) {
+        return {
+          kind: "requestApproval",
+          title: "Approve file transfer risk",
+          approvalPrompt: [
+            "Approve risky mission files before sending context to a provider?",
+            ...fileRiskFindings.map((finding) => `- ${finding.severity}: ${finding.message}`)
+          ].join("\n"),
+          execute: async () => []
+        };
+      }
       return {
         kind: "sendToExecutor",
         title: "Send to Codex",
@@ -172,6 +210,21 @@ export class AutopilotService {
         execute: async () => {
           const result = await this.workbenchService.sendTaskSpecToExecutor(run.missionId);
           return result.artifactIds;
+        }
+      };
+    }
+    const monitorSteps = await this.store.listAutopilotSteps(run.id);
+    const completedMonitorCount = monitorSteps.filter((step) => step.kind === "monitorExecutor" && step.status === "completed").length;
+    if (completedMonitorCount < deliveryResultCount) {
+      return {
+        kind: "monitorExecutor",
+        title: "Monitor Codex",
+        execute: async () => {
+          if (hasMonitorExecutor(this.workbenchService)) {
+            const result = await this.workbenchService.monitorExecutor(run.missionId);
+            return result.artifactIds;
+          }
+          return [];
         }
       };
     }
@@ -215,6 +268,9 @@ export class AutopilotService {
     }
     if (kind === "sendToExecutor") {
       return !policy.allowCodexTurnsWithoutApproval;
+    }
+    if (kind === "requestApproval") {
+      return true;
     }
     if (kind === "verify") {
       return !policy.allowVerificationWithoutApproval;
@@ -284,6 +340,38 @@ export class AutopilotService {
     return decision;
   }
 
+  private async findMissionFileRiskFindings(missionId: string, policy: AutopilotPolicy): Promise<FileRiskFinding[]> {
+    if (!this.artifactBroker) {
+      return [];
+    }
+    const files = await this.store.listArtifactFilesForMission(missionId);
+    const findings: FileRiskFinding[] = [];
+    for (const file of files) {
+      const scanOptions: {
+        maxProviderUploadBytes?: number;
+        allowedFileExtensions?: string[];
+        blockedFilePatterns?: string[];
+        requireApprovalForBinaryFiles?: boolean;
+      } = {};
+      if (policy.requireApprovalForBinaryFiles !== undefined) {
+        scanOptions.requireApprovalForBinaryFiles = policy.requireApprovalForBinaryFiles;
+      }
+      if (policy.maxProviderUploadBytes !== undefined) {
+        scanOptions.maxProviderUploadBytes = policy.maxProviderUploadBytes;
+      }
+      if (policy.allowedFileExtensions !== undefined) {
+        scanOptions.allowedFileExtensions = policy.allowedFileExtensions;
+      }
+      if (policy.blockedFilePatterns !== undefined) {
+        scanOptions.blockedFilePatterns = policy.blockedFilePatterns;
+      }
+      findings.push(
+        ...(await this.artifactBroker.scanFileRisk(file.id, scanOptions))
+      );
+    }
+    return findings.filter((finding) => finding.severity === "high" || policy.allowProviderFileUpload === "askEachTime");
+  }
+
   private async ensureDefaultPolicy(): Promise<AutopilotPolicy> {
     const existing = (await this.store.listAutopilotPolicies()).find((policy) => policy.name === "Supervised");
     if (existing) {
@@ -301,6 +389,12 @@ export class AutopilotService {
       allowShellCommands: "configuredOnly",
       allowFileWrites: "repoOnly",
       allowNetworkAccess: false,
+      allowProviderFileUpload: "askEachTime",
+      maxProviderUploadBytes: 512 * 1024,
+      allowStagedFilesToRepo: "askEachTime",
+      blockedFilePatterns: ["(^|[/\\\\])\\.env$", "id_rsa", "private[-_]?key"],
+      redactBeforeUpload: true,
+      requireApprovalForBinaryFiles: true,
       stopOnVerificationFailure: false,
       stopOnRedactionFinding: true,
       stopOnProviderWarning: true,
@@ -439,6 +533,12 @@ function basePolicy(id: string, name: string, now: string): AutopilotPolicy {
     allowShellCommands: "configuredOnly",
     allowFileWrites: "repoOnly",
     allowNetworkAccess: false,
+    allowProviderFileUpload: "askEachTime",
+    maxProviderUploadBytes: 512 * 1024,
+    allowStagedFilesToRepo: "askEachTime",
+    blockedFilePatterns: ["(^|[/\\\\])\\.env$", "id_rsa", "private[-_]?key"],
+    redactBeforeUpload: true,
+    requireApprovalForBinaryFiles: true,
     stopOnVerificationFailure: false,
     stopOnRedactionFinding: true,
     stopOnProviderWarning: true,
@@ -451,4 +551,10 @@ function hasSteerExecutor(value: WorkbenchService): value is WorkbenchService & 
   steerExecutor(missionId: string, text: string): Promise<{ artifactIds: string[] }>;
 } {
   return typeof (value as { steerExecutor?: unknown }).steerExecutor === "function";
+}
+
+function hasMonitorExecutor(value: WorkbenchService): value is WorkbenchService & {
+  monitorExecutor(missionId: string): Promise<{ artifactIds: string[] }>;
+} {
+  return typeof (value as { monitorExecutor?: unknown }).monitorExecutor === "function";
 }

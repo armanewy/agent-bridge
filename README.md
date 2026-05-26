@@ -133,8 +133,8 @@ Implemented:
 - Codex Executor provider wrapping new-thread deep links, existing-thread open-only fallback, and App Server turn start.
 - Workbench orchestration service for mission creation, Planner turns, TaskSpec creation, Codex send, verification, Planner review, and follow-up send.
 - Autopilot runner for intent-first Manual/Supervised/Autonomous missions with approvals, stop conditions, steering, and durable run steps.
-- Artifact Broker for local-first generated files, staged provider inputs, hashes, file bundles, and file risk scanning.
-- Codex provider events for turn start/completion/failure, errors, and App Server steering.
+- Artifact Broker for local-first generated files, staged provider inputs, hashes, file bundles, file risk scanning, and artifact transfer controls.
+- Codex provider events for turn start/progress/completion/failure, errors, App Server monitoring, and App Server steering.
 - Optional Chrome extension/native-host path for external existing browser tabs.
 - Cross-platform PlatformService for app data paths, bundled resources, file picker, external links, shell selection, and capability gating.
 - Windows/macOS packaging configuration for the desktop app.
@@ -153,7 +153,7 @@ Implemented:
 ## Known Limitations
 
 - OpenAI Planner requires `OPENAI_API_KEY` or `AGENTBRIDGE_OPENAI_API_KEY` in the environment.
-- Codex deep-link result observation is not implemented yet; Codex App Server sessions provide the stronger event/steering path.
+- Codex deep-link result observation is unavailable by design; Codex App Server sessions provide the event monitoring and steering path.
 - Existing Codex thread continuation requires Codex App Server; deep links can only open an existing thread.
 - Legacy ChatGPT/browser/Desktop capture is Advanced-only and still experimental.
 - The optional Chrome extension still requires local unpacked-extension setup until there is a published extension ID.

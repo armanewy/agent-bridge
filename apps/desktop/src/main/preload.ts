@@ -71,6 +71,7 @@ const api: AgentBridgeApi = {
   captureEmbeddedChatGptSelection: () => ipcRenderer.invoke("agentbridge:captureEmbeddedChatGptSelection"),
   selectRepoFolder: () => ipcRenderer.invoke("agentbridge:selectRepoFolder"),
   openDataFolder: () => ipcRenderer.invoke("agentbridge:openDataFolder"),
+  revealArtifactFile: (fileId: string) => ipcRenderer.invoke("agentbridge:revealArtifactFile", fileId),
   openNativeHostLog: () => ipcRenderer.invoke("agentbridge:openNativeHostLog"),
   clearLocalData: () => ipcRenderer.invoke("agentbridge:clearLocalData"),
   bindMockBrowserSource: () => ipcRenderer.invoke("agentbridge:bindMockBrowserSource"),

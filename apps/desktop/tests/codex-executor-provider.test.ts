@@ -95,6 +95,40 @@ describe("CodexExecutorProvider", () => {
     );
   });
 
+  it("monitors an app-server Codex thread and stores provider events", async () => {
+    const transport: CodexAppServerTransport = {
+      async request(method) {
+        if (method === "thread/read") {
+          return {
+            events: [
+              { type: "turn.started", turnId: "turn_123" },
+              { type: "tool.progress", turnId: "turn_123", message: "editing" },
+              { type: "turn.completed", turnId: "turn_123" }
+            ]
+          };
+        }
+        return {};
+      }
+    };
+    const appServerClient = new CodexAppServerClient({ transport });
+    const store = new JsonFileStore(tempDir);
+    const session = existingCodexSession("appServer");
+    await store.saveAgentSession({ ...session, metadata: { ...session.metadata, codexTurnId: "turn_123" } });
+    const provider = createProvider(store, { appServerClient });
+
+    const result = await provider.monitorTurn(session, { missionId: "mission_2" });
+
+    expect(result.status).toBe("completed");
+    expect(result.eventCount).toBe(3);
+    await expect(store.listAgentEvents({ providerId: CODEX_EXECUTOR_PROVIDER_ID })).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ type: "turn.started" }),
+        expect.objectContaining({ type: "tool.progress" }),
+        expect.objectContaining({ type: "turn.completed" })
+      ])
+    );
+  });
+
   it("steers an existing app-server Codex turn", async () => {
     const calls: Array<{ method: string; params?: unknown }> = [];
     const transport: CodexAppServerTransport = {
