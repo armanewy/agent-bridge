@@ -84,6 +84,7 @@ export function WorkbenchPage({
   const taskCard = missionDetail?.handoffCards.find((card) => card.recipe !== "debuggingRequest");
   const followUpCard = missionDetail?.handoffCards.find((card) => card.recipe === "debuggingRequest");
   const verification = missionDetail?.verificationResults[0];
+  const completionContract = missionDetail?.completionContracts?.[0];
   const plannerResponses = missionDetail?.artifacts.filter((artifact) => artifact.kind === "modelResponse") ?? [];
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
   const latestProviderEvent = missionDetail?.agentEvents?.[0];
@@ -144,6 +145,7 @@ export function WorkbenchPage({
           <StatusChip label="Account" value={planner?.status === "available" ? "signed in" : "sign in needed"} tone={planner?.status === "available" ? "ready" : "warning"} />
           <StatusChip label="Planner" value={planner?.displayName ?? "unknown"} tone={planner?.status === "available" ? "ready" : "warning"} />
           <StatusChip label="Codex" value={codex?.status ?? "unknown"} tone={codex?.status === "available" ? "ready" : "warning"} />
+          <StatusChip label="Workflow" value="Planner ↔ Codex" tone="ready" />
           <StatusChip
             label="Workspace"
             value={missionWorkspace ? "selected" : bestWorkspaceCandidate ? "inferred" : "not needed yet"}
@@ -354,6 +356,7 @@ export function WorkbenchPage({
             Send Follow-up
           </button>
         </div>
+        <DoneMeansPanel contract={completionContract} evidenceCount={missionDetail?.completionEvidence?.length ?? 0} />
         {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
         {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
       </section>
@@ -385,6 +388,43 @@ export function WorkbenchPage({
           </div>
         </section>
       ) : null}
+    </div>
+  );
+}
+
+function DoneMeansPanel({
+  contract,
+  evidenceCount
+}: {
+  contract: NonNullable<MissionDetail["completionContracts"]>[number] | undefined;
+  evidenceCount: number;
+}): JSX.Element {
+  if (!contract) {
+    return (
+      <div className="done-means-panel muted">
+        <strong>Done means</strong>
+        <p>Generate a TaskSpec to create objective acceptance criteria.</p>
+      </div>
+    );
+  }
+  const objectiveCriteria = contract.acceptanceCriteria.filter((criterion) => criterion.verifierKind !== "humanReview");
+  const canPassAutonomously = contract.status === "valid" && objectiveCriteria.length > 0;
+  return (
+    <div className={canPassAutonomously ? "done-means-panel" : "done-means-panel warning"}>
+      <div className="done-means-heading">
+        <strong>Done means</strong>
+        <span>{contract.status}</span>
+      </div>
+      {!canPassAutonomously ? <p>This task cannot autonomously pass yet.</p> : null}
+      <ul>
+        {contract.acceptanceCriteria.slice(0, 4).map((criterion) => (
+          <li key={criterion.id}>
+            {criterion.statement}
+            <em>{criterion.verifierKind}</em>
+          </li>
+        ))}
+      </ul>
+      <p>{evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"} recorded.</p>
     </div>
   );
 }

@@ -227,7 +227,7 @@ nav {
 
 .workbench-status-strip {
   display: grid;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
   gap: 8px;
 }
 
@@ -494,6 +494,57 @@ nav {
   border-radius: 8px;
   padding: 12px;
   background: #fbfcfd;
+}
+
+.done-means-panel {
+  border: 1px solid #cfe2d8;
+  border-radius: 8px;
+  padding: 12px;
+  background: #f3fbf7;
+  display: grid;
+  gap: 8px;
+}
+
+.done-means-panel.warning {
+  border-color: #efcd86;
+  background: #fff8e6;
+}
+
+.done-means-panel.muted {
+  border-color: #dce3e9;
+  background: #fbfcfd;
+}
+
+.done-means-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  align-items: center;
+}
+
+.done-means-heading span {
+  color: #64737f;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.done-means-panel p {
+  margin: 0;
+  color: #526270;
+}
+
+.done-means-panel ul {
+  margin: 0;
+  padding-left: 18px;
+}
+
+.done-means-panel li em {
+  color: #64737f;
+  display: inline-block;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  margin-left: 6px;
 }
 
 .taskspec-summary p {

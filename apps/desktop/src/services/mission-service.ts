@@ -15,14 +15,18 @@ export class MissionService {
       return undefined;
     }
 
-    const [handoffCards, artifacts, artifactFiles, artifactBundles, runs, verificationResults] = await Promise.all([
+    const [handoffCards, artifacts, artifactFiles, artifactBundles, runs, verificationResults, completionContracts] = await Promise.all([
       this.store.listHandoffCardsForMission(id),
       this.store.listArtifactsForMission(id),
       this.store.listArtifactFilesForMission(id),
       this.store.listArtifactBundlesForMission(id),
       this.store.listRunsForMission(id),
-      this.store.listVerificationResultsForMission(id)
+      this.store.listVerificationResultsForMission(id),
+      this.store.listCompletionContractsForMission(id)
     ]);
+    const completionEvidence = (
+      await Promise.all(completionContracts.map((contract) => this.store.listCompletionEvidenceForContract(contract.id)))
+    ).flat();
     const handoffCardIds = new Set(handoffCards.map((card) => card.id));
     const captures = (await Promise.all(mission.captureIds.map((captureId) => this.store.getCapture(captureId)))).filter(
       (capture): capture is Capture => Boolean(capture)
@@ -43,6 +47,8 @@ export class MissionService {
       artifacts,
       artifactFiles,
       artifactBundles,
+      completionContracts,
+      completionEvidence,
       deliveryAttempts,
       runs,
       verificationResults,

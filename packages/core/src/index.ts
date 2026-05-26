@@ -7,3 +7,7 @@ export * from "./targets/codex.js";
 export * from "./safety.js";
 export * from "./adapter-registry.js";
 export * from "./components.js";
+export * from "./completion-contracts.js";
+export * from "./workflow-templates.js";
+export * from "./autopilot-decision.js";
+export * from "./workspace-isolation.js";

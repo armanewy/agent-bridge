@@ -41,7 +41,9 @@ Optional adapters remain under Advanced for importing external ChatGPT/browser/D
 AgentBridge stores local work records so the task can be resumed and audited:
 
 - `Mission`: the durable user task.
+- `WorkflowTemplate`: the typed provider-role loop for the mission.
 - `TaskSpec`: the structured agent-ready task.
+- `CompletionContract`: "done means X, verified by Y" acceptance and evidence rules.
 - `HandoffCard`: one dispatch to Codex or another target.
 - `RepoContextPack`: repo path, branch/status, changed files, and verification commands when workspace access is needed.
 - `Artifact`: captured text, generated prompt, delivery result, git diff, test output, follow-up prompt, and related evidence.
@@ -132,10 +134,14 @@ Implemented:
 - Packaged Electron desktop app with compact `760x940` default window.
 - Workbench-first UI focused on Planner -> Codex -> verification -> Planner review.
 - Provider model for OpenAI Planner and Codex Executor profiles, sessions, turns, and events.
+- Workflow templates for the default Planner/Reviewer -> Codex Executor -> local Verifier loop.
+- Completion contracts that keep autonomous missions from passing without objective evidence.
 - OpenAI Planner provider using the Responses API through the official SDK, with API-key-from-environment setup.
+- Advanced Codex Local Planner provider for no-cloud dogfood mode through a separate Codex planning thread.
 - Codex Executor provider wrapping new-thread deep links, existing-thread open-only fallback, and App Server turn start.
 - Workbench orchestration service for mission creation, Planner turns, TaskSpec creation, Codex send, verification, Planner review, and follow-up send.
-- Autopilot runner for intent-first Manual/Supervised/Autonomous missions with approvals, stop conditions, steering, and durable run steps.
+- Autopilot runner for intent-first Manual/Supervised/Autonomous missions with approvals, repeated-failure/no-change stop conditions, steering, and durable run steps.
+- Mission queue, file conflict detection, and branch/worktree isolation service foundations for parallel mission safety.
 - Artifact Broker for local-first generated files, staged provider inputs, hashes, file bundles, file risk scanning, and artifact transfer controls.
 - Codex provider events for turn start/progress/completion/failure, errors, App Server monitoring, and App Server steering.
 - Optional Chrome extension/native-host path for external existing browser tabs.
@@ -160,6 +166,7 @@ Implemented:
 - Hosted planner provider is the production target. Current BYOK planner requires `OPENAI_API_KEY` or `AGENTBRIDGE_OPENAI_API_KEY` until cloud auth/provider code lands.
 - Codex deep-link result observation is unavailable by design; Codex App Server sessions provide the event monitoring and steering path.
 - Existing Codex thread continuation requires Codex App Server; deep links can only open an existing thread.
+- Advanced Codex Local Planner avoids hosted planning but uses Codex on both planning and execution sides, so it is not cross-agent diverse.
 - Legacy ChatGPT/browser/Desktop capture is Advanced-only and still experimental.
 - The optional Chrome extension still requires local unpacked-extension setup until there is a published extension ID.
 - Firefox/external-browser support should be added as another optional adapter, not as the default flow.
@@ -178,3 +185,4 @@ Implemented:
 - UI automation is capability-gated and visibly risky when applicable.
 - Verification commands are user-configured and user-confirmed before local execution.
 - Data stays local by default.
+- LLM review alone cannot mark a mission autonomously complete; completion contracts require objective evidence or fall back to `needs_review`.

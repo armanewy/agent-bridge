@@ -31,6 +31,7 @@ import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromW
 import { ProviderRegistryService } from "../services/provider-registry-service.js";
 import { AgentBridgeHostedPlannerProvider } from "../services/providers/agentbridge-hosted-planner-provider.js";
 import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
+import { CodexLocalPlannerProvider } from "../services/providers/codex-local-planner-provider.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
 import { PlatformService } from "../services/platform-service.js";
@@ -38,6 +39,8 @@ import { ArtifactBrokerService } from "../services/artifact-broker-service.js";
 import { AutopilotService } from "../services/autopilot-service.js";
 import { AuthService, FetchAuthTransport, MemoryAuthStorage } from "../services/auth-service.js";
 import { WorkspaceResolverService } from "../services/workspace-resolver-service.js";
+import { CompletionContractService } from "../services/completion-contract-service.js";
+import { WorkflowTemplateService } from "../services/workflow-template-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -105,11 +108,14 @@ app.whenReady().then(async () => {
   const cloudBaseUrl = process.env.AGENTBRIDGE_CLOUD_URL ?? "http://127.0.0.1:8787";
   const authService = new AuthService(new MemoryAuthStorage(), cloudBaseUrl, app.isPackaged ? "production" : "development", new FetchAuthTransport(cloudBaseUrl));
   const workspaceResolverService = new WorkspaceResolverService(store);
+  const workflowTemplateService = new WorkflowTemplateService(store);
+  await workflowTemplateService.ensureDefaultTemplate();
   const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);
   const transformService = new TransformService(store);
   const missionService = new MissionService(store);
+  const completionContractService = new CompletionContractService(store);
   const verificationService = new VerificationService(store, new PlatformCommandRunner(platformService).run);
   const setupService = new SetupService(store, undefined, undefined, process.cwd(), {
     isPackaged: app.isPackaged,
@@ -136,12 +142,14 @@ app.whenReady().then(async () => {
   const providerRegistryService = new ProviderRegistryService(store);
   const hostedPlannerProvider = new AgentBridgeHostedPlannerProvider(store, authService);
   const openAiPlannerProvider = new OpenAIPlannerProvider(store, { artifactBroker: artifactBrokerService });
+  const codexLocalPlannerProvider = new CodexLocalPlannerProvider(store, codexAppServerClient);
   const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient, undefined, {
     platform: platformCapabilities.platform,
     canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks
   }, artifactBrokerService);
   providerRegistryService.registerProvider(hostedPlannerProvider);
   providerRegistryService.registerProvider(openAiPlannerProvider);
+  providerRegistryService.registerProvider(codexLocalPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
   const workbenchService = new WorkbenchService(
     store,
@@ -149,7 +157,8 @@ app.whenReady().then(async () => {
     codexExecutorProvider,
     verificationService,
     undefined,
-    workspaceResolverService
+    workspaceResolverService,
+    completionContractService
   );
   const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService);
 

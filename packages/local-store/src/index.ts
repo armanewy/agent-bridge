@@ -16,18 +16,24 @@ import {
   AutopilotRunSchema,
   AutopilotStepSchema,
   CaptureSchema,
+  CompletionContractSchema,
+  CompletionEvidenceSchema,
   CodexThreadRefSchema,
+  FileOwnershipSchema,
   HandoffSchema,
   HandoffCardSchema,
   LinkSchema,
   LinkableComponentSchema,
   MissionSchema,
+  MissionQueueItemSchema,
+  MissionWorkspaceSchema,
   RunSchema,
   RunStepSchema,
   SourceEndpointSchema,
   TargetEndpointSchema,
   VerificationResultSchema,
   WorkflowLinkSchema,
+  WorkflowTemplateSchema,
   type Approval,
   type AgentEvent,
   type AgentProviderProfile,
@@ -43,7 +49,10 @@ import {
   type AutopilotStep,
   type AuditEvent,
   type Capture,
+  type CompletionContract,
+  type CompletionEvidence,
   type CodexThreadRef,
+  type FileOwnership,
   type Handoff,
   type HandoffCard,
   type Link,
@@ -56,16 +65,19 @@ import {
   type Run,
   type RunStep,
   type ExtensionHeartbeat,
+  type MissionQueueItem,
+  type MissionWorkspace,
   type Setting,
   type SourceEndpoint,
   type TargetEndpoint,
   type VerificationResult,
   type WorkflowLink,
+  type WorkflowTemplate,
   type UserDecision,
   UserDecisionSchema
 } from "@agentbridge/core";
 
-export const CURRENT_STORE_VERSION = 8;
+export const CURRENT_STORE_VERSION = 9;
 
 export interface LocalStore {
   saveLink(link: Link): Promise<void>;
@@ -79,6 +91,24 @@ export interface LocalStore {
   getWorkflowLink(id: string): Promise<WorkflowLink | undefined>;
   listWorkflowLinks(): Promise<WorkflowLink[]>;
   deleteWorkflowLink(id: string): Promise<boolean>;
+  saveWorkflowTemplate(template: WorkflowTemplate): Promise<void>;
+  getWorkflowTemplate(id: string): Promise<WorkflowTemplate | undefined>;
+  listWorkflowTemplates(): Promise<WorkflowTemplate[]>;
+  deleteWorkflowTemplate(id: string): Promise<boolean>;
+  saveCompletionContract(contract: CompletionContract): Promise<void>;
+  getCompletionContract(id: string): Promise<CompletionContract | undefined>;
+  listCompletionContractsForMission(missionId: string): Promise<CompletionContract[]>;
+  saveCompletionEvidence(evidence: CompletionEvidence): Promise<void>;
+  listCompletionEvidenceForContract(contractId: string): Promise<CompletionEvidence[]>;
+  saveMissionWorkspace(workspace: MissionWorkspace): Promise<void>;
+  getMissionWorkspace(id: string): Promise<MissionWorkspace | undefined>;
+  listMissionWorkspaces(missionId?: string): Promise<MissionWorkspace[]>;
+  saveFileOwnership(ownership: FileOwnership): Promise<void>;
+  listFileOwnershipForMission(missionId: string): Promise<FileOwnership[]>;
+  listFileOwnershipByPath(relativePath: string): Promise<FileOwnership[]>;
+  saveMissionQueueItem(item: MissionQueueItem): Promise<void>;
+  getMissionQueueItem(id: string): Promise<MissionQueueItem | undefined>;
+  listMissionQueueItems(): Promise<MissionQueueItem[]>;
   saveCodexThreadRef(ref: CodexThreadRef): Promise<void>;
   getCodexThreadRef(threadId: string): Promise<CodexThreadRef | undefined>;
   listCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]>;
@@ -172,6 +202,12 @@ interface StoreData {
   links: Record<string, Link>;
   linkableComponents: Record<string, LinkableComponent>;
   workflowLinks: Record<string, WorkflowLink>;
+  workflowTemplates: Record<string, WorkflowTemplate>;
+  completionContracts: Record<string, CompletionContract>;
+  completionEvidence: Record<string, CompletionEvidence>;
+  missionWorkspaces: Record<string, MissionWorkspace>;
+  fileOwnership: Record<string, FileOwnership>;
+  missionQueue: Record<string, MissionQueueItem>;
   codexThreadRefs: Record<string, CodexThreadRef>;
   providerProfiles: Record<string, AgentProviderProfile>;
   agentSessions: Record<string, AgentSessionRef>;
@@ -269,6 +305,115 @@ export class JsonFileStore implements LocalStore {
       delete data.workflowLinks[id];
     });
     return deleted;
+  }
+
+  async saveWorkflowTemplate(template: WorkflowTemplate): Promise<void> {
+    WorkflowTemplateSchema.parse(template);
+    await this.update((data) => {
+      data.workflowTemplates[template.id] = template;
+    });
+  }
+
+  async getWorkflowTemplate(id: string): Promise<WorkflowTemplate | undefined> {
+    return (await this.read()).workflowTemplates[id];
+  }
+
+  async listWorkflowTemplates(): Promise<WorkflowTemplate[]> {
+    return Object.values((await this.read()).workflowTemplates).sort((a, b) => a.name.localeCompare(b.name));
+  }
+
+  async deleteWorkflowTemplate(id: string): Promise<boolean> {
+    let deleted = false;
+    await this.update((data) => {
+      deleted = Object.hasOwn(data.workflowTemplates, id);
+      delete data.workflowTemplates[id];
+    });
+    return deleted;
+  }
+
+  async saveCompletionContract(contract: CompletionContract): Promise<void> {
+    CompletionContractSchema.parse(contract);
+    await this.update((data) => {
+      data.completionContracts[contract.id] = contract;
+    });
+  }
+
+  async getCompletionContract(id: string): Promise<CompletionContract | undefined> {
+    return (await this.read()).completionContracts[id];
+  }
+
+  async listCompletionContractsForMission(missionId: string): Promise<CompletionContract[]> {
+    return Object.values((await this.read()).completionContracts)
+      .filter((contract) => contract.missionId === missionId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async saveCompletionEvidence(evidence: CompletionEvidence): Promise<void> {
+    CompletionEvidenceSchema.parse(evidence);
+    await this.update((data) => {
+      data.completionEvidence[evidence.id] = evidence;
+    });
+  }
+
+  async listCompletionEvidenceForContract(contractId: string): Promise<CompletionEvidence[]> {
+    return Object.values((await this.read()).completionEvidence)
+      .filter((evidence) => evidence.contractId === contractId)
+      .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
+  }
+
+  async saveMissionWorkspace(workspace: MissionWorkspace): Promise<void> {
+    MissionWorkspaceSchema.parse(workspace);
+    await this.update((data) => {
+      data.missionWorkspaces[workspace.id] = workspace;
+    });
+  }
+
+  async getMissionWorkspace(id: string): Promise<MissionWorkspace | undefined> {
+    return (await this.read()).missionWorkspaces[id];
+  }
+
+  async listMissionWorkspaces(missionId?: string): Promise<MissionWorkspace[]> {
+    return Object.values((await this.read()).missionWorkspaces)
+      .filter((workspace) => !missionId || workspace.missionId === missionId)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async saveFileOwnership(ownership: FileOwnership): Promise<void> {
+    FileOwnershipSchema.parse(ownership);
+    await this.update((data) => {
+      data.fileOwnership[ownership.id] = ownership;
+    });
+  }
+
+  async listFileOwnershipForMission(missionId: string): Promise<FileOwnership[]> {
+    return Object.values((await this.read()).fileOwnership)
+      .filter((ownership) => ownership.missionId === missionId)
+      .sort((a, b) => a.relativePath.localeCompare(b.relativePath));
+  }
+
+  async listFileOwnershipByPath(relativePath: string): Promise<FileOwnership[]> {
+    const normalized = normalizePath(relativePath);
+    return Object.values((await this.read()).fileOwnership)
+      .filter((ownership) => normalizePath(ownership.relativePath) === normalized)
+      .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async saveMissionQueueItem(item: MissionQueueItem): Promise<void> {
+    MissionQueueItemSchema.parse(item);
+    await this.update((data) => {
+      data.missionQueue[item.id] = item;
+    });
+  }
+
+  async getMissionQueueItem(id: string): Promise<MissionQueueItem | undefined> {
+    return (await this.read()).missionQueue[id];
+  }
+
+  async listMissionQueueItems(): Promise<MissionQueueItem[]> {
+    return Object.values((await this.read()).missionQueue).sort((a, b) => {
+      const priority = b.priority - a.priority;
+      return priority === 0 ? a.createdAt.localeCompare(b.createdAt) : priority;
+    });
   }
 
   async saveCodexThreadRef(ref: CodexThreadRef): Promise<void> {
@@ -800,6 +945,12 @@ export function createEmptyStore(): StoreData {
     links: {},
     linkableComponents: {},
     workflowLinks: {},
+    workflowTemplates: {},
+    completionContracts: {},
+    completionEvidence: {},
+    missionWorkspaces: {},
+    fileOwnership: {},
+    missionQueue: {},
     codexThreadRefs: {},
     providerProfiles: {},
     agentSessions: {},

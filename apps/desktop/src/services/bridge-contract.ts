@@ -1,6 +1,8 @@
 import type {
   BrowserTabSource,
   Capture,
+  CompletionContract,
+  CompletionEvidence,
   CodexDeepLinkTarget,
   CodexIntegrationMode,
   CodexOpenMode,
@@ -148,6 +150,8 @@ export interface MissionDetail {
   artifacts: Artifact[];
   artifactFiles?: ArtifactFile[];
   artifactBundles?: ArtifactBundle[];
+  completionContracts?: CompletionContract[];
+  completionEvidence?: CompletionEvidence[];
   deliveryAttempts: DeliveryAttempt[];
   runs: Run[];
   verificationResults: VerificationResult[];

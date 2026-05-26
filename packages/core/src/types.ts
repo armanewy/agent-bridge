@@ -364,6 +364,8 @@ export const MissionSchema = z.object({
   artifactIds: z.array(z.string()),
   runIds: z.array(z.string()),
   repoContext: RepoContextPackSchema.optional(),
+  workflowTemplateId: z.string().optional(),
+  roleSessionRefs: z.record(z.string()).optional(),
   verificationPlan: VerificationPlanSchema.optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
@@ -849,6 +851,8 @@ export const AutopilotPolicySchema = z.object({
   blockedFilePatterns: z.array(z.string()).optional(),
   redactBeforeUpload: z.boolean().optional(),
   requireApprovalForBinaryFiles: z.boolean().optional(),
+  workspaceStrategy: z.enum(["none", "branch", "gitWorktree"]).optional(),
+  requireIsolationForParallelRuns: z.boolean().optional(),
   stopOnVerificationFailure: z.boolean(),
   stopOnRedactionFinding: z.boolean(),
   stopOnProviderWarning: z.boolean(),

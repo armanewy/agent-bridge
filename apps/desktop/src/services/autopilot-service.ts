@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { decideAutopilot, evaluateCompletionContract } from "@agentbridge/core";
 import type {
   Artifact,
   AutopilotPolicy,
@@ -239,6 +240,30 @@ export class AutopilotService {
       };
     }
     if (latestVerification.status === "passed") {
+      const contract = (await this.store.listCompletionContractsForMission(run.missionId))[0];
+      if (contract) {
+        const evidence = await this.store.listCompletionEvidenceForContract(contract.id);
+        const completionEvaluation = evaluateCompletionContract(contract, evidence, this.now());
+        const decision = decideAutopilot({
+          completionEvaluation,
+          iteration: run.iteration,
+          maxIterations: run.maxIterations
+        });
+        if (decision.kind === "stopPassed") {
+          return { kind: "stop", status: "passed", reason: decision.reason };
+        }
+        if (decision.kind === "retryWithFollowUp") {
+          return {
+            kind: "review",
+            title: "Ask Planner to review failed completion evidence",
+            execute: async () => {
+              const review = await this.workbenchService.sendVerificationToPlannerForReview(run.missionId);
+              return review.artifactIds;
+            }
+          };
+        }
+        return { kind: "stop", status: "blocked", reason: decision.reason };
+      }
       return { kind: "stop", status: "passed", reason: "Verification passed." };
     }
     if (!artifacts.some((artifact) => artifact.kind === "modelResponse" && artifact.metadata.source === "verificationReview")) {

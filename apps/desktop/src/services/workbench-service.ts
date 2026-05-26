@@ -22,6 +22,7 @@ import {
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { VerificationRunRequest, VerificationRunResponse } from "./bridge-contract.js";
+import type { CompletionContractService } from "./completion-contract-service.js";
 import type { VerificationService } from "./verification-service.js";
 import type { WorkspaceResolverService } from "./workspace-resolver-service.js";
 
@@ -46,7 +47,8 @@ export class WorkbenchService {
     private readonly executor: ExecutorProvider,
     private readonly verificationService: VerificationService,
     private readonly now: () => string = () => new Date().toISOString(),
-    private readonly workspaceResolver?: WorkspaceResolverService
+    private readonly workspaceResolver?: WorkspaceResolverService,
+    private readonly completionContractService?: CompletionContractService
   ) {}
 
   async createWorkbenchMission(input: CreateWorkbenchMissionInput = {}): Promise<Mission> {
@@ -61,6 +63,7 @@ export class WorkbenchService {
       handoffCardIds: [],
       artifactIds: [],
       runIds: [],
+      workflowTemplateId: "workflow_default_chatgpt_codex",
       ...(input.repoContext ? { repoContext: input.repoContext } : {}),
       verificationPlan: {
         commands: input.verificationCommands ?? [],
@@ -151,11 +154,12 @@ export class WorkbenchService {
     await this.store.saveArtifact(taskArtifact);
     await this.store.saveArtifact(promptArtifact);
     await this.store.saveHandoffCard(card);
+    const completionContract = await this.completionContractService?.createFromTaskSpec(missionId, taskSpec);
     await this.store.saveMission({
       ...mission,
       title: mission.title === "Workbench task" ? taskSpec.title : mission.title,
       goal: taskSpec.goal,
-      status: "ready",
+      status: completionContract?.status === "invalid" || completionContract?.status === "needs_user_input" ? "needs_review" : "ready",
       handoffCardIds: unique([...mission.handoffCardIds, card.id]),
       artifactIds: unique([...mission.artifactIds, ...(taskSpecResponse?.artifactIds ?? []), taskArtifact.id, promptArtifact.id]),
       updatedAt: createdAt

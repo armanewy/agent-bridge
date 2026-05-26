@@ -15,18 +15,24 @@ import type {
   AutopilotRun,
   AutopilotStep,
   AuditEvent,
+  CompletionContract,
+  CompletionEvidence,
   CodexThreadRef,
   DeliveryAttempt,
+  FileOwnership,
   Handoff,
   HandoffCard,
   Link,
   LinkableComponent,
   Mission,
+  MissionQueueItem,
+  MissionWorkspace,
   OpenAIUploadedFileRef,
   TaskSpec,
   UserDecision,
   VerificationResult,
-  WorkflowLink
+  WorkflowLink,
+  WorkflowTemplate
 } from "@agentbridge/core";
 
 let tempDir: string;
@@ -121,6 +127,133 @@ describe("JsonFileStore", () => {
     expect(await store.listLinkableComponents()).toEqual([component]);
     expect(await store.getWorkflowLink(workflowLink.id)).toEqual(workflowLink);
     expect(await store.listWorkflowLinks()).toEqual([workflowLink]);
+  });
+
+  it("roundtrips workflow templates, completion contracts, workspaces, ownership, and queue items", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    const template: WorkflowTemplate = {
+      id: "workflow_default",
+      name: "ChatGPT-style reasoning ↔ Codex coding",
+      description: "Default provider workflow",
+      roles: [
+        {
+          role: "planner",
+          providerId: "agentbridge-hosted-planner",
+          requiredCapabilities: ["canPlan"],
+          optional: false,
+          defaultSessionPolicy: "reuseOrCreate"
+        },
+        {
+          role: "executor",
+          providerId: "codex",
+          requiredCapabilities: ["canExecuteCode"],
+          optional: false,
+          defaultSessionPolicy: "reuseOrCreate"
+        }
+      ],
+      allowedTransitions: [
+        {
+          id: "transition_1",
+          fromRole: "planner",
+          toRole: "executor",
+          transform: "taskSpecToExecutor",
+          requiresApproval: false,
+          producesArtifactKinds: ["generatedPrompt"]
+        }
+      ],
+      defaultPolicy: {},
+      createdAt: now,
+      updatedAt: now
+    };
+    const contract: CompletionContract = {
+      id: "contract_1",
+      missionId: "mission_1",
+      goal: "Make Workbench compact.",
+      scope: ["Workbench UI"],
+      nonGoals: [],
+      acceptanceCriteria: [
+        {
+          id: "criterion_1",
+          statement: "The app fits at 760x940.",
+          evidenceRequired: "Screenshot or textual layout evidence.",
+          verifierKind: "visual",
+          required: true
+        }
+      ],
+      verificationMethods: [
+        {
+          id: "method_1",
+          kind: "visual",
+          description: "Inspect screenshot at 760x940."
+        }
+      ],
+      stopConditions: [],
+      humanReviewTriggers: [],
+      status: "valid",
+      createdAt: now,
+      updatedAt: now
+    };
+    const evidence: CompletionEvidence = {
+      id: "evidence_1",
+      contractId: contract.id,
+      criterionId: "criterion_1",
+      kind: "visual",
+      status: "missing",
+      summary: "No screenshot yet.",
+      createdAt: now
+    };
+    const workspace: MissionWorkspace = {
+      id: "workspace_1",
+      missionId: contract.missionId,
+      baseRepoPath: tempDir,
+      workingPath: join(tempDir, ".agentbridge-worktree"),
+      strategy: "gitWorktree",
+      branchName: "agentbridge/mission-1",
+      worktreeName: ".agentbridge-mission-1",
+      status: "active",
+      createdAt: now,
+      updatedAt: now
+    };
+    const ownership: FileOwnership = {
+      id: "ownership_1",
+      missionId: contract.missionId,
+      workspaceId: workspace.id,
+      relativePath: "apps/desktop/src/App.tsx",
+      status: "changed",
+      firstSeenAt: now,
+      updatedAt: now
+    };
+    const queueItem: MissionQueueItem = {
+      id: "queue_1",
+      missionId: contract.missionId,
+      priority: 10,
+      status: "queued",
+      assignedWorkspaceId: workspace.id,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await store.saveWorkflowTemplate(template);
+    await store.saveCompletionContract(contract);
+    await store.saveCompletionEvidence(evidence);
+    await store.saveMissionWorkspace(workspace);
+    await store.saveFileOwnership(ownership);
+    await store.saveMissionQueueItem(queueItem);
+
+    expect(await store.getWorkflowTemplate(template.id)).toEqual(template);
+    expect(await store.listWorkflowTemplates()).toEqual([template]);
+    expect(await store.getCompletionContract(contract.id)).toEqual(contract);
+    expect(await store.listCompletionContractsForMission(contract.missionId)).toEqual([contract]);
+    expect(await store.listCompletionEvidenceForContract(contract.id)).toEqual([evidence]);
+    expect(await store.getMissionWorkspace(workspace.id)).toEqual(workspace);
+    expect(await store.listMissionWorkspaces(contract.missionId)).toEqual([workspace]);
+    expect(await store.listFileOwnershipForMission(contract.missionId)).toEqual([ownership]);
+    expect(await store.listFileOwnershipByPath("apps\\desktop\\src\\App.tsx")).toEqual([ownership]);
+    expect(await store.getMissionQueueItem(queueItem.id)).toEqual(queueItem);
+    expect(await store.listMissionQueueItems()).toEqual([queueItem]);
+    expect(await store.deleteWorkflowTemplate(template.id)).toBe(true);
+    expect(await store.listWorkflowTemplates()).toEqual([]);
   });
 
   it("roundtrips Codex thread refs", async () => {
@@ -481,6 +614,10 @@ describe("JsonFileStore", () => {
     expect(await store.listArtifactFilesForMission(mission.id)).toEqual([]);
     expect(await store.listArtifactBundlesForMission(mission.id)).toEqual([]);
     expect(await store.listOpenAIUploadedFileRefs()).toEqual([]);
+    expect(await store.listWorkflowTemplates()).toEqual([]);
+    expect(await store.listCompletionContractsForMission(mission.id)).toEqual([]);
+    expect(await store.listMissionWorkspaces(mission.id)).toEqual([]);
+    expect(await store.listMissionQueueItems()).toEqual([]);
   });
 
   it("roundtrips mission, handoff card, and artifact", async () => {

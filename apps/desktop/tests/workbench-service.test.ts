@@ -16,6 +16,7 @@ import type { OpenAIPlannerResponseRequest } from "../src/services/providers/ope
 import { WorkbenchService } from "../src/services/workbench-service.js";
 import { VerificationService } from "../src/services/verification-service.js";
 import { WorkspaceResolverService } from "../src/services/workspace-resolver-service.js";
+import { CompletionContractService } from "../src/services/completion-contract-service.js";
 
 let tempDir: string;
 
@@ -124,7 +125,15 @@ describe("WorkbenchService", () => {
       stderr: "",
       durationMs: 12
     }));
-    const workbench = new WorkbenchService(store, planner, executor, verification, fixedNow);
+    const workbench = new WorkbenchService(
+      store,
+      planner,
+      executor,
+      verification,
+      fixedNow,
+      undefined,
+      new CompletionContractService(store)
+    );
 
     const mission = await workbench.createWorkbenchMission({
       repoContext: { repoPath: tempDir, testCommand: "pnpm test" },
@@ -137,6 +146,12 @@ describe("WorkbenchService", () => {
     const review = await workbench.sendVerificationToPlannerForReview(mission.id);
 
     expect(card.taskSpec.title).toBe("Provider workbench");
+    await expect(store.listCompletionContractsForMission(mission.id)).resolves.toEqual([
+      expect.objectContaining({
+        goal: "Create one simple provider workbench flow.",
+        status: "valid"
+      })
+    ]);
     expect(delivery.deliveryMode).toBe("newSession");
     expect(verificationRun.result.status).toBe("passed");
     expect(review.statusSuggestion).toBe("follow_up_needed");
@@ -231,7 +246,7 @@ function sampleTaskSpec() {
     requirements: ["Store artifacts"],
     constraints: ["Do not add providers"],
     nonGoals: ["No browser extension dependency"],
-    acceptanceCriteria: ["Workbench flow can complete"],
+    acceptanceCriteria: ["pnpm test passes for the Workbench flow"],
     suggestedFiles: ["apps/desktop/src/services/workbench-service.ts"],
     verificationSteps: ["pnpm test"],
     expectedSummaryFormat: "Summary and verification"
