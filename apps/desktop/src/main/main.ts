@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, Menu, Tray, globalShortcut, nativeImage, ipcMain, shell } from "electron";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDesktopStore } from "../services/store.js";
@@ -22,9 +22,14 @@ import type { RepoCommandConfig } from "../services/repo-context-service.js";
 import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
+const TRAY_ICON =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/p9sAAAAASUVORK5CYII=";
+
+let mainWindow: BrowserWindow | undefined;
+let tray: Tray | undefined;
 
 async function createWindow(): Promise<void> {
-  const mainWindow = new BrowserWindow({
+  mainWindow = new BrowserWindow({
     width: 1280,
     height: 860,
     minWidth: 980,
@@ -91,6 +96,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());
 
   await createWindow();
+  registerQuickActions();
 });
 
 app.on("window-all-closed", () => {
@@ -102,5 +108,47 @@ app.on("window-all-closed", () => {
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
     void createWindow();
+  } else {
+    showMainWindow();
   }
 });
+
+app.on("will-quit", () => {
+  globalShortcut.unregisterAll();
+});
+
+function registerQuickActions(): void {
+  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openInbox"));
+  const icon = nativeImage.createFromDataURL(TRAY_ICON);
+  tray = new Tray(icon);
+  tray.setToolTip("AgentBridge");
+  tray.setContextMenu(
+    Menu.buildFromTemplate([
+      { label: "Open AgentBridge", click: () => showMainWindow("openInbox") },
+      { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
+      { label: "Open latest task", click: () => showMainWindow("openTasks") },
+      { type: "separator" },
+      { label: "Quit", click: () => app.quit() }
+    ])
+  );
+}
+
+function showMainWindow(action?: "openInbox" | "openTasks" | "createTaskFromLatestCapture"): void {
+  const window = mainWindow ?? BrowserWindow.getAllWindows()[0];
+  if (!window) {
+    void createWindow().then(() => {
+      if (action) {
+        mainWindow?.webContents.send("agentbridge:quickAction", { type: action });
+      }
+    });
+    return;
+  }
+  if (window.isMinimized()) {
+    window.restore();
+  }
+  window.show();
+  window.focus();
+  if (action) {
+    window.webContents.send("agentbridge:quickAction", { type: action });
+  }
+}

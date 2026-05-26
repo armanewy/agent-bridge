@@ -1,6 +1,6 @@
 # AgentBridge Chrome Extension
 
-This is the Wave 2 Manifest V3 skeleton for explicit browser source binding and selected-text capture.
+This Manifest V3 extension captures selected browser text only after an explicit popup action or keyboard command.
 
 ## Development
 
@@ -18,6 +18,16 @@ Then load `apps/extension` as an unpacked extension in Chrome.
 
 No broad host permissions are requested. The extension does not register all-page content scripts; selected text and ChatGPT latest-message capture run through explicit `chrome.scripting.executeScript` calls after user action.
 
+## Quick Capture
+
+The extension registers a keyboard command:
+
+```text
+Ctrl+Shift+Y
+```
+
+Chrome may require the user to confirm or change this shortcut at `chrome://extensions/shortcuts`. The shortcut captures selected text from the active tab and sends it to the local native host. The popup remains the visible error surface for native-host setup issues.
+
 ## Manual Test Checklist
 
 1. Build the extension.
@@ -25,6 +35,7 @@ No broad host permissions are requested. The extension does not register all-pag
 3. Register the native host using the development manifest.
 4. Open a page and click "Bind current tab as source".
 5. Select text on the page and click "Capture selected text".
-6. Verify the popup shows a clear error when the native host is not registered.
+6. Select text and press the keyboard shortcut.
+7. Verify the popup shows a clear error when the native host is not registered.
 
 The extension includes a cautious ChatGPT latest assistant message adapter. It runs only when the user clicks the popup action. If selectors fail, use selected-text capture instead.

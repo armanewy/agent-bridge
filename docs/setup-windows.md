@@ -35,9 +35,21 @@ Open `http://127.0.0.1:5173`.
 3. Enable developer mode.
 4. Load unpacked extension from `apps/extension`.
 
+## First-Run Setup
+
+Open Settings in the desktop app. The guided setup walks through:
+
+1. Local storage ready.
+2. Connect Chrome extension.
+3. Choose repo.
+4. Configure Codex target.
+5. Optional verification commands.
+
+The setup screen hides registry and native-host details behind diagnostics. After setup is ready, go back to Inbox and create Task Cards from captured browser text.
+
 ## Register Native Host
 
-The desktop Setup view can generate and register the development native-host manifest after you paste the unpacked Chrome extension ID.
+The desktop Settings view can generate and register the development native-host manifest after you paste the unpacked Chrome extension ID.
 
 Manual setup is also available:
 

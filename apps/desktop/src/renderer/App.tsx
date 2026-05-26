@@ -1,15 +1,13 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  CheckCircle,
   Chrome,
   ClipboardCheck,
   ClipboardList,
-  History,
-  Link2,
-  Monitor,
+  Gauge,
+  Inbox,
   RefreshCw,
   Settings,
-  ShieldAlert
+  SlidersHorizontal
 } from "lucide-react";
 import type {
   Capture,
@@ -32,12 +30,14 @@ import { MissionPanel } from "../components/mission/MissionPanel.js";
 import { SetupPanel } from "../components/setup/SetupPanel.js";
 import { TargetSelector } from "../components/target-selector/TargetSelector.js";
 
-type View = "home" | "setup" | "missions" | "sources" | "targets" | "links" | "audit";
+type View = "inbox" | "tasks" | "settings" | "advanced";
+type AdvancedView = "sources" | "targets" | "links" | "audit";
 
 const api = getAgentBridgeApi();
 
 export function App(): JSX.Element {
-  const [view, setView] = useState<View>("home");
+  const [view, setView] = useState<View>("inbox");
+  const [advancedView, setAdvancedView] = useState<AdvancedView>("sources");
   const [sources, setSources] = useState<SourceEndpoint[]>([]);
   const [targets, setTargets] = useState<TargetEndpoint[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -65,6 +65,8 @@ export function App(): JSX.Element {
     () => targets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink"),
     [targets]
   );
+  const selectedCapture = captures.find((item) => item.id === selectedCaptureId);
+  const selectedTarget = targets.find((item) => item.id === selectedTargetId);
 
   useEffect(() => {
     void refresh();
@@ -76,6 +78,34 @@ export function App(): JSX.Element {
     }, 5000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    const handleQuickAction = (event: Event): void => {
+      const action = (event as CustomEvent<{ type?: string }>).detail;
+      if (action?.type === "openTasks") {
+        setView("tasks");
+        return;
+      }
+      if (action?.type === "createTaskFromLatestCapture") {
+        const capture = captures[0];
+        const target = targets.find((item) => item.kind === "codexDeepLink") ?? targets[0];
+        setView("inbox");
+        if (capture?.id) {
+          setSelectedCaptureId(capture.id);
+        }
+        if (target?.id) {
+          setSelectedTargetId(target.id);
+        }
+        if (capture?.id && target?.id) {
+          void createPreview(capture.id, target.id);
+        }
+        return;
+      }
+      setView("inbox");
+    };
+    window.addEventListener("agentbridge:quickAction", handleQuickAction);
+    return () => window.removeEventListener("agentbridge:quickAction", handleQuickAction);
+  }, [captures, targets, recipe]);
 
   async function refresh(): Promise<void> {
     const [nextSources, nextTargets, nextLinks, nextCaptures, nextAuditEvents, nextMissions, nextSetupStatus] = await Promise.all([
@@ -145,9 +175,9 @@ export function App(): JSX.Element {
     await refresh();
   }
 
-  async function createPreview(): Promise<void> {
-    const capture = captures.find((item) => item.id === selectedCaptureId);
-    const target = targets.find((item) => item.id === selectedTargetId);
+  async function createPreview(captureId = selectedCaptureId, targetId = selectedTargetId): Promise<void> {
+    const capture = captures.find((item) => item.id === captureId);
+    const target = targets.find((item) => item.id === targetId);
     if (!capture || !target) {
       return;
     }
@@ -247,22 +277,19 @@ export function App(): JSX.Element {
           <span className="brand-mark">AB</span>
           <div>
             <strong>AgentBridge</strong>
-            <small>Local handoff router</small>
+            <small>Capture tasks. Send to agents. Verify results.</small>
           </div>
         </div>
         <nav aria-label="Main navigation">
-          <NavButton icon={<ClipboardCheck size={18} />} label="Home" active={view === "home"} onClick={() => setView("home")} />
-          <NavButton icon={<Settings size={18} />} label="Setup" active={view === "setup"} onClick={() => setView("setup")} />
+          <NavButton icon={<Inbox size={18} />} label="Inbox" active={view === "inbox"} onClick={() => setView("inbox")} />
+          <NavButton icon={<ClipboardList size={18} />} label="Tasks" active={view === "tasks"} onClick={() => setView("tasks")} />
+          <NavButton icon={<Settings size={18} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} />
           <NavButton
-            icon={<ClipboardList size={18} />}
-            label="Missions"
-            active={view === "missions"}
-            onClick={() => setView("missions")}
+            icon={<SlidersHorizontal size={18} />}
+            label="Advanced"
+            active={view === "advanced"}
+            onClick={() => setView("advanced")}
           />
-          <NavButton icon={<Chrome size={18} />} label="Sources" active={view === "sources"} onClick={() => setView("sources")} />
-          <NavButton icon={<Monitor size={18} />} label="Targets" active={view === "targets"} onClick={() => setView("targets")} />
-          <NavButton icon={<Link2 size={18} />} label="Links" active={view === "links"} onClick={() => setView("links")} />
-          <NavButton icon={<History size={18} />} label="Audit" active={view === "audit"} onClick={() => setView("audit")} />
         </nav>
       </aside>
 
@@ -278,30 +305,83 @@ export function App(): JSX.Element {
           </button>
         </header>
 
-        {view === "home" ? (
+        {view === "inbox" ? (
           <div className="home-grid">
-            <section className="panel metrics-panel">
-              <Metric icon={<Chrome size={20} />} label="Sources" value={sources.length} />
-              <Metric icon={<Monitor size={20} />} label="Targets" value={targets.length} />
-              <Metric icon={<Link2 size={20} />} label="Links" value={links.length} />
-              <Metric icon={<ShieldAlert size={20} />} label="Warnings" value={preview?.handoff.redactionFindings.length ?? 0} />
-            </section>
-            <section className="panel workflow-panel">
+            <section className="panel start-panel">
               <div className="panel-heading">
                 <div>
-                  <h2>Handoff Workflow</h2>
-                  <p>Select a capture and target, then turn that pair into a Mission.</p>
+                  <span className="eyebrow">Simple Mode</span>
+                  <h2>Ready to create a task.</h2>
+                  <p>Select browser text, choose the repo agent should work in, then create a Task Card.</p>
                 </div>
+                <Gauge size={22} />
+              </div>
+              <div className="ready-grid">
+                <ReadyBlock
+                  label="Latest capture"
+                  value={selectedCapture ? `${selectedCapture.text.length} characters` : "No capture selected"}
+                  detail={selectedCapture ? selectedCapture.text.slice(0, 120) : "Select text in Chrome and click AgentBridge capture."}
+                />
+                <ReadyBlock
+                  label="Repo and agent"
+                  value={selectedTarget?.kind === "codexDeepLink" ? "Codex" : selectedTarget?.kind ?? "No target selected"}
+                  detail={selectedTarget?.kind === "codexDeepLink" ? selectedTarget.repoPath : "Configure a Codex repo target in Settings."}
+                />
+                <ReadyBlock
+                  label="Recent tasks"
+                  value={String(missions.length)}
+                  detail={missions[0] ? `${missions[0].title} - ${missions[0].status}` : "No task cards yet."}
+                />
               </div>
               <div className="button-row">
                 <button type="button" className="secondary-button" onClick={() => void bindMockSource()}>
                   <Chrome size={16} />
-                  Bind Mock Source
+                  Use demo capture
                 </button>
-                <button type="button" className="secondary-button" onClick={() => void createPreview()} disabled={!selectedCaptureId || !selectedTargetId}>
+                <button
+                  type="button"
+                  className="primary-button"
+                  onClick={() => void createPreview()}
+                  disabled={!selectedCaptureId || !selectedTargetId}
+                >
                   <ClipboardCheck size={16} />
-                  Create Mission from selected capture
+                  Create Task Card
                 </button>
+                {!selectedTargetId ? (
+                  <button type="button" className="secondary-button" onClick={() => setView("settings")}>
+                    <Settings size={16} />
+                    Choose repo
+                  </button>
+                ) : null}
+              </div>
+            </section>
+            <section className="panel recent-panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Recent tasks</h2>
+                  <p>Open a task to see what was asked, sent, verified, and what is next.</p>
+                </div>
+              </div>
+              <div className="item-list">
+                {missions.length === 0 ? (
+                  <p className="empty-copy">Task Cards will appear here after you create one from a capture.</p>
+                ) : (
+                  missions.slice(0, 4).map((mission) => (
+                    <button
+                      type="button"
+                      className="list-card selectable"
+                      key={mission.id}
+                      onClick={() => {
+                        void selectMission(mission.id);
+                        setView("tasks");
+                      }}
+                    >
+                      <strong>{mission.title}</strong>
+                      <span>{mission.status}</span>
+                      <small>{mission.updatedAt}</small>
+                    </button>
+                  ))
+                )}
               </div>
             </section>
             <CaptureInbox
@@ -309,8 +389,38 @@ export function App(): JSX.Element {
               sources={sources}
               selectedCaptureId={selectedCaptureId}
               onSelectCapture={setSelectedCaptureId}
+              onCreateDemoCapture={() => void bindMockSource()}
             />
             <TargetSelector targets={targets} selectedTargetId={selectedTargetId} onSelectTarget={setSelectedTargetId} />
+            <HandoffPreview
+              preview={preview}
+              deliveryResult={deliveryResult}
+              onApproveDryRun={() => void dryRunCodex()}
+              onApproveSend={() => void sendCodex()}
+              onSaveDraft={() => {
+                setPreview(undefined);
+                setDeliveryResult(undefined);
+                setView("tasks");
+              }}
+              onCancel={() => {
+                setPreview(undefined);
+                setDeliveryResult(undefined);
+              }}
+            />
+          </div>
+        ) : null}
+
+        {view === "settings" ? (
+          <div className="settings-layout">
+            <SetupPanel
+              status={setupStatus}
+              extensionId={extensionId}
+              setupError={setupError}
+              onExtensionIdChange={setExtensionId}
+              onConfigureNativeHost={() => void configureNativeHost()}
+              onRefresh={() => void refresh()}
+              onGoToInbox={() => setView("inbox")}
+            />
             <CodexTargetPanel
               repoPath={repoPath}
               onRepoPathChange={setRepoPath}
@@ -324,35 +434,10 @@ export function App(): JSX.Element {
               latestTarget={codexTarget}
               error={targetError}
             />
-            <HandoffPreview
-              preview={preview}
-              deliveryResult={deliveryResult}
-              onApproveDryRun={() => void dryRunCodex()}
-              onApproveSend={() => void sendCodex()}
-              onCancel={() => {
-                setPreview(undefined);
-                setDeliveryResult(undefined);
-              }}
-            />
           </div>
         ) : null}
 
-        {view === "sources" ? (
-          <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
-        ) : null}
-
-        {view === "setup" ? (
-          <SetupPanel
-            status={setupStatus}
-            extensionId={extensionId}
-            setupError={setupError}
-            onExtensionIdChange={setExtensionId}
-            onConfigureNativeHost={() => void configureNativeHost()}
-            onRefresh={() => void refresh()}
-          />
-        ) : null}
-
-        {view === "missions" ? (
+        {view === "tasks" ? (
           <MissionPanel
             missions={missions}
             selectedMissionId={selectedMissionId}
@@ -363,61 +448,73 @@ export function App(): JSX.Element {
           />
         ) : null}
 
-        {view === "targets" ? (
-          <div className="two-column">
-            <CodexTargetPanel
-              repoPath={repoPath}
-              onRepoPathChange={setRepoPath}
-              testCommand={testCommand}
-              lintCommand={lintCommand}
-              typecheckCommand={typecheckCommand}
-              onTestCommandChange={setTestCommand}
-              onLintCommandChange={setLintCommand}
-              onTypecheckCommandChange={setTypecheckCommand}
-              onCreate={() => void createCodexTarget()}
-              latestTarget={codexTarget}
-              error={targetError}
-            />
-            <EntityPanel title="Saved Targets" items={targets.map((target) => describeTarget(target))} empty="No targets saved yet." />
-          </div>
-        ) : null}
-
-        {view === "links" ? (
-          <LinkManager
-            sources={sources}
-            targets={targets}
-            links={links}
-            recipe={recipe}
-            onRecipeChange={setRecipe}
-            onCreateLink={() => void createLink()}
-          />
-        ) : null}
-
-        {view === "audit" ? (
-          <section className="panel">
-            <div className="panel-heading">
-              <div>
-                <h2>Audit Events</h2>
-                <p>{auditEvents.length} local event(s)</p>
+        {view === "advanced" ? (
+          <div className="advanced-layout">
+            <section className="panel">
+              <div className="panel-heading">
+                <div>
+                  <h2>Advanced</h2>
+                  <p>Raw sources, targets, links, and provenance for debugging the local pipeline.</p>
+                </div>
               </div>
-              <button type="button" className="secondary-button" onClick={() => void clearAudit()}>
-                Clear Audit
-              </button>
-            </div>
-            <div className="item-list">
-              {auditEvents.length === 0 ? (
-                <p className="empty-copy">No local audit events yet.</p>
-              ) : (
-                auditEvents.map((event) => (
-                  <article className="list-card" key={event.id}>
-                    <strong>{event.type}</strong>
-                    <span>{event.entityId ?? "No entity"}</span>
-                    <small>{event.createdAt}</small>
-                  </article>
-                ))
-              )}
-            </div>
-          </section>
+              <div className="segmented-control advanced-tabs">
+                <button type="button" className={advancedView === "sources" ? "selected" : ""} onClick={() => setAdvancedView("sources")}>
+                  Sources
+                </button>
+                <button type="button" className={advancedView === "targets" ? "selected" : ""} onClick={() => setAdvancedView("targets")}>
+                  Targets
+                </button>
+                <button type="button" className={advancedView === "links" ? "selected" : ""} onClick={() => setAdvancedView("links")}>
+                  Links
+                </button>
+                <button type="button" className={advancedView === "audit" ? "selected" : ""} onClick={() => setAdvancedView("audit")}>
+                  Audit
+                </button>
+              </div>
+            </section>
+            {advancedView === "sources" ? (
+              <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
+            ) : null}
+            {advancedView === "targets" ? (
+              <EntityPanel title="Saved Targets" items={targets.map((target) => describeTarget(target))} empty="No targets saved yet." />
+            ) : null}
+            {advancedView === "links" ? (
+              <LinkManager
+                sources={sources}
+                targets={targets}
+                links={links}
+                recipe={recipe}
+                onRecipeChange={setRecipe}
+                onCreateLink={() => void createLink()}
+              />
+            ) : null}
+            {advancedView === "audit" ? (
+              <div className="advanced-panel">
+                <div className="panel-heading compact">
+                  <div>
+                    <h2>Audit Events</h2>
+                    <p>{auditEvents.length} local event(s)</p>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => void clearAudit()}>
+                    Clear Audit
+                  </button>
+                </div>
+                <div className="item-list">
+                  {auditEvents.length === 0 ? (
+                    <p className="empty-copy">No local audit events yet.</p>
+                  ) : (
+                    auditEvents.map((event) => (
+                      <article className="list-card" key={event.id}>
+                        <strong>{event.type}</strong>
+                        <span>{event.entityId ?? "No entity"}</span>
+                        <small>{event.createdAt}</small>
+                      </article>
+                    ))
+                  )}
+                </div>
+              </div>
+            ) : null}
+          </div>
         ) : null}
       </main>
     </div>
@@ -443,12 +540,12 @@ function NavButton({
   );
 }
 
-function Metric({ icon, label, value }: { icon: JSX.Element; label: string; value: number }): JSX.Element {
+function ReadyBlock({ label, value, detail }: { label: string; value: string; detail: string }): JSX.Element {
   return (
-    <div className="metric">
-      {icon}
-      <span>{label}</span>
+    <div className="ready-block">
+      <span className="eyebrow">{label}</span>
       <strong>{value}</strong>
+      <p>{detail}</p>
     </div>
   );
 }
@@ -506,24 +603,18 @@ function describeTarget(target: TargetEndpoint): { title: string; subtitle: stri
 
 function titleForView(view: View): string {
   return {
-    home: "Dashboard",
-    setup: "Setup",
-    missions: "Missions",
-    sources: "Sources",
-    targets: "Targets",
-    links: "Links",
-    audit: "Audit"
+    inbox: "Inbox",
+    tasks: "Tasks",
+    settings: "Settings",
+    advanced: "Advanced"
   }[view];
 }
 
 function subtitleForView(view: View): string {
   return {
-    home: "Bind, transform, preview, and deliver local handoffs.",
-    setup: "Native host registration, extension health, and local readiness.",
-    missions: "Durable task cards, artifacts, repo context, and verification state.",
-    sources: "Browser tab sources captured through explicit user actions.",
-    targets: "Codex deep links and Windows desktop windows.",
-    links: "Saved source-to-target routing definitions.",
-    audit: "Local provenance for previewed handoffs."
+    inbox: "Turn selected browser text into a scoped, repo-aware Task Card.",
+    tasks: "Task history, verification results, artifacts, and follow-up drafts.",
+    settings: "Connect Chrome, choose a repo, and configure Codex delivery.",
+    advanced: "Operator views for sources, targets, links, and audit."
   }[view];
 }

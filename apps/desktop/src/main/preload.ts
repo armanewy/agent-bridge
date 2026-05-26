@@ -34,3 +34,7 @@ const api: AgentBridgeApi = {
 };
 
 contextBridge.exposeInMainWorld("agentBridge", api);
+
+ipcRenderer.on("agentbridge:quickAction", (_event, action: { type?: string }) => {
+  window.dispatchEvent(new CustomEvent("agentbridge:quickAction", { detail: action }));
+});

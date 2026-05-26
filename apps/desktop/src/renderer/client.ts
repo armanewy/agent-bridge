@@ -19,6 +19,7 @@ import type {
   Link,
   AuditEvent,
   Mission,
+  RepoContextPack,
   SourceEndpoint,
   TargetEndpoint,
   WindowsDesktopWindowTarget
@@ -117,6 +118,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async previewHandoff(input: PreviewRequest): Promise<DeliveryPreview> {
       const capture = mockCaptures.find((item) => item.id === input.captureId) ?? mockCapture;
       const target = mockTargets.find((item) => item.id === input.targetId);
+      const repoContext = target?.kind === "codexDeepLink" ? createMockRepoContext(target.repoPath) : undefined;
       const prompt = buildMockPrompt(capture.text, input.recipe);
       const mission = {
         id: "mission_mock",
@@ -128,6 +130,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         handoffCardIds: ["card_mock"],
         artifactIds: ["artifact_prompt_mock"],
         runIds: [],
+        ...(repoContext ? { repoContext } : {}),
         createdAt: now(),
         updatedAt: now()
       };
@@ -153,6 +156,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         recipe: input.recipe,
         taskSpec,
         generatedPrompt: prompt,
+        ...(repoContext ? { repoContext } : {}),
         redactionFindings: [],
         deliveryAttemptIds: [],
         artifactIds: ["artifact_prompt_mock"],
@@ -398,12 +402,46 @@ function mockSetupStatus(): SetupStatus {
         details: mockExtensionId ? "Mock manifest registered." : "No registry entry found."
       },
       {
+        id: "nativeHostPath",
+        label: "Native host launcher path valid",
+        status: mockExtensionId ? "ready" : "missing",
+        details: mockExtensionId ? "Mock launcher path valid." : "No launcher path found."
+      },
+      {
+        id: "allowedOrigin",
+        label: "Manifest allows extension",
+        status: mockExtensionId ? "ready" : "missing",
+        details: mockExtensionId ? `chrome-extension://${mockExtensionId}/` : "No extension ID to validate."
+      },
+      {
         id: "extensionHealth",
         label: "Extension health check",
         status: "warning",
         details: "Run Health check from the extension popup after registration."
+      },
+      {
+        id: "codexTarget",
+        label: "Codex target configured",
+        status: mockTargets.some((target) => target.kind === "codexDeepLink") ? "ready" : "missing",
+        details: mockTargets.some((target) => target.kind === "codexDeepLink")
+          ? "At least one Codex target is saved."
+          : "Configure a Codex repo path in Settings."
       }
     ]
+  };
+}
+
+function createMockRepoContext(repoPath: string): RepoContextPack {
+  const normalized = repoPath.replace(/\\/g, "/");
+  return {
+    repoPath,
+    repoName: normalized.split("/").filter(Boolean).at(-1) ?? "repo",
+    currentBranch: "main",
+    gitStatusSummary: "Mock repo context; real Electron mode reads git status.",
+    changedFiles: [],
+    packageManager: "pnpm",
+    testCommand: "pnpm test",
+    typecheckCommand: "pnpm build"
   };
 }
 

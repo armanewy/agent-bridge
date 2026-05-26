@@ -1,6 +1,6 @@
 # AgentBridge
 
-AgentBridge is a local-first AI BuildOps workspace for developer handoffs. It turns explicitly captured browser context into a durable Mission with a structured TaskSpec, repo context, Codex delivery provenance, local artifacts, verification results, and follow-up drafts.
+AgentBridge is a local-first AI BuildOps assistant for developer tasks. It turns explicitly captured browser context into a durable Task Card with a structured TaskSpec, repo context, Codex delivery provenance, local artifacts, verification results, and follow-up drafts.
 
 ## MVP Principles
 
@@ -17,16 +17,25 @@ AgentBridge is a local-first AI BuildOps workspace for developer handoffs. It tu
 ```text
 Browser selected text
 -> Capture Inbox
--> Mission
+-> Task Card
 -> TaskSpec
 -> RepoContextPack
 -> HandoffCard
--> approval preview
+-> Task Card Preview
 -> Codex delivery
 -> VerificationResult
 -> Artifacts
 -> optional follow-up HandoffCard
 ```
+
+## Default UX
+
+The default desktop UI is Simple Mode:
+
+- Inbox: pick a capture, see the selected repo/agent, and create a Task Card.
+- Tasks: inspect task history, generated prompts, artifacts, verification results, and follow-up drafts.
+- Settings: connect Chrome, choose a repo, configure Codex, and set verification commands.
+- Advanced: raw Sources, Targets, Links, and Audit views for debugging the local pipeline.
 
 ## Workspace Map
 
@@ -54,16 +63,18 @@ dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj
 
 ## Current Status
 
-Waves 1-10 are implemented through closed-loop dogfood hardening:
+Waves 1-11 are implemented through zero-friction UX hardening:
 
 - Mission-first core schemas and v2 local persistence.
 - Deterministic TaskSpec compiler and Codex prompt renderer.
 - Repo context pack with branch/status/changed-files and verification command settings.
-- Desktop Setup, Capture Inbox, Target Selector, Missions, artifact viewer, and verification preflight.
+- Desktop Inbox, Tasks, Settings, Advanced mode, artifact viewer, and verification preflight.
 - Mission-aware Codex delivery attempts and audit provenance.
 - User-triggered verification runner that stores git diff and command output artifacts.
 - Failed verification creates a visible, sendable follow-up HandoffCard.
 - Extension capture uses `activeTab`, `scripting`, and `nativeMessaging` without broad content scripts.
+- Extension keyboard command and desktop quick actions open the task-card flow without navigating the dashboard.
+- Default desktop navigation is Inbox, Tasks, Settings, and Advanced instead of exposing internals first.
 
 ## Known Limitations
 

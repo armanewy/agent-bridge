@@ -23,12 +23,13 @@
 
 ## Desktop
 
-- Dashboard loads at `http://127.0.0.1:5173`.
-- Mock source creates a capture.
+- Inbox loads at `http://127.0.0.1:5173`.
+- Mock capture is labeled demo-only.
 - Codex target rejects invalid paths in Electron mode.
-- Preview shows source, target, original excerpt, transformed prompt, redaction findings, and strategy.
+- Task Card Preview shows task title, repo/agent, acceptance criteria, verification steps, redaction warnings, and expandable raw prompt/source details.
 - Dry-run Codex delivery creates a local delivery attempt.
-- Audit view lists local events and can clear them.
+- Tasks view shows timeline, next action, artifacts, delivery attempts, and verification state.
+- Advanced Audit view lists local events and can clear them.
 
 ## Windows UIA Helper
 

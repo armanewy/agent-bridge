@@ -20,6 +20,7 @@ export function VerificationPanel({ detail, onRunVerification }: VerificationPan
         <div>
           <span className="eyebrow">Verification</span>
           <h3>{latestResult?.status ?? "not_run"}</h3>
+          <p>Run local checks after the agent changes files.</p>
         </div>
         <button
           type="button"
@@ -35,7 +36,7 @@ export function VerificationPanel({ detail, onRunVerification }: VerificationPan
       {repoContext?.repoPath ? (
         <>
           <div className="verification-warning">
-            Commands execute locally in the configured repository after this button click.
+            Commands execute locally only after you confirm the preflight.
           </div>
           <div className="verification-meta">
             <span>{repoContext.repoPath}</span>

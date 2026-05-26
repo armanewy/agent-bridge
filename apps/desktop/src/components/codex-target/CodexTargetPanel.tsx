@@ -32,8 +32,8 @@ export function CodexTargetPanel({
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <h2>Codex Target</h2>
-          <p>Configure the documented deep-link path for a local repository.</p>
+          <h2>Repo and Codex</h2>
+          <p>Choose the local repo Codex should work in and optional verification commands.</p>
         </div>
         <button type="button" className="icon-button" onClick={onCreate} title="Add Codex target">
           <FolderPlus size={18} />

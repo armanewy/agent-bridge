@@ -1,6 +1,6 @@
 # Backlog
 
-## Done In Waves 7-10
+## Done In Waves 7-11
 
 - Mission / HandoffCard / TaskSpec core model.
 - Local-store v2 for missions, artifacts, runs, and verification results.
@@ -15,12 +15,18 @@
 - Verification preflight and artifact viewer.
 - Follow-up HandoffCard dry-run/send path.
 - Extension broad content-script removal.
+- Simple Mode navigation: Inbox, Tasks, Settings, Advanced.
+- Task Card Preview copy and layout.
+- Guided setup wizard presentation.
+- Task detail timeline, next action, and readable work record.
+- Chrome keyboard capture command and desktop quick actions.
 
 ## P0 Dogfood Hardening
 
 - Add Codex repo directory picker.
 - Add a visible end-to-end demo script result after real extension capture.
 - Improve setup path resolution for packaged Electron vs development repo root.
+- Polish quick-action routing in packaged Electron with a real tray icon.
 - Show target verification diff before Windows delivery.
 - Block terminal-like Windows targets unless the user confirms command-execution risk.
 
@@ -28,7 +34,7 @@
 
 - Windows target binding UI for foreground window and top-level window list.
 - Redaction preview actions: redact and continue, edit manually, cancel, allow once.
-- Audit detail view for one Mission/HandoffCard with delivery attempts.
+- Audit detail view for one Task Card/HandoffCard with delivery attempts.
 - Better artifact filtering by kind and run.
 - Manual acceptance-test checklist for the full ChatGPT-to-Codex-to-verification loop.
 
@@ -49,5 +55,5 @@
 ## Next Three Features
 
 1. Real dogfood run and demo recording/checklist from ChatGPT selected text to Codex follow-up.
-2. Codex app-server/SKD spike for continuing and observing threads.
+2. Codex app-server/SDK spike for continuing and observing threads.
 3. Windows target UI hardening only after the Codex mission loop feels reliable.

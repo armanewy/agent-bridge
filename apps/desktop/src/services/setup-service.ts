@@ -62,7 +62,7 @@ export class SetupService {
           "codexTarget",
           "Codex target configured",
           codexTargetConfigured,
-          codexTargetConfigured ? "At least one Codex target is saved." : "Configure a Codex repo path in Targets."
+          codexTargetConfigured ? "At least one Codex target is saved." : "Configure a Codex repo path in Settings."
         )
       ],
       ...(extensionId ? { extensionId } : {}),

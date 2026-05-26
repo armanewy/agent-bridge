@@ -7,6 +7,7 @@ interface HandoffPreviewProps {
   deliveryResult?: CodexDeliveryResult | undefined;
   onApproveDryRun(): void;
   onApproveSend(): void;
+  onSaveDraft(): void;
   onCancel(): void;
 }
 
@@ -15,13 +16,14 @@ export function HandoffPreview({
   deliveryResult,
   onApproveDryRun,
   onApproveSend,
+  onSaveDraft,
   onCancel
 }: HandoffPreviewProps): JSX.Element {
   if (!preview) {
     return (
       <section className="panel preview-empty">
-        <h2>Approval Preview</h2>
-        <p>Select a capture, target, and transform recipe to preview the handoff.</p>
+        <h2>Task Card Preview</h2>
+        <p>Select a capture and repo, then create a Task Card to review before sending.</p>
       </section>
     );
   }
@@ -33,17 +35,20 @@ export function HandoffPreview({
     <section className="panel preview-panel">
       <div className="panel-heading">
         <div>
-          <h2>Approval Preview</h2>
-          <p>Review the source, resolved target, transformed prompt, and warnings before delivery.</p>
+          <h2>Task Card Preview</h2>
+          <p>Review the scoped task before Codex opens with the generated prompt.</p>
         </div>
         <div className="button-row">
           <button type="button" className="secondary-button" onClick={onCancel}>
             <XCircle size={16} />
             Cancel
           </button>
+          <button type="button" className="secondary-button" onClick={onSaveDraft}>
+            Save Draft
+          </button>
           <button type="button" className="primary-button" onClick={onApproveDryRun} disabled={!codexTarget}>
             <Send size={16} />
-            Dry Run Codex
+            Dry run
           </button>
           <button type="button" className="primary-button" onClick={onApproveSend} disabled={!codexTarget}>
             <Send size={16} />
@@ -60,16 +65,16 @@ export function HandoffPreview({
         </div>
         <div>
           <span className="eyebrow">Target</span>
-          <strong>{codexTarget ? "Codex deep link" : target?.kind ?? "No target"}</strong>
+          <strong>{codexTarget ? "Codex" : target?.kind ?? "No target"}</strong>
           <p>{codexTarget ? codexTarget.repoPath : "Configure a Codex target to enable dry-run delivery."}</p>
         </div>
         <div>
-          <span className="eyebrow">Strategy</span>
-          <strong>{preview.deliveryStrategy}</strong>
-          <p>{preview.handoff.prompt.length} characters</p>
+          <span className="eyebrow">Verification</span>
+          <strong>{preview.handoffCard.repoContext?.testCommand ?? preview.handoffCard.repoContext?.typecheckCommand ?? "Not configured"}</strong>
+          <p>{preview.taskSpec.verificationSteps.length} planned step(s)</p>
         </div>
         <div>
-          <span className="eyebrow">Mission</span>
+          <span className="eyebrow">Task Card</span>
           <strong>{preview.mission.title}</strong>
           <p>{preview.mission.status}</p>
         </div>
@@ -86,6 +91,15 @@ export function HandoffPreview({
           <span>No redaction findings in the transformed prompt.</span>
         </div>
       )}
+
+      <div className="next-steps-panel">
+        <span className="eyebrow">What will happen next?</span>
+        <ul>
+          <li>Codex opens with this prompt and repo path.</li>
+          <li>AgentBridge saves the Task Card, delivery attempt, and prompt artifact.</li>
+          <li>You can run verification afterward and send a follow-up if needed.</li>
+        </ul>
+      </div>
 
       <div className="task-spec-grid">
         <SpecSection title="Goal" items={[preview.taskSpec.goal]} />
@@ -115,16 +129,32 @@ export function HandoffPreview({
         <SpecSection title="Verification Steps" items={preview.taskSpec.verificationSteps} />
       </div>
 
-      <div className="prompt-columns">
-        <div>
-          <span className="eyebrow">Original Capture</span>
-          <pre>{preview.originalCaptureExcerpt}</pre>
+      <details className="advanced-details">
+        <summary>Advanced details</summary>
+        <div className="prompt-columns">
+          <div>
+            <span className="eyebrow">Original Capture</span>
+            <pre>{preview.originalCaptureExcerpt}</pre>
+          </div>
+          <div>
+            <span className="eyebrow">Generated Prompt</span>
+            <pre>{preview.handoffCard.generatedPrompt}</pre>
+          </div>
         </div>
-        <div>
-          <span className="eyebrow">Generated Prompt</span>
-          <pre>{preview.handoffCard.generatedPrompt}</pre>
-        </div>
-      </div>
+        {preview.handoff.redactionFindings.length > 0 ? (
+          <div className="redaction-list">
+            <span className="eyebrow">Redaction findings</span>
+            {preview.handoff.redactionFindings.map((finding) => (
+              <article className="list-card" key={finding.id}>
+                <strong>{finding.kind}</strong>
+                <span>
+                  {finding.severity} - {finding.recommendation}
+                </span>
+              </article>
+            ))}
+          </div>
+        ) : null}
+      </details>
 
       {deliveryResult ? (
         <div className="result-line">

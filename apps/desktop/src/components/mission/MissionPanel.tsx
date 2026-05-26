@@ -24,6 +24,8 @@ export function MissionPanel({
 }: MissionPanelProps): JSX.Element {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>();
   const selectedArtifact = detail?.artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? detail?.artifacts[0];
+  const nextAction = detail ? nextActionFor(detail) : undefined;
+  const timeline = detail ? timelineFor(detail) : [];
 
   useEffect(() => {
     setSelectedArtifactId(detail?.artifacts[0]?.id);
@@ -34,14 +36,14 @@ export function MissionPanel({
       <section className="panel">
         <div className="panel-heading">
           <div>
-            <h2>Missions</h2>
-            <p>{missions.length} durable task(s)</p>
+            <h2>Task Cards</h2>
+            <p>{missions.length} tracked task(s)</p>
           </div>
           <ClipboardList size={20} />
         </div>
         <div className="item-list">
           {missions.length === 0 ? (
-            <p className="empty-copy">Preview a handoff to create the first Mission.</p>
+            <p className="empty-copy">Create a Task Card from a capture to start tracking agent work.</p>
           ) : (
             missions.map((mission) => (
               <button
@@ -70,6 +72,12 @@ export function MissionPanel({
               <span className="status-pill">{detail.mission.status}</span>
             </div>
 
+            <div className="task-status-summary">
+              <span className="eyebrow">Status</span>
+              <strong>{summaryFor(detail)}</strong>
+              <p>{detail.verificationResults[0]?.summary ?? "AgentBridge is tracking capture, prompt, delivery, and verification state for this task."}</p>
+            </div>
+
             <div className="mission-detail-grid">
               <DetailBlock label="Repo" value={detail.mission.repoContext?.repoPath ?? "No repo context"} />
               <DetailBlock label="Branch" value={detail.mission.repoContext?.currentBranch ?? "Unknown"} />
@@ -78,6 +86,43 @@ export function MissionPanel({
               <DetailBlock label="Artifacts" value={String(detail.artifacts.length)} />
               <DetailBlock label="Deliveries" value={String(detail.deliveryAttempts.length)} />
             </div>
+
+            <div className="timeline">
+              <span className="eyebrow">Timeline</span>
+              {timeline.map((item) => (
+                <div className={`timeline-item ${item.done ? "done" : ""}`} key={item.label}>
+                  <span className="timeline-dot" />
+                  <div>
+                    <strong>{item.label}</strong>
+                    <p>{item.detail}</p>
+                  </div>
+                </div>
+              ))}
+            </div>
+
+            {nextAction ? (
+              <div className="next-action">
+                <div>
+                  <span className="eyebrow">Next action</span>
+                  <strong>{nextAction.title}</strong>
+                  <p>{nextAction.description}</p>
+                </div>
+                {nextAction.kind === "send" ? (
+                  <button
+                    type="button"
+                    className="primary-button"
+                    onClick={() => onDeliverHandoffCard(detail.mission.id, nextAction.handoffCardId, false)}
+                  >
+                    {nextAction.label}
+                  </button>
+                ) : null}
+                {nextAction.kind === "verify" ? (
+                  <button type="button" className="primary-button" onClick={() => onRunVerification(detail.mission.id)}>
+                    Run verification
+                  </button>
+                ) : null}
+              </div>
+            ) : null}
 
             {detail.captures[0] ? (
               <div className="capture-excerpt">
@@ -88,7 +133,7 @@ export function MissionPanel({
 
             {detail.handoffCards.length > 0 ? (
               <div className="mission-task">
-                <span className="eyebrow">HandoffCards</span>
+                <span className="eyebrow">Task dispatches</span>
                 {detail.handoffCards.map((card, index) => (
                   <article className="handoff-card-panel" key={card.id}>
                     <div className="panel-heading compact">
@@ -164,13 +209,97 @@ export function MissionPanel({
           </>
         ) : (
           <div className="preview-empty">
-            <h2>Mission Detail</h2>
-            <p>Select a mission to inspect its task spec, artifacts, repo context, and verification state.</p>
+            <h2>Task Detail</h2>
+            <p>Select a task to see what was captured, sent, verified, and what should happen next.</p>
           </div>
         )}
       </section>
     </div>
   );
+}
+
+function summaryFor(detail: MissionDetail): string {
+  const latestVerification = detail.verificationResults[0]?.status;
+  if (latestVerification === "passed") {
+    return "Verification passed";
+  }
+  if (latestVerification === "failed") {
+    return "Verification failed";
+  }
+  if (latestVerification === "needs_review" || latestVerification === "warning") {
+    return "Needs review";
+  }
+  if (detail.deliveryAttempts.some((attempt) => attempt.success)) {
+    return "Sent to Codex";
+  }
+  return "Draft";
+}
+
+function nextActionFor(detail: MissionDetail):
+  | { kind: "send"; title: string; description: string; label: string; handoffCardId: string }
+  | { kind: "verify"; title: string; description: string }
+  | { kind: "done"; title: string; description: string }
+  | undefined {
+  const unsentCard = detail.handoffCards.find((card) => card.deliveryAttemptIds.length === 0);
+  if (unsentCard) {
+    const isFollowUp = detail.handoffCards.indexOf(unsentCard) > 0;
+    return {
+      kind: "send",
+      title: isFollowUp ? "Follow-up ready" : "Ready to send",
+      description: isFollowUp ? "Verification created a follow-up prompt. Review it below, then send it to Codex." : "Send the Task Card to Codex when the prompt looks right.",
+      label: isFollowUp ? "Send follow-up to Codex" : "Send to Codex",
+      handoffCardId: unsentCard.id
+    };
+  }
+  if (detail.deliveryAttempts.some((attempt) => attempt.success) && detail.verificationResults.length === 0) {
+    return {
+      kind: "verify",
+      title: "Verify the result",
+      description: "After Codex changes files, run the configured local checks and capture artifacts."
+    };
+  }
+  if (detail.verificationResults[0]?.status === "failed") {
+    return {
+      kind: "done",
+      title: "Inspect failure artifacts",
+      description: "Open the command output and follow-up draft before deciding what to send next."
+    };
+  }
+  return {
+    kind: "done",
+    title: "No immediate action",
+    description: "Open artifacts or delivery attempts if you need to review the task history."
+  };
+}
+
+function timelineFor(detail: MissionDetail): Array<{ label: string; detail: string; done: boolean }> {
+  return [
+    {
+      label: "Captured",
+      detail: detail.captures[0]?.createdAt ?? "No capture attached",
+      done: detail.captures.length > 0
+    },
+    {
+      label: "Task created",
+      detail: detail.mission.createdAt,
+      done: true
+    },
+    {
+      label: "Sent to Codex",
+      detail: detail.deliveryAttempts[0]?.attemptedAt ?? "Not sent yet",
+      done: detail.deliveryAttempts.length > 0
+    },
+    {
+      label: "Verification run",
+      detail: detail.runs[0]?.completedAt ?? detail.runs[0]?.startedAt ?? "Not run yet",
+      done: detail.runs.length > 0
+    },
+    {
+      label: "Follow-up drafted",
+      detail: detail.handoffCards.length > 1 ? detail.handoffCards[1]?.createdAt ?? "Draft available" : "No follow-up draft",
+      done: detail.handoffCards.length > 1
+    }
+  ];
 }
 
 function DetailBlock({ label, value }: { label: string; value: string }): JSX.Element {

@@ -14,14 +14,14 @@ export function TargetSelector({ targets, selectedTargetId, onSelectTarget }: Ta
     <section className="panel">
       <div className="panel-heading">
         <div>
-          <h2>Target Selector</h2>
-          <p>{targets.length} saved target(s)</p>
+          <h2>Repo and Agent</h2>
+          <p>{targets.length} repo/agent option(s)</p>
         </div>
         <Monitor size={20} />
       </div>
       <div className="selection-list">
         {orderedTargets.length === 0 ? (
-          <p className="empty-copy">No targets yet. Configure a Codex repo target before creating a Mission.</p>
+          <p className="empty-copy">No repo is connected yet. Choose a Codex repo target in Settings before creating a Task Card.</p>
         ) : (
           orderedTargets.map((target) => {
             const summary = describeTarget(target);
@@ -34,7 +34,7 @@ export function TargetSelector({ targets, selectedTargetId, onSelectTarget }: Ta
               >
                 <strong>{summary.title}</strong>
                 <span>{summary.subtitle}</span>
-                <small>{target.kind}</small>
+                <small>{target.kind === "codexDeepLink" ? "Agent: Codex" : target.kind}</small>
                 <p>{summary.detail}</p>
               </button>
             );
@@ -48,9 +48,9 @@ export function TargetSelector({ targets, selectedTargetId, onSelectTarget }: Ta
 function describeTarget(target: TargetEndpoint): { title: string; subtitle: string; detail: string } {
   if (target.kind === "codexDeepLink") {
     return {
-      title: "Codex deep link",
+      title: "Codex",
       subtitle: target.repoPath,
-      detail: "Repo-aware TaskSpec delivery through codex://."
+      detail: "Repo-aware Task Card delivery through codex://."
     };
   }
   if (target.kind === "windowsDesktopWindow") {

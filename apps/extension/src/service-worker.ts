@@ -12,6 +12,15 @@ chrome.runtime.onMessage.addListener((message: ExtensionMessage, _sender, sendRe
   return true;
 });
 
+chrome.commands.onCommand.addListener((command) => {
+  if (command !== "capture-selection") {
+    return;
+  }
+  handleMessage({ type: "ui.captureSelection" }).catch(() => {
+    // The popup remains the visible error surface; keyboard capture is intentionally silent on failure.
+  });
+});
+
 async function handleMessage(message: ExtensionMessage): Promise<unknown> {
   switch (message.type) {
     case "ui.healthCheck":
