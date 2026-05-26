@@ -25,4 +25,10 @@ describe("redaction helpers", () => {
 
     expect(applyRedactions(input, findings)).toContain("[REDACTED:");
   });
+
+  it("detects provider-specific tokens", () => {
+    const findings = detectRedactions("github_pat_abcdefghijklmnopqrstuvwxyz1234567890 and AKIAABCDEFGHIJKLMNOP");
+
+    expect(findings.some((finding) => finding.kind === "apiKey")).toBe(true);
+  });
 });

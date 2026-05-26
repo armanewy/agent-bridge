@@ -12,7 +12,9 @@
     "dev:native-host": "pnpm --filter @agentbridge/native-host dev",
     "dev:win-uia-helper": "dotnet run --project apps/win-uia-helper/AgentBridge.WinUiaHelper.csproj",
     "build:win-uia-helper": "dotnet build apps/win-uia-helper/AgentBridge.WinUiaHelper.csproj",
-    "test:win-uia-helper": "dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj"
+    "test:win-uia-helper": "dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj",
+    "register:native-host": "powershell -ExecutionPolicy Bypass -File scripts/register-native-host-windows.ps1",
+    "unregister:native-host": "powershell -ExecutionPolicy Bypass -File scripts/unregister-native-host-windows.ps1"
   },
   "devDependencies": {
     "@types/node": "^22.10.2",

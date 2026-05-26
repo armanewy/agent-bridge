@@ -27,4 +27,4 @@ No broad host permissions are requested in this skeleton.
 5. Select text on the page and click "Capture selected text".
 6. Verify the popup shows a clear error when the native host is not registered.
 
-The extension does not implement ChatGPT DOM-specific extraction yet. It only captures selected text after a user action.
+The extension includes a cautious ChatGPT latest assistant message adapter. It runs only when the user clicks the popup action. If selectors fail, use selected-text capture instead.

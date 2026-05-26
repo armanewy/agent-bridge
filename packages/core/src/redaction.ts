@@ -24,7 +24,7 @@ const patterns: RedactionPattern[] = [
     kind: "apiKey",
     severity: "high",
     recommendation: "redact",
-    pattern: /\b(?:sk-[A-Za-z0-9_-]{20,}|api[_-]?key\s*[:=]\s*["']?[A-Za-z0-9._-]{16,})/gi
+    pattern: /\b(?:sk-(?:proj-)?[A-Za-z0-9_-]{20,}|sk-ant-[A-Za-z0-9_-]{20,}|ghp_[A-Za-z0-9_]{20,}|github_pat_[A-Za-z0-9_]{20,}|AKIA[0-9A-Z]{16}|api[_-]?key\s*[:=]\s*["']?[A-Za-z0-9._-]{16,})/gi
   },
   {
     kind: "envAssignment",
@@ -37,6 +37,12 @@ const patterns: RedactionPattern[] = [
     severity: "low",
     recommendation: "warn",
     pattern: /\b[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}\b/gi
+  },
+  {
+    kind: "highEntropyToken",
+    severity: "medium",
+    recommendation: "redact",
+    pattern: /\b[A-Za-z0-9_-]{40,}\b/g
   }
 ];
 

@@ -10,6 +10,10 @@ document.querySelector<HTMLButtonElement>("#capture")?.addEventListener("click",
   void run({ type: "ui.captureSelection" }, "Captured selected text.");
 });
 
+document.querySelector<HTMLButtonElement>("#latest")?.addEventListener("click", () => {
+  void run({ type: "ui.captureLatestMessage" }, "Captured latest assistant message.");
+});
+
 document.querySelector<HTMLButtonElement>("#health")?.addEventListener("click", () => {
   void run({ type: "ui.healthCheck" }, "Native host responded.");
 });

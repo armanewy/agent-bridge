@@ -1,4 +1,5 @@
 import { buildBindSourceMessage, buildCaptureMessage, type ExtensionMessage, type NativeHostMessage } from "./protocol.js";
+import { extractLatestChatGptAssistantMessage } from "./page-adapters/chatgpt.js";
 
 const nativeHostName = "com.agentbridge.native_host";
 
@@ -27,6 +28,14 @@ async function handleMessage(message: ExtensionMessage): Promise<unknown> {
       const selectedText = await captureSelectedText(tab.id);
       return sendNative(buildCaptureMessage(tab, selectedText));
     }
+    case "ui.captureLatestMessage": {
+      const tab = await getActiveTab();
+      if (typeof tab.id !== "number") {
+        throw new Error("No active tab is available for capture.");
+      }
+      const latestMessage = await captureLatestMessage(tab.id);
+      return sendNative(buildCaptureMessage(tab, latestMessage, new Date().toISOString(), "latestMessage"));
+    }
   }
 }
 
@@ -51,6 +60,20 @@ async function captureSelectedText(tabId: number): Promise<string> {
   }
 
   return text;
+}
+
+async function captureLatestMessage(tabId: number): Promise<string> {
+  const results = await chrome.scripting.executeScript({
+    target: { tabId },
+    func: extractLatestChatGptAssistantMessage
+  });
+  const result = results[0]?.result;
+
+  if (!result?.ok || !result.text?.trim()) {
+    throw new Error("Latest-message capture is unavailable for this page. Select text and capture the selection instead.");
+  }
+
+  return result.text;
 }
 
 async function sendNative(message: NativeHostMessage): Promise<unknown> {

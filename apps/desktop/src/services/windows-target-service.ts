@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import type { WindowsDesktopWindowTarget } from "@agentbridge/core";
+import { scoreWindowsTargetVerification, type WindowsDesktopWindowTarget } from "@agentbridge/core";
 import type { WindowRevalidation } from "./bridge-contract.js";
 
 export interface HelperWindowMetadata {
@@ -106,21 +106,11 @@ export function scoreTargetMatch(
   original: WindowsDesktopWindowTarget,
   current: WindowsDesktopWindowTarget
 ): WindowRevalidation {
-  const warnings: string[] = [];
-
-  if (original.processId && current.processId && original.processId !== current.processId) {
-    warnings.push("Process ID changed.");
-  }
-  if (original.executablePath && current.executablePath && original.executablePath !== current.executablePath) {
-    warnings.push("Executable path changed.");
-  }
-  if (original.title && current.title && original.title !== current.title) {
-    warnings.push("Window title changed.");
-  }
+  const verification = scoreWindowsTargetVerification(original, current);
 
   return {
-    status: warnings.length > 0 ? "changed" : "available",
-    warnings,
+    status: verification.status === "pass" ? "available" : "changed",
+    warnings: verification.differences,
     current
   };
 }

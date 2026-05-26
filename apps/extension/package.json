@@ -10,6 +10,8 @@
     "dev": "tsc -p tsconfig.json --watch"
   },
   "devDependencies": {
-    "@types/chrome": "^0.0.287"
+    "@types/chrome": "^0.0.287",
+    "@types/jsdom": "^21.1.7",
+    "jsdom": "^25.0.1"
   }
 }

@@ -1,6 +1,7 @@
 export type ExtensionMessage =
   | { type: "ui.bindCurrentTab" }
   | { type: "ui.captureSelection" }
+  | { type: "ui.captureLatestMessage" }
   | { type: "ui.healthCheck" };
 
 export type NativeHostMessage =
@@ -24,7 +25,7 @@ export type NativeHostMessage =
   | {
       type: "capture";
       sentAt: string;
-      captureType: "selectedText" | "pageTextSummary";
+      captureType: "selectedText" | "latestMessage" | "pageTextSummary";
       source: {
         kind: "browserTab";
         browser: "chrome";
@@ -68,7 +69,8 @@ export function buildBindSourceMessage(tab: ActiveTabSnapshot, sentAt = new Date
 export function buildCaptureMessage(
   tab: ActiveTabSnapshot,
   text: string,
-  sentAt = new Date().toISOString()
+  sentAt = new Date().toISOString(),
+  captureType: "selectedText" | "latestMessage" | "pageTextSummary" = "selectedText"
 ): NativeHostMessage {
   if (!tab.url) {
     throw new Error("Active tab does not have a URL.");
@@ -81,7 +83,7 @@ export function buildCaptureMessage(
   return {
     type: "capture",
     sentAt,
-    captureType: "selectedText",
+    captureType,
     source: {
       kind: "browserTab",
       browser: "chrome",
