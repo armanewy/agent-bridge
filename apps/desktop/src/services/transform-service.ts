@@ -16,9 +16,14 @@ import {
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { DeliveryPreview, PreviewRequest } from "./bridge-contract.js";
+import { RepoContextService } from "./repo-context-service.js";
 
 export class TransformService {
-  constructor(private readonly store: LocalStore) {}
+  private readonly repoContextService: RepoContextService;
+
+  constructor(private readonly store: LocalStore) {
+    this.repoContextService = new RepoContextService(store);
+  }
 
   async previewHandoff(input: PreviewRequest): Promise<DeliveryPreview> {
     const capture = await this.store.getCapture(input.captureId);
@@ -28,7 +33,7 @@ export class TransformService {
 
     const target = await this.store.getTarget(input.targetId);
     const source = await this.store.getSource(capture.sourceId);
-    const repoContext = createRepoContextFromTarget(target);
+    const repoContext = await this.createRepoContextFromTarget(target);
     const taskSpec = createTaskSpecFromCapture({ capture, recipe: input.recipe });
     const generatedPrompt = renderTaskSpecForTarget(taskSpec, target, repoContext);
     const redactionFindings = detectRedactions(generatedPrompt);
@@ -176,16 +181,14 @@ export class TransformService {
       updatedAt: input.now
     };
   }
-}
 
-function createRepoContextFromTarget(target?: TargetEndpoint): RepoContextPack | undefined {
-  if (target?.kind !== "codexDeepLink") {
-    return undefined;
+  private async createRepoContextFromTarget(target?: TargetEndpoint): Promise<RepoContextPack | undefined> {
+    if (target?.kind !== "codexDeepLink") {
+      return undefined;
+    }
+
+    return this.repoContextService.build(target.repoPath);
   }
-
-  return {
-    repoPath: target.repoPath
-  };
 }
 
 function createPreviewArtifacts(input: {

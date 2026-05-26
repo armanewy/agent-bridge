@@ -13,6 +13,7 @@ import type {
   WindowsDesktopWindowTarget,
   AuditEvent
 } from "@agentbridge/core";
+import type { RepoCommandConfig } from "./repo-context-service.js";
 
 export interface WindowRevalidation {
   status: "available" | "changed" | "unavailable";
@@ -63,7 +64,7 @@ export interface AgentBridgeApi {
   createLink(input: Omit<Link, "id" | "createdAt" | "updatedAt" | "enabled"> & { name: string }): Promise<Link>;
   previewHandoff(input: PreviewRequest): Promise<DeliveryPreview>;
   revalidateTarget(target: WindowsDesktopWindowTarget): Promise<WindowRevalidation>;
-  configureCodexTarget(repoPath: string): Promise<CodexDeepLinkTarget>;
+  configureCodexTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget>;
   deliverToCodex(input: CodexDeliveryRequest): Promise<CodexDeliveryResult>;
   bindMockBrowserSource(): Promise<BrowserTabSource>;
   listAuditEvents(): Promise<AuditEvent[]>;

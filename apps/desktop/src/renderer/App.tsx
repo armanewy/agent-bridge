@@ -37,6 +37,9 @@ export function App(): JSX.Element {
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [recipe, setRecipe] = useState<Transform["recipe"]>("implementationBrief");
   const [repoPath, setRepoPath] = useState("");
+  const [testCommand, setTestCommand] = useState("");
+  const [lintCommand, setLintCommand] = useState("");
+  const [typecheckCommand, setTypecheckCommand] = useState("");
   const [targetError, setTargetError] = useState<string | undefined>();
   const [preview, setPreview] = useState<DeliveryPreview | undefined>();
   const [deliveryResult, setDeliveryResult] = useState<CodexDeliveryResult | undefined>();
@@ -73,7 +76,11 @@ export function App(): JSX.Element {
   async function createCodexTarget(): Promise<void> {
     setTargetError(undefined);
     try {
-      await api.configureCodexTarget(repoPath.trim());
+      await api.configureCodexTarget(repoPath.trim(), {
+        ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
+        ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
+        ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
+      });
       await refresh();
     } catch (error) {
       setTargetError(error instanceof Error ? error.message : String(error));
@@ -205,6 +212,12 @@ export function App(): JSX.Element {
             <CodexTargetPanel
               repoPath={repoPath}
               onRepoPathChange={setRepoPath}
+              testCommand={testCommand}
+              lintCommand={lintCommand}
+              typecheckCommand={typecheckCommand}
+              onTestCommandChange={setTestCommand}
+              onLintCommandChange={setLintCommand}
+              onTypecheckCommandChange={setTypecheckCommand}
               onCreate={() => void createCodexTarget()}
               latestTarget={codexTarget}
               error={targetError}
@@ -231,6 +244,12 @@ export function App(): JSX.Element {
             <CodexTargetPanel
               repoPath={repoPath}
               onRepoPathChange={setRepoPath}
+              testCommand={testCommand}
+              lintCommand={lintCommand}
+              typecheckCommand={typecheckCommand}
+              onTestCommandChange={setTestCommand}
+              onLintCommandChange={setLintCommand}
+              onTypecheckCommandChange={setTypecheckCommand}
               onCreate={() => void createCodexTarget()}
               latestTarget={codexTarget}
               error={targetError}

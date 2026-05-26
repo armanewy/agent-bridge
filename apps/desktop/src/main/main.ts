@@ -56,7 +56,9 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:revalidateTarget", (_event, target: WindowsDesktopWindowTarget) =>
     windowsTargetService.revalidate(target)
   );
-  ipcMain.handle("agentbridge:configureCodexTarget", (_event, repoPath: string) => codexTargetService.configureTarget(repoPath));
+  ipcMain.handle("agentbridge:configureCodexTarget", (_event, repoPath: string, commands) =>
+    codexTargetService.configureTarget(repoPath, commands)
+  );
   ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());

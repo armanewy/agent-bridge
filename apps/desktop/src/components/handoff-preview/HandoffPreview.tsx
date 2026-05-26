@@ -89,6 +89,26 @@ export function HandoffPreview({
 
       <div className="task-spec-grid">
         <SpecSection title="Goal" items={[preview.taskSpec.goal]} />
+        {preview.handoffCard.repoContext ? (
+          <SpecSection
+            title="Repo Context"
+            items={[
+              `Path: ${preview.handoffCard.repoContext.repoPath}`,
+              preview.handoffCard.repoContext.currentBranch ? `Branch: ${preview.handoffCard.repoContext.currentBranch}` : "Branch: unknown",
+              preview.handoffCard.repoContext.gitStatusSummary
+                ? `Status: ${preview.handoffCard.repoContext.gitStatusSummary}`
+                : "Status: unknown",
+              preview.handoffCard.repoContext.changedFiles?.length
+                ? `Changed files: ${preview.handoffCard.repoContext.changedFiles.join(", ")}`
+                : "Changed files: none",
+              preview.handoffCard.repoContext.testCommand ? `Test: ${preview.handoffCard.repoContext.testCommand}` : "Test: not configured",
+              preview.handoffCard.repoContext.lintCommand ? `Lint: ${preview.handoffCard.repoContext.lintCommand}` : "Lint: not configured",
+              preview.handoffCard.repoContext.typecheckCommand
+                ? `Typecheck: ${preview.handoffCard.repoContext.typecheckCommand}`
+                : "Typecheck: not configured"
+            ]}
+          />
+        ) : null}
         <SpecSection title="Requirements" items={preview.taskSpec.requirements} />
         <SpecSection title="Constraints" items={preview.taskSpec.constraints} />
         <SpecSection title="Acceptance Criteria" items={preview.taskSpec.acceptanceCriteria} />

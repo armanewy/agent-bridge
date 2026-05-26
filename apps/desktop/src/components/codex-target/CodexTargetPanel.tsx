@@ -4,6 +4,12 @@ import type { CodexDeepLinkTarget } from "@agentbridge/core";
 interface CodexTargetPanelProps {
   repoPath: string;
   onRepoPathChange(value: string): void;
+  testCommand: string;
+  lintCommand: string;
+  typecheckCommand: string;
+  onTestCommandChange(value: string): void;
+  onLintCommandChange(value: string): void;
+  onTypecheckCommandChange(value: string): void;
   onCreate(): void;
   latestTarget?: CodexDeepLinkTarget | undefined;
   error?: string | undefined;
@@ -12,6 +18,12 @@ interface CodexTargetPanelProps {
 export function CodexTargetPanel({
   repoPath,
   onRepoPathChange,
+  testCommand,
+  lintCommand,
+  typecheckCommand,
+  onTestCommandChange,
+  onLintCommandChange,
+  onTypecheckCommandChange,
   onCreate,
   latestTarget,
   error
@@ -35,6 +47,24 @@ export function CodexTargetPanel({
           placeholder="C:\Users\name\Documents\project"
         />
       </label>
+      <div className="command-grid">
+        <label className="field">
+          <span>Test command</span>
+          <input value={testCommand} onChange={(event) => onTestCommandChange(event.target.value)} placeholder="pnpm test" />
+        </label>
+        <label className="field">
+          <span>Lint command</span>
+          <input value={lintCommand} onChange={(event) => onLintCommandChange(event.target.value)} placeholder="pnpm lint" />
+        </label>
+        <label className="field">
+          <span>Typecheck command</span>
+          <input
+            value={typecheckCommand}
+            onChange={(event) => onTypecheckCommandChange(event.target.value)}
+            placeholder="pnpm build"
+          />
+        </label>
+      </div>
       {error ? <p className="inline-error">{error}</p> : null}
       {latestTarget ? (
         <div className="target-summary">

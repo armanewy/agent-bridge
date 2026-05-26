@@ -8,13 +8,15 @@ import {
 } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { CodexDeliveryRequest, CodexDeliveryResult } from "./bridge-contract.js";
+import type { RepoCommandConfig } from "./repo-context-service.js";
+import { repoCommandSettingsKey } from "./repo-context-service.js";
 
 export type OpenExternal = (url: string) => Promise<void>;
 
 export class CodexTargetService {
   constructor(private readonly store: LocalStore, private readonly openExternal?: OpenExternal) {}
 
-  async configureTarget(repoPath: string): Promise<CodexDeepLinkTarget> {
+  async configureTarget(repoPath: string, commands?: RepoCommandConfig): Promise<CodexDeepLinkTarget> {
     const validationErrors = validateCodexDeepLinkInput({ repoPath, prompt: "validation" });
     if (validationErrors.length > 0) {
       throw new Error(validationErrors.join(" "));
@@ -24,6 +26,9 @@ export class CodexTargetService {
       id: `target_codex_${randomUUID()}`,
       repoPath
     });
+    if (commands) {
+      await this.store.saveSetting(repoCommandSettingsKey(repoPath), commands);
+    }
     await this.store.saveTarget(target);
     await this.store.appendAuditEvent({
       id: `audit_${randomUUID()}`,

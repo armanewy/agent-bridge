@@ -236,6 +236,13 @@ button:disabled {
   gap: 8px;
 }
 
+.command-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 10px;
+  margin-top: 12px;
+}
+
 .field span,
 .eyebrow {
   color: #64737f;
