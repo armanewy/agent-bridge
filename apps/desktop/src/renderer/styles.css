@@ -686,6 +686,21 @@ button:disabled {
   color: #6f4a00;
 }
 
+.warning-band.stacked {
+  display: grid;
+  align-items: stretch;
+}
+
+.warning-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.warning-row span {
+  flex: 1;
+}
+
 .ok-band,
 .result-line {
   background: #e7f6ee;

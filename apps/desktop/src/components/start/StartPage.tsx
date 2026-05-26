@@ -23,11 +23,13 @@ interface StartPageProps {
   selectedTargetComponentId?: string | undefined;
   selectedCodexThreadId?: string | undefined;
   manualCodexThreadId: string;
+  embeddedChatGptUrl: string;
   chatGptSourceMode: "chrome" | "desktop";
   linkError?: string | undefined;
   targetError?: string | undefined;
   onSelectCodexThread(threadId?: string): void;
   onManualCodexThreadIdChange(value: string): void;
+  onEmbeddedChatGptUrlChange(value: string): void;
   onChatGptSourceModeChange(mode: "chrome" | "desktop"): void;
   onSaveManualCodexThread(): void;
   onChooseRepo(): void;
@@ -37,7 +39,7 @@ interface StartPageProps {
   onOpenAdvanced(): void;
   onOpenSettings(): void;
   onProbeDesktopApps(): void;
-  onOpenEmbeddedChatGpt(): void;
+  onOpenEmbeddedChatGpt(url?: string): void;
   onCaptureEmbeddedChatGptSelection(): void;
   onConnectChrome(): void;
   onCheckChromeConnection(): void;
@@ -56,11 +58,13 @@ export function StartPage({
   selectedTargetComponentId,
   selectedCodexThreadId,
   manualCodexThreadId,
+  embeddedChatGptUrl,
   chatGptSourceMode,
   linkError,
   targetError,
   onSelectCodexThread,
   onManualCodexThreadIdChange,
+  onEmbeddedChatGptUrlChange,
   onChatGptSourceModeChange,
   onSaveManualCodexThread,
   onChooseRepo,
@@ -143,7 +147,7 @@ export function StartPage({
               onProbeDesktopApps,
               onOpenAdvanced,
               onOpenSettings,
-              onOpenEmbeddedChatGpt,
+              onOpenEmbeddedChatGpt: () => onOpenEmbeddedChatGpt(),
               onConnectChrome,
               onCheckChromeConnection
             })}
@@ -173,19 +177,22 @@ export function StartPage({
         </div>
 
         {!sourceReady ? (
-          <div className="warning-band">
-            <span>{sourceBlockedCopy(chatGptSourceMode, setupStatus, matchingSourceComponent)}</span>
-            <button type="button" className="secondary-button" onClick={sourceAction(chatGptSourceMode, setupStatus, matchingSourceComponent, {
+          <SourceSetupPanel
+            mode={chatGptSourceMode}
+            setupStatus={setupStatus}
+            sourceComponent={matchingSourceComponent}
+            embeddedChatGptUrl={embeddedChatGptUrl}
+            onEmbeddedChatGptUrlChange={onEmbeddedChatGptUrlChange}
+            onOpenEmbeddedChatGpt={onOpenEmbeddedChatGpt}
+            onAction={sourceAction(chatGptSourceMode, setupStatus, matchingSourceComponent, {
               onProbeDesktopApps,
               onOpenAdvanced,
               onOpenSettings,
-              onOpenEmbeddedChatGpt,
+              onOpenEmbeddedChatGpt: () => onOpenEmbeddedChatGpt(),
               onConnectChrome,
               onCheckChromeConnection
-            })}>
-              {sourceActionLabel(chatGptSourceMode, setupStatus, matchingSourceComponent)}
-            </button>
-          </div>
+            })}
+          />
         ) : null}
 
         {sourceReady && repoReady && codexTarget ? (
@@ -278,6 +285,53 @@ function StartStep({
         {actionLabel}
       </button>
     </article>
+  );
+}
+
+function SourceSetupPanel({
+  mode,
+  setupStatus,
+  sourceComponent,
+  embeddedChatGptUrl,
+  onEmbeddedChatGptUrlChange,
+  onOpenEmbeddedChatGpt,
+  onAction
+}: {
+  mode: "chrome" | "desktop";
+  setupStatus?: SetupStatus | undefined;
+  sourceComponent?: LinkableComponent | undefined;
+  embeddedChatGptUrl: string;
+  onEmbeddedChatGptUrlChange(value: string): void;
+  onOpenEmbeddedChatGpt(url?: string): void;
+  onAction(): void;
+}): JSX.Element {
+  const showEmbeddedUrl = mode === "chrome" && !setupStatus?.extensionIdKnown && !setupStatus?.extensionConnected;
+  return (
+    <div className="warning-band stacked">
+      <div className="warning-row">
+        <span>{sourceBlockedCopy(mode, setupStatus, sourceComponent)}</span>
+        <button type="button" className="secondary-button" onClick={onAction}>
+          {sourceActionLabel(mode, setupStatus, sourceComponent)}
+        </button>
+      </div>
+      {showEmbeddedUrl ? (
+        <div className="inline-form">
+          <input
+            value={embeddedChatGptUrl}
+            onChange={(event) => onEmbeddedChatGptUrlChange(event.currentTarget.value)}
+            placeholder="Optional: paste an existing ChatGPT conversation URL"
+          />
+          <button
+            type="button"
+            className="secondary-button"
+            disabled={!embeddedChatGptUrl.trim()}
+            onClick={() => onOpenEmbeddedChatGpt(embeddedChatGptUrl)}
+          >
+            Open existing conversation
+          </button>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

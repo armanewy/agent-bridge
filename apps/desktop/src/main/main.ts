@@ -172,8 +172,8 @@ app.whenReady().then(async () => {
   });
   ipcMain.handle("agentbridge:openChromeExtensionsPage", () => openChromeExtensionsPage());
   ipcMain.handle("agentbridge:openChromeExtensionFolder", () => openChromeExtensionFolder());
-  ipcMain.handle("agentbridge:openEmbeddedChatGpt", async () => {
-    const window = await showEmbeddedChatGptWindow();
+  ipcMain.handle("agentbridge:openEmbeddedChatGpt", async (_event, input?: { url?: string }) => {
+    const window = await showEmbeddedChatGptWindow(input?.url);
     return sourceService.bindEmbeddedChatGptSource({
       title: window.getTitle() || "ChatGPT in AgentBridge",
       url: window.webContents.getURL() || "https://chatgpt.com/"
@@ -329,7 +329,8 @@ async function openDataFolder(dataDir: string): Promise<void> {
   await shell.openPath(dataDir);
 }
 
-async function showEmbeddedChatGptWindow(): Promise<BrowserWindow> {
+async function showEmbeddedChatGptWindow(rawUrl?: string): Promise<BrowserWindow> {
+  const targetUrl = normalizeChatGptUrl(rawUrl);
   if (!chatGptWindow || chatGptWindow.isDestroyed()) {
     chatGptWindow = new BrowserWindow({
       width: 1120,
@@ -346,7 +347,9 @@ async function showEmbeddedChatGptWindow(): Promise<BrowserWindow> {
     chatGptWindow.on("closed", () => {
       chatGptWindow = undefined;
     });
-    await chatGptWindow.loadURL("https://chatgpt.com/");
+    await chatGptWindow.loadURL(targetUrl);
+  } else if (rawUrl?.trim() && chatGptWindow.webContents.getURL() !== targetUrl) {
+    await chatGptWindow.loadURL(targetUrl);
   }
 
   if (chatGptWindow.isMinimized()) {
@@ -355,6 +358,22 @@ async function showEmbeddedChatGptWindow(): Promise<BrowserWindow> {
   chatGptWindow.show();
   chatGptWindow.focus();
   return chatGptWindow;
+}
+
+function normalizeChatGptUrl(rawUrl?: string): string {
+  const fallback = "https://chatgpt.com/";
+  if (!rawUrl?.trim()) {
+    return fallback;
+  }
+
+  const parsed = new URL(rawUrl.trim());
+  if (parsed.protocol !== "https:") {
+    throw new Error("ChatGPT URL must start with https://.");
+  }
+  if (parsed.hostname !== "chatgpt.com" && parsed.hostname !== "chat.openai.com") {
+    throw new Error("Paste a ChatGPT conversation URL from chatgpt.com.");
+  }
+  return parsed.toString();
 }
 
 async function openChromeExtensionsPage(): Promise<void> {

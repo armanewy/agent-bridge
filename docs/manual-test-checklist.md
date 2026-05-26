@@ -35,6 +35,7 @@
 - Simple Mode uses progressive disclosure: show ChatGPT source first, show repo only after the source is readable/synced, and show Codex only after a repo target exists.
 - With no extension configured, Start shows `Open ChatGPT here`.
 - Clicking `Open ChatGPT here` opens ChatGPT in an AgentBridge-owned window and binds it as the source.
+- Pasting an existing ChatGPT conversation URL and clicking `Open existing conversation` opens that conversation in the AgentBridge-owned window and binds that URL as the source.
 - After selecting text in that AgentBridge-owned ChatGPT window, `Capture selection` saves a real local capture without installing a browser extension.
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.

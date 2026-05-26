@@ -195,7 +195,7 @@ export interface AgentBridgeApi {
   openChromeExtensionInstall(): Promise<void>;
   openChromeExtensionsPage(): Promise<void>;
   openChromeExtensionFolder(): Promise<void>;
-  openEmbeddedChatGpt(): Promise<BrowserTabSource>;
+  openEmbeddedChatGpt(input?: { url?: string }): Promise<BrowserTabSource>;
   captureEmbeddedChatGptSelection(): Promise<Capture>;
   selectRepoFolder(): Promise<string | undefined>;
   openDataFolder(): Promise<void>;

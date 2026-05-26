@@ -500,10 +500,16 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async openChromeExtensionFolder() {
       return undefined;
     },
-    async openEmbeddedChatGpt() {
-      mockSources = [mockSource, ...mockSources.filter((source) => source.id !== mockSource.id)];
-      mockComponents = mergeMockComponents([mockBrowserTabComponent(mockSource), ...mockComponents]);
-      return mockSource;
+    async openEmbeddedChatGpt(input?: { url?: string }) {
+      const source = {
+        ...mockSource,
+        url: input?.url?.trim() || mockSource.url,
+        title: input?.url?.trim() ? "Existing ChatGPT conversation" : mockSource.title,
+        browser: "agentbridge" as const
+      };
+      mockSources = [source, ...mockSources.filter((item) => item.id !== source.id)];
+      mockComponents = mergeMockComponents([mockBrowserTabComponent(source), ...mockComponents]);
+      return source;
     },
     async captureEmbeddedChatGptSelection() {
       const capture = {

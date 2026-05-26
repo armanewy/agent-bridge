@@ -13,6 +13,7 @@
 - A Chrome extension can sync an existing ChatGPT tab as a source.
 - A Chrome extension can explicitly capture selected text.
 - AgentBridge can open ChatGPT in its own browser window, bind that window as a source, and capture selected text from it after a user click.
+- AgentBridge can open either a new ChatGPT session or a pasted existing ChatGPT conversation URL in its own browser window.
 - The native host persists browser sources and captures locally.
 - The desktop app lists real native-host captures by default; mock capture remains an explicit development action.
 - The desktop app offers `Create Task Card` after the user selects a capture and repo/agent target.

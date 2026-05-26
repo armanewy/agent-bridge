@@ -70,6 +70,7 @@ export function App(): JSX.Element {
   const [selectedTargetComponentId, setSelectedTargetComponentId] = useState<string | undefined>();
   const [selectedCodexThreadId, setSelectedCodexThreadId] = useState<string | undefined>();
   const [manualCodexThreadId, setManualCodexThreadId] = useState("");
+  const [embeddedChatGptUrl, setEmbeddedChatGptUrl] = useState("");
   const [chatGptSourceMode, setChatGptSourceMode] = useState<ChatGptSourceMode>("chrome");
   const [linkError, setLinkError] = useState<string | undefined>();
   const [discoveryWarnings, setDiscoveryWarnings] = useState<string[]>([]);
@@ -534,10 +535,10 @@ export function App(): JSX.Element {
     }
   }
 
-  async function openEmbeddedChatGpt(): Promise<void> {
+  async function openEmbeddedChatGpt(url?: string): Promise<void> {
     setLinkError(undefined);
     try {
-      const source = await api.openEmbeddedChatGpt();
+      const source = await api.openEmbeddedChatGpt({ ...(url?.trim() ? { url: url.trim() } : {}) });
       await discoverComponents();
       await refresh();
       setSelectedSourceComponentId(`component_source_${source.id}`);
@@ -625,11 +626,13 @@ export function App(): JSX.Element {
               selectedTargetComponentId={selectedTargetComponentId}
               selectedCodexThreadId={selectedCodexThreadId}
               manualCodexThreadId={manualCodexThreadId}
+              embeddedChatGptUrl={embeddedChatGptUrl}
               chatGptSourceMode={chatGptSourceMode}
               linkError={linkError}
               targetError={targetError}
               onSelectCodexThread={setSelectedCodexThreadId}
               onManualCodexThreadIdChange={setManualCodexThreadId}
+              onEmbeddedChatGptUrlChange={setEmbeddedChatGptUrl}
               onChatGptSourceModeChange={(mode) => {
                 setChatGptSourceMode(mode);
                 const nextSource = components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, mode) && !isDemoSourceComponent(component));
@@ -643,7 +646,7 @@ export function App(): JSX.Element {
               onOpenAdvanced={() => setView("advanced")}
               onOpenSettings={() => setView("settings")}
               onProbeDesktopApps={() => void discoverComponents()}
-              onOpenEmbeddedChatGpt={() => void openEmbeddedChatGpt()}
+              onOpenEmbeddedChatGpt={(url) => void openEmbeddedChatGpt(url)}
               onCaptureEmbeddedChatGptSelection={() => void captureEmbeddedChatGptSelection()}
               onConnectChrome={() => void connectChrome()}
               onCheckChromeConnection={() => void refresh()}
