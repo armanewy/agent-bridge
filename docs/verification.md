@@ -10,6 +10,7 @@ Mission verification is explicit and local. AgentBridge does not run commands au
 4. AgentBridge captures a git diff summary and runs configured commands.
 5. Outputs are saved as local Artifacts.
 6. A VerificationResult is saved on the Mission.
+7. If verification fails, AgentBridge drafts a follow-up HandoffCard but does not send it.
 
 ## Command Sources
 
@@ -36,3 +37,9 @@ Verification can create:
 - `lintOutput`
 - `typecheckOutput`
 - `terminalLog` for custom commands
+- `reviewNote` for the deterministic verification summary
+- `generatedPrompt` for a failed-verification follow-up draft
+
+## Follow-Up Drafts
+
+When a configured command fails, AgentBridge creates a `debuggingRequest` HandoffCard using the same mission, source, capture, target, constraints, and non-goals as the original card. The generated prompt includes failed commands and output excerpts. The user must approve and send it manually.

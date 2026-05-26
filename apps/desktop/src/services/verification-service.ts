@@ -5,9 +5,11 @@ import type {
   Artifact,
   ArtifactKind,
   CommandResult,
+  HandoffCard,
   Mission,
   Run,
   RunStep,
+  TaskSpec,
   VerificationCommand,
   VerificationPlan,
   VerificationResult
@@ -76,13 +78,20 @@ export class VerificationService {
 
     const resultStatus = resolveVerificationStatus(commandResults, commands.length);
     const completedAt = new Date().toISOString();
+    const summary = summarizeResult(commandResults, artifacts);
+    artifacts.push(await this.saveSummaryArtifact(mission.id, run.id, summary));
+    const followUp = resultStatus === "failed" ? await this.saveFollowUpDraft(mission, run.id, commandResults, summary, artifacts) : undefined;
+    if (followUp) {
+      artifacts.push(followUp.artifact);
+    }
+
     const result: VerificationResult = {
       id: `verification_${randomUUID()}`,
       missionId: mission.id,
       runId: run.id,
       status: resultStatus,
       commandResults,
-      summary: summarizeResult(commandResults, artifacts),
+      summary,
       artifactIds: artifacts.map((artifact) => artifact.id),
       createdAt: completedAt
     };
@@ -117,6 +126,7 @@ export class VerificationService {
       status: missionStatusForVerification(resultStatus),
       verificationPlan: plan,
       runIds: unique([...mission.runIds, run.id]),
+      handoffCardIds: unique([...mission.handoffCardIds, ...(followUp ? [followUp.card.id] : [])]),
       artifactIds: unique([...mission.artifactIds, ...artifacts.map((artifact) => artifact.id)]),
       updatedAt: completedAt
     });
@@ -166,6 +176,69 @@ export class VerificationService {
     };
     await this.store.saveArtifact(artifact);
     return artifact;
+  }
+
+  private async saveSummaryArtifact(missionId: string, runId: string, summary: string): Promise<Artifact> {
+    const artifact: Artifact = {
+      id: `artifact_${randomUUID()}`,
+      missionId,
+      runId,
+      kind: "reviewNote",
+      title: "Verification summary",
+      content: summary,
+      metadata: { generatedBy: "verification-service" },
+      createdAt: new Date().toISOString()
+    };
+    await this.store.saveArtifact(artifact);
+    return artifact;
+  }
+
+  private async saveFollowUpDraft(
+    mission: Mission,
+    runId: string,
+    commandResults: CommandResult[],
+    summary: string,
+    artifacts: Artifact[]
+  ): Promise<{ card: HandoffCard; artifact: Artifact } | undefined> {
+    const baseCard = (await this.store.listHandoffCardsForMission(mission.id))[0];
+    if (!baseCard) {
+      return undefined;
+    }
+
+    const taskSpec = createFollowUpTaskSpec(baseCard.taskSpec, commandResults, summary);
+    const prompt = renderFollowUpPrompt(taskSpec, baseCard, commandResults, artifacts);
+    const createdAt = new Date().toISOString();
+    const repoContext = baseCard.repoContext ?? mission.repoContext;
+    const artifact: Artifact = {
+      id: `artifact_${randomUUID()}`,
+      missionId: mission.id,
+      runId,
+      kind: "generatedPrompt",
+      title: "Follow-up prompt draft",
+      content: prompt,
+      metadata: { draft: true, reason: "verificationFailed", baseHandoffCardId: baseCard.id },
+      createdAt
+    };
+    await this.store.saveArtifact(artifact);
+
+    const card: HandoffCard = {
+      id: `card_${randomUUID()}`,
+      missionId: mission.id,
+      sourceId: baseCard.sourceId,
+      captureId: baseCard.captureId,
+      targetId: baseCard.targetId,
+      recipe: "debuggingRequest",
+      taskSpec,
+      generatedPrompt: prompt,
+      ...(repoContext ? { repoContext } : {}),
+      redactionFindings: [],
+      deliveryAttemptIds: [],
+      artifactIds: [artifact.id],
+      createdAt,
+      updatedAt: createdAt
+    };
+    await this.store.saveHandoffCard(card);
+    return { card, artifact };
   }
 }
 
@@ -222,14 +295,85 @@ function missionStatusForVerification(status: VerificationResult["status"]): Mis
 }
 
 function summarizeResult(commandResults: CommandResult[], artifacts: Artifact[]): string {
+  const changedFiles = artifacts
+    .flatMap((artifact) => (Array.isArray(artifact.metadata.changedFiles) ? artifact.metadata.changedFiles : []))
+    .filter((item): item is string => typeof item === "string");
+  const commandLines = commandResults.map(
+    (result) => `- ${result.kind}: ${result.command} => ${result.status}${typeof result.exitCode === "number" ? ` (${result.exitCode})` : ""}`
+  );
   const failed = commandResults.filter((result) => result.status === "failed");
-  if (failed.length > 0) {
-    return `Verification failed: ${failed.map((result) => `${result.kind} (${result.command})`).join(", ")}.`;
-  }
-  if (commandResults.length === 0) {
-    return "Verification needs review: no configured commands were run; git diff summary was captured.";
-  }
-  return `Verification passed: ${commandResults.length} command(s) completed successfully and ${artifacts.length} artifact(s) were saved.`;
+  const statusLine =
+    failed.length > 0 ? "Verification status: failed" : commandResults.length === 0 ? "Verification status: needs_review" : "Verification status: passed";
+  return [
+    statusLine,
+    `Files changed: ${changedFiles.length === 0 ? "unknown or none" : changedFiles.join(", ")}`,
+    "Commands run:",
+    commandLines.length === 0 ? "- none configured" : commandLines.join("\n"),
+    "Notable errors:",
+    failed.length === 0 ? "- none detected" : failed.map((result) => `- ${result.kind}: ${result.command}`).join("\n"),
+    "Acceptance criteria status: unknown without semantic review."
+  ].join("\n");
+}
+
+function createFollowUpTaskSpec(base: TaskSpec, commandResults: CommandResult[], summary: string): TaskSpec {
+  const failed = commandResults.filter((result) => result.status === "failed");
+  return {
+    title: `Fix verification failures: ${base.title}`,
+    goal: "Fix only the failed verification issue(s) from the previous run.",
+    background: [base.background, "", "Verification summary:", summary].join("\n"),
+    instructions: [
+      "Inspect the failed command output artifacts before editing.",
+      "Fix only the verification failure described in this follow-up.",
+      "Preserve the original task constraints and non-goals."
+    ],
+    requirements: failed.map((result) => `Make ${result.kind} pass: ${result.command}`),
+    constraints: base.constraints,
+    nonGoals: unique([...base.nonGoals, "Do not expand scope beyond the failed verification result."]),
+    acceptanceCriteria: failed.map((result) => `${result.kind} command passes: ${result.command}`),
+    suggestedFiles: base.suggestedFiles,
+    verificationSteps: failed.map((result) => `Run ${result.command}`),
+    expectedSummaryFormat: base.expectedSummaryFormat
+  };
+}
+
+function renderFollowUpPrompt(
+  taskSpec: TaskSpec,
+  baseCard: HandoffCard,
+  commandResults: CommandResult[],
+  artifacts: Artifact[]
+): string {
+  const failed = commandResults.filter((result) => result.status === "failed");
+  return [
+    "Goal",
+    taskSpec.goal,
+    "",
+    "Background",
+    taskSpec.background,
+    "",
+    "Requirements",
+    ...taskSpec.requirements.map((item) => `- ${item}`),
+    "",
+    "Constraints",
+    ...taskSpec.constraints.map((item) => `- ${item}`),
+    "",
+    "Non-goals",
+    ...taskSpec.nonGoals.map((item) => `- ${item}`),
+    "",
+    "Failed command output excerpts",
+    ...failed.map((result) => renderFailedCommand(result, artifacts)),
+    "",
+    "Original handoff card",
+    baseCard.id,
+    "",
+    "Expected final response format",
+    taskSpec.expectedSummaryFormat
+  ].join("\n");
+}
+
+function renderFailedCommand(result: CommandResult, artifacts: Artifact[]): string {
+  const artifact = result.outputArtifactId ? artifacts.find((item) => item.id === result.outputArtifactId) : undefined;
+  const excerpt = artifact?.content?.slice(0, 2000) ?? "No output artifact found.";
+  return [`- ${result.kind}: ${result.command}`, "```", excerpt, "```"].join("\n");
 }
 
 function artifactKindForCommand(kind: VerificationCommand["kind"]): ArtifactKind {
