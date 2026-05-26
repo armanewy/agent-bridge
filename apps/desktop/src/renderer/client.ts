@@ -17,11 +17,13 @@ import type {
   Capture,
   CodexDeepLinkTarget,
   Link,
+  LinkableComponent,
   AuditEvent,
   Mission,
   RepoContextPack,
   SourceEndpoint,
   TargetEndpoint,
+  WorkflowLink,
   WindowsDesktopWindowTarget
 } from "@agentbridge/core";
 
@@ -49,6 +51,8 @@ const mockCapture: Capture = {
 let mockSources: SourceEndpoint[] = [mockSource];
 let mockTargets: TargetEndpoint[] = [];
 let mockLinks: Link[] = [];
+let mockWorkflowLinks: WorkflowLink[] = [];
+let mockComponents: LinkableComponent[] = [mockBrowserTabComponent(mockSource)];
 let mockCaptures: Capture[] = [mockCapture];
 let mockAuditEvents: AuditEvent[] = [];
 let mockMissions: Mission[] = [];
@@ -70,6 +74,52 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async listLinks() {
       return mockLinks;
     },
+    async listLinkableComponents() {
+      return mockComponents;
+    },
+    async discoverLinkableComponents() {
+      mockComponents = mergeMockComponents([
+        ...mockComponents,
+        ...mockSources.map((source) => mockBrowserTabComponent(source)),
+        ...mockTargets.flatMap((target) => {
+          const components = [mockTargetComponent(target)];
+          if (target.kind === "codexDeepLink") {
+            components.push(mockRepoComponent(createMockRepoContext(target.repoPath), `mock_${target.id}`));
+          }
+          return components;
+        })
+      ]);
+      return { components: mockComponents, warnings: [] };
+    },
+    async listWorkflowLinks() {
+      return mockWorkflowLinks;
+    },
+    async createWorkflowLink(input) {
+      const link: WorkflowLink = {
+        id: `workflow_${mockWorkflowLinks.length + 1}`,
+        ...input,
+        verificationCommandDefaults: input.verificationCommandDefaults ?? [],
+        enabled: true,
+        createdAt: now(),
+        updatedAt: now()
+      };
+      mockWorkflowLinks = [link, ...mockWorkflowLinks];
+      return link;
+    },
+    async createTaskFromWorkflowLink(input) {
+      const link = mockWorkflowLinks.find((item) => item.id === input.workflowLinkId);
+      if (!link) {
+        throw new Error("Workflow link not found.");
+      }
+      const sourceComponent = mockComponents.find((item) => item.id === link.sourceComponentId);
+      const targetComponent = mockComponents.find((item) => item.id === link.targetComponentId);
+      const capture = mockCaptures.find((item) => item.sourceId === sourceComponent?.backingRef.sourceId);
+      const targetId = targetComponent?.backingRef.targetId;
+      if (!capture || !targetId) {
+        throw new Error("Capture selected text first before creating a Task Card from this link.");
+      }
+      return this.previewHandoff({ captureId: capture.id, targetId, recipe: link.recipe });
+    },
     async listCaptures() {
       return mockCaptures;
     },
@@ -82,6 +132,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async bindMockBrowserSource() {
       mockSources = [mockSource];
       mockCaptures = [mockCapture];
+      mockComponents = mergeMockComponents([...mockComponents, mockBrowserTabComponent(mockSource)]);
       mockAuditEvents = [
         {
           id: `audit_${mockAuditEvents.length + 1}`,
@@ -230,6 +281,11 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         boundAt: now()
       };
       mockTargets = [target, ...mockTargets];
+      mockComponents = mergeMockComponents([
+        ...mockComponents,
+        mockTargetComponent(target),
+        mockRepoComponent(createMockRepoContext(repoPath), `mock_${target.id}`)
+      ]);
       mockAuditEvents = [
         {
           id: `audit_${mockAuditEvents.length + 1}`,
@@ -382,6 +438,8 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       mockSources = [mockSource];
       mockTargets = [];
       mockLinks = [];
+      mockWorkflowLinks = [];
+      mockComponents = [mockBrowserTabComponent(mockSource)];
       mockCaptures = [mockCapture];
       mockAuditEvents = [];
       mockMissions = [];
@@ -393,6 +451,119 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async clearAuditEvents() {
       mockAuditEvents = [];
     }
+  };
+}
+
+function mergeMockComponents(components: LinkableComponent[]): LinkableComponent[] {
+  const byId = new Map<string, LinkableComponent>();
+  for (const component of components) {
+    byId.set(component.id, component);
+  }
+  return [...byId.values()];
+}
+
+function mockBrowserTabComponent(source: BrowserTabSource): LinkableComponent {
+  const provider = source.url.includes("chatgpt.com") ? "chatgpt" : "browser";
+  return {
+    id: `component_source_${source.id}`,
+    kind: "browserTab",
+    label: source.title || "Browser tab",
+    subtitle: new URL(source.url).hostname,
+    provider,
+    roleCapabilities: {
+      canBeSource: true,
+      canBeTarget: false,
+      canBeWorkspace: false,
+      canCapture: true,
+      canDeliver: false,
+      canVerify: false,
+      canObserve: false
+    },
+    riskLevel: "low",
+    status: "available",
+    compatibilityScore: provider === "chatgpt" ? 90 : 72,
+    backingRef: { sourceId: source.id },
+    metadata: { url: source.url, title: source.title },
+    discoveredAt: source.boundAt,
+    updatedAt: source.boundAt
+  };
+}
+
+function mockTargetComponent(target: TargetEndpoint): LinkableComponent {
+  if (target.kind === "codexDeepLink") {
+    return {
+      id: `component_target_${target.id}`,
+      kind: "agentTarget",
+      label: "Codex",
+      subtitle: "Official deep-link target",
+      provider: "codex",
+      roleCapabilities: {
+        canBeSource: false,
+        canBeTarget: true,
+        canBeWorkspace: false,
+        canCapture: false,
+        canDeliver: true,
+        canVerify: false,
+        canObserve: false
+      },
+      riskLevel: "low",
+      status: "available",
+      compatibilityScore: 96,
+      backingRef: { targetId: target.id, repoPath: target.repoPath },
+      metadata: { repoPath: target.repoPath, delivery: "codex://" },
+      discoveredAt: target.boundAt,
+      updatedAt: target.boundAt
+    };
+  }
+
+  return {
+    id: `component_target_${target.kind}`,
+    kind: "desktopWindow",
+    label: target.kind,
+    subtitle: "Mock target",
+    provider: "unknown",
+    roleCapabilities: {
+      canBeSource: false,
+      canBeTarget: true,
+      canBeWorkspace: false,
+      canCapture: false,
+      canDeliver: false,
+      canVerify: false,
+      canObserve: false
+    },
+    riskLevel: "medium",
+    status: "unsupported",
+    compatibilityScore: 30,
+    backingRef: {},
+    metadata: { kind: target.kind },
+    discoveredAt: now(),
+    updatedAt: now()
+  };
+}
+
+function mockRepoComponent(repoContext: RepoContextPack, idSuffix: string): LinkableComponent {
+  return {
+    id: `component_repo_${idSuffix}`,
+    kind: "repo",
+    label: repoContext.repoName ?? repoContext.repoPath,
+    subtitle: `${repoContext.currentBranch ?? "branch unknown"} · ${repoContext.gitStatusSummary ?? "repo"}`,
+    provider: "repo",
+    roleCapabilities: {
+      canBeSource: false,
+      canBeTarget: false,
+      canBeWorkspace: true,
+      canCapture: false,
+      canDeliver: false,
+      canVerify: true,
+      canObserve: false
+    },
+    riskLevel: "low",
+    status: "available",
+    compatibilityScore: 92,
+    backingRef: { repoPath: repoContext.repoPath },
+    metadata: repoContext,
+    discoveredAt: now(),
+    updatedAt: now()
   };
 }
 

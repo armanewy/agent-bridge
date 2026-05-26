@@ -9,12 +9,14 @@ import {
   HandoffSchema,
   HandoffCardSchema,
   LinkSchema,
+  LinkableComponentSchema,
   MissionSchema,
   RunSchema,
   RunStepSchema,
   SourceEndpointSchema,
   TargetEndpointSchema,
   VerificationResultSchema,
+  WorkflowLinkSchema,
   type Approval,
   type Artifact,
   type AuditEvent,
@@ -22,6 +24,7 @@ import {
   type Handoff,
   type HandoffCard,
   type Link,
+  type LinkableComponent,
   type DeliveryAttempt,
   DeliveryAttemptSchema,
   type Mission,
@@ -31,16 +34,24 @@ import {
   type Setting,
   type SourceEndpoint,
   type TargetEndpoint,
-  type VerificationResult
+  type VerificationResult,
+  type WorkflowLink
 } from "@agentbridge/core";
 
-export const CURRENT_STORE_VERSION = 2;
+export const CURRENT_STORE_VERSION = 3;
 
 export interface LocalStore {
   saveLink(link: Link): Promise<void>;
   getLink(id: string): Promise<Link | undefined>;
   listLinks(): Promise<Link[]>;
   deleteLink(id: string): Promise<boolean>;
+  saveLinkableComponent(component: LinkableComponent): Promise<void>;
+  getLinkableComponent(id: string): Promise<LinkableComponent | undefined>;
+  listLinkableComponents(): Promise<LinkableComponent[]>;
+  saveWorkflowLink(link: WorkflowLink): Promise<void>;
+  getWorkflowLink(id: string): Promise<WorkflowLink | undefined>;
+  listWorkflowLinks(): Promise<WorkflowLink[]>;
+  deleteWorkflowLink(id: string): Promise<boolean>;
   saveSource(source: SourceEndpoint): Promise<void>;
   getSource(id: string): Promise<SourceEndpoint | undefined>;
   listSources(): Promise<SourceEndpoint[]>;
@@ -87,6 +98,8 @@ export interface LocalStore {
 interface StoreData {
   version: number;
   links: Record<string, Link>;
+  linkableComponents: Record<string, LinkableComponent>;
+  workflowLinks: Record<string, WorkflowLink>;
   sources: Record<string, SourceEndpoint>;
   targets: Record<string, TargetEndpoint>;
   captures: Record<string, Capture>;
@@ -130,6 +143,45 @@ export class JsonFileStore implements LocalStore {
     await this.update((data) => {
       deleted = Object.hasOwn(data.links, id);
       delete data.links[id];
+    });
+    return deleted;
+  }
+
+  async saveLinkableComponent(component: LinkableComponent): Promise<void> {
+    LinkableComponentSchema.parse(component);
+    await this.update((data) => {
+      data.linkableComponents[component.id] = component;
+    });
+  }
+
+  async getLinkableComponent(id: string): Promise<LinkableComponent | undefined> {
+    return (await this.read()).linkableComponents[id];
+  }
+
+  async listLinkableComponents(): Promise<LinkableComponent[]> {
+    return Object.values((await this.read()).linkableComponents).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async saveWorkflowLink(link: WorkflowLink): Promise<void> {
+    WorkflowLinkSchema.parse(link);
+    await this.update((data) => {
+      data.workflowLinks[link.id] = link;
+    });
+  }
+
+  async getWorkflowLink(id: string): Promise<WorkflowLink | undefined> {
+    return (await this.read()).workflowLinks[id];
+  }
+
+  async listWorkflowLinks(): Promise<WorkflowLink[]> {
+    return Object.values((await this.read()).workflowLinks).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  }
+
+  async deleteWorkflowLink(id: string): Promise<boolean> {
+    let deleted = false;
+    await this.update((data) => {
+      deleted = Object.hasOwn(data.workflowLinks, id);
+      delete data.workflowLinks[id];
     });
     return deleted;
   }
@@ -414,6 +466,8 @@ export function createEmptyStore(): StoreData {
   return {
     version: CURRENT_STORE_VERSION,
     links: {},
+    linkableComponents: {},
+    workflowLinks: {},
     sources: {},
     targets: {},
     captures: {},

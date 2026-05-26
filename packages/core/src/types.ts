@@ -15,6 +15,67 @@ export const LinkSchema = z.object({
 });
 export type Link = z.infer<typeof LinkSchema>;
 
+export const LinkableComponentKindSchema = z.enum([
+  "browserTab",
+  "desktopWindow",
+  "repo",
+  "agentTarget",
+  "terminal",
+  "ide",
+  "unknown"
+]);
+export type LinkableComponentKind = z.infer<typeof LinkableComponentKindSchema>;
+
+export const ComponentProviderSchema = z.enum([
+  "chatgpt",
+  "claude",
+  "gemini",
+  "github",
+  "codex",
+  "vscode",
+  "cursor",
+  "terminal",
+  "repo",
+  "browser",
+  "unknown"
+]);
+export type ComponentProvider = z.infer<typeof ComponentProviderSchema>;
+
+export const ComponentRoleCapabilitiesSchema = z.object({
+  canBeSource: z.boolean(),
+  canBeTarget: z.boolean(),
+  canBeWorkspace: z.boolean(),
+  canCapture: z.boolean(),
+  canDeliver: z.boolean(),
+  canVerify: z.boolean(),
+  canObserve: z.boolean()
+});
+export type ComponentRoleCapabilities = z.infer<typeof ComponentRoleCapabilitiesSchema>;
+
+export const LinkableComponentSchema = z.object({
+  id: z.string().min(1),
+  kind: LinkableComponentKindSchema,
+  label: z.string().min(1),
+  subtitle: z.string(),
+  provider: ComponentProviderSchema,
+  roleCapabilities: ComponentRoleCapabilitiesSchema,
+  riskLevel: z.enum(["low", "medium", "high"]),
+  status: z.enum(["available", "permission_needed", "unsupported", "unavailable"]),
+  compatibilityScore: z.number().int().min(0).max(100),
+  backingRef: z.object({
+    sourceId: z.string().optional(),
+    targetId: z.string().optional(),
+    repoPath: z.string().optional(),
+    hwnd: z.string().optional(),
+    tabId: z.number().int().optional(),
+    windowId: z.number().int().optional()
+  }),
+  metadata: z.record(z.unknown()),
+  discoveredAt: TimestampSchema,
+  updatedAt: TimestampSchema
+});
+export type LinkableComponent = z.infer<typeof LinkableComponentSchema>;
+
 export const BrowserTabSourceSchema = z.object({
   id: z.string().min(1),
   kind: z.literal("browserTab"),
@@ -151,6 +212,20 @@ export const VerificationCommandSchema = z.object({
   cwd: z.string().optional()
 });
 export type VerificationCommand = z.infer<typeof VerificationCommandSchema>;
+
+export const WorkflowLinkSchema = z.object({
+  id: z.string().min(1),
+  name: z.string().min(1),
+  sourceComponentId: z.string().min(1),
+  workspaceComponentId: z.string().optional(),
+  targetComponentId: z.string().min(1),
+  recipe: z.enum(["rawRelay", "implementationBrief", "codeReviewRequest", "debuggingRequest"]),
+  verificationCommandDefaults: z.array(VerificationCommandSchema).default([]),
+  enabled: z.boolean(),
+  createdAt: TimestampSchema,
+  updatedAt: TimestampSchema
+});
+export type WorkflowLink = z.infer<typeof WorkflowLinkSchema>;
 
 export const VerificationPlanSchema = z.object({
   commands: z.array(VerificationCommandSchema),

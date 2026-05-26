@@ -4,6 +4,8 @@
 
 Mission-first objects now sit above the original handoff router model:
 
+- `LinkableComponent`: user-visible thing AgentBridge can connect, such as a browser tab, repo, desktop window, or agent target.
+- `WorkflowLink`: reusable route between components, such as ChatGPT tab -> repo -> Codex.
 - `Mission`: durable user task.
 - `HandoffCard`: one target-agent dispatch inside a mission.
 - `TaskSpec`: structured agent-ready task generated from a capture.
@@ -13,9 +15,63 @@ Mission-first objects now sit above the original handoff router model:
 
 The legacy `Handoff` remains for compatibility and can reference `missionId` and `handoffCardId`.
 
+### LinkableComponent
+
+```ts
+interface LinkableComponent {
+  id: string;
+  kind: "browserTab" | "desktopWindow" | "repo" | "agentTarget" | "terminal" | "ide" | "unknown";
+  label: string;
+  subtitle: string;
+  provider: "chatgpt" | "claude" | "gemini" | "github" | "codex" | "vscode" | "cursor" | "terminal" | "repo" | "browser" | "unknown";
+  roleCapabilities: {
+    canBeSource: boolean;
+    canBeTarget: boolean;
+    canBeWorkspace: boolean;
+    canCapture: boolean;
+    canDeliver: boolean;
+    canVerify: boolean;
+    canObserve: boolean;
+  };
+  riskLevel: "low" | "medium" | "high";
+  status: "available" | "permission_needed" | "unsupported" | "unavailable";
+  compatibilityScore: number;
+  backingRef: {
+    sourceId?: string;
+    targetId?: string;
+    repoPath?: string;
+    hwnd?: string;
+    tabId?: number;
+    windowId?: number;
+  };
+  metadata: Record<string, unknown>;
+  discoveredAt: string;
+  updatedAt: string;
+}
+```
+
+### WorkflowLink
+
+A user-facing reusable route. Task Cards are created from workflow links after an explicit capture exists.
+
+```ts
+interface WorkflowLink {
+  id: string;
+  name: string;
+  sourceComponentId: string;
+  workspaceComponentId?: string;
+  targetComponentId: string;
+  recipe: "rawRelay" | "implementationBrief" | "codeReviewRequest" | "debuggingRequest";
+  verificationCommandDefaults: VerificationCommand[];
+  enabled: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+```
+
 ### Link
 
-A saved route from one source endpoint to one target endpoint with a selected transform and delivery policy.
+Legacy saved route from one source endpoint to one target endpoint with a selected transform and delivery policy. `WorkflowLink` is the preferred user-facing route.
 
 ```ts
 interface Link {

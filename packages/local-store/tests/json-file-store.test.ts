@@ -10,9 +10,11 @@ import type {
   Handoff,
   HandoffCard,
   Link,
+  LinkableComponent,
   Mission,
   TaskSpec,
-  VerificationResult
+  VerificationResult,
+  WorkflowLink
 } from "@agentbridge/core";
 
 let tempDir: string;
@@ -45,6 +47,54 @@ describe("JsonFileStore", () => {
 
     expect(await store.getLink("link_1")).toEqual(link);
     expect(await store.listLinks()).toHaveLength(1);
+  });
+
+  it("roundtrips linkable components and workflow links", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    const component: LinkableComponent = {
+      id: "component_source_1",
+      kind: "browserTab",
+      label: "ChatGPT - AgentBridge",
+      subtitle: "chatgpt.com",
+      provider: "chatgpt",
+      roleCapabilities: {
+        canBeSource: true,
+        canBeTarget: false,
+        canBeWorkspace: false,
+        canCapture: true,
+        canDeliver: false,
+        canVerify: false,
+        canObserve: false
+      },
+      riskLevel: "low",
+      status: "available",
+      compatibilityScore: 90,
+      backingRef: { sourceId: "src_1", tabId: 10 },
+      metadata: { url: "https://chatgpt.com/" },
+      discoveredAt: now,
+      updatedAt: now
+    };
+    const workflowLink: WorkflowLink = {
+      id: "workflow_1",
+      name: "ChatGPT to Codex",
+      sourceComponentId: component.id,
+      workspaceComponentId: "component_repo_1",
+      targetComponentId: "component_target_1",
+      recipe: "implementationBrief",
+      verificationCommandDefaults: [{ kind: "test", command: "pnpm test" }],
+      enabled: true,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    await store.saveLinkableComponent(component);
+    await store.saveWorkflowLink(workflowLink);
+
+    expect(await store.getLinkableComponent(component.id)).toEqual(component);
+    expect(await store.listLinkableComponents()).toEqual([component]);
+    expect(await store.getWorkflowLink(workflowLink.id)).toEqual(workflowLink);
+    expect(await store.listWorkflowLinks()).toEqual([workflowLink]);
   });
 
   it("saves handoffs and audit events", async () => {

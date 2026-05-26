@@ -17,6 +17,8 @@ Tests use temporary directories.
 ## Stored Records
 
 - links
+- linkable components
+- workflow links
 - source and target endpoint records through links and handoffs
 - handoffs
 - delivery attempts
@@ -33,7 +35,7 @@ Tests use temporary directories.
 
 The store exposes record-level deletion for links and handoffs, and a clear-audit operation for audit logs. Users should also be able to delete the local data directory when the desktop UI is implemented.
 
-Store version 2 is non-destructive. Older JSON stores without mission-first sections load with empty v2 records.
+Store version 3 is non-destructive. Older JSON stores without mission-first or link-center sections load with empty records for missing sections.
 
 ## Secret Storage Policy
 

@@ -18,7 +18,8 @@ AgentBridge is intended to run as a desktop application. `http://127.0.0.1:5173`
 
 ```text
 Browser selected text
--> Capture Inbox
+-> Linkable Component
+-> Workflow Link
 -> Task Card
 -> TaskSpec
 -> RepoContextPack
@@ -34,7 +35,7 @@ Browser selected text
 
 The default desktop UI is Simple Mode:
 
-- Inbox: pick a capture, see the selected repo/agent, and create a Task Card.
+- Connect: detect linkable browser tabs, repos, desktop windows, and agent targets; create reusable routes such as `ChatGPT tab -> repo -> Codex`.
 - Tasks: inspect task history, generated prompts, artifacts, verification results, and follow-up drafts.
 - Settings: connect Chrome, choose a repo, configure Codex, and set verification commands.
 - Advanced: raw Sources, Targets, Links, and Audit views for debugging the local pipeline.
@@ -68,18 +69,22 @@ dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj
 
 ## Current Status
 
-Waves 1-12 are implemented through desktop packaging and service masking:
+Waves 1-13 are implemented through desktop packaging, service masking, and the Link Center:
 
-- Mission-first core schemas and v2 local persistence.
+- LinkableComponent and WorkflowLink schemas with local persistence.
+- Connect-first UI with Browser Tabs, Repos / Workspaces, Desktop Windows / Agents, and Links sections.
+- Explicit extension action for optional browser-tab discovery; content capture remains user-triggered.
+- Desktop component discovery for saved browser sources, Codex targets, repo context, and Windows windows where the UIA helper is available.
+- Mission-first core schemas and v3 local persistence.
 - Deterministic TaskSpec compiler and Codex prompt renderer.
 - Repo context pack with branch/status/changed-files and verification command settings.
-- Desktop Inbox, Tasks, Settings, Advanced mode, artifact viewer, and verification preflight.
+- Desktop Connect, Tasks, Settings, Advanced mode, artifact viewer, and verification preflight.
 - Mission-aware Codex delivery attempts and audit provenance.
 - User-triggered verification runner that stores git diff and command output artifacts.
 - Failed verification creates a visible, sendable follow-up HandoffCard.
 - Extension capture uses `activeTab`, `scripting`, and `nativeMessaging` without broad content scripts.
 - Extension keyboard command and desktop quick actions open the task-card flow without navigating the dashboard.
-- Default desktop navigation is Inbox, Tasks, Settings, and Advanced instead of exposing internals first.
+- Default desktop navigation is Connect, Tasks, Settings, and Advanced instead of exposing internals first.
 - Electron packaging produces a Windows unpacked app target with bundled native-host and Windows UIA helper resources.
 - Settings presents Chrome/repo/Codex onboarding with diagnostics behind Advanced details.
 

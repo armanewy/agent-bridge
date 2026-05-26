@@ -71,7 +71,7 @@ export function SetupPanel({
           </button>
           {isReady ? (
             <button type="button" className="secondary-button" onClick={onGoToInbox}>
-              Go to Inbox
+              Go to Connect
             </button>
           ) : null}
         </div>
@@ -132,7 +132,7 @@ function setupSteps(status?: SetupStatus): SetupStep[] {
     {
       id: "testCapture",
       title: "Capture a test selection",
-      description: "Select text in Chrome, click AgentBridge capture or press Ctrl+Shift+Y, then confirm it appears in Inbox.",
+      description: "Select text in Chrome, click AgentBridge capture or press Ctrl+Shift+Y, then confirm it appears in Connect under the selected source.",
       status: get("extensionHealth") === "ready" ? "ready" : "warning",
       optional: true
     },

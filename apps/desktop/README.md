@@ -28,7 +28,8 @@ This builds:
 
 ## Current Flow
 
-- Inbox creates Task Cards from explicit browser captures.
+- Connect detects linkable components and creates reusable Workflow Links.
+- Workflow Links create Task Cards from explicit browser captures.
 - Settings connects Chrome and configures the repo/Codex target.
 - Tasks shows task history, artifacts, verification, and follow-up drafts.
 - Advanced contains raw source/target/link/audit diagnostics.

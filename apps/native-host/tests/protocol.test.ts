@@ -37,4 +37,31 @@ describe("native host protocol", () => {
     expect(response.capture?.text).toBe("selected text");
     expect(response.capture?.userTriggered).toBe(true);
   });
+
+  it("converts discovered browser tabs into linkable components", async () => {
+    const response = await handleNativeHostMessage(
+      {
+        type: "browserTabsDiscovered",
+        permissionMode: "allTabs",
+        tabs: [
+          {
+            kind: "browserTab",
+            browser: "chrome",
+            tabId: 9,
+            windowId: 1,
+            title: "ChatGPT - Notes",
+            url: "https://chatgpt.com/"
+          }
+        ]
+      },
+      { now: () => "2026-01-01T00:00:00.000Z" }
+    );
+
+    expect(response.ok).toBe(true);
+    expect(response.components?.[0]).toMatchObject({
+      kind: "browserTab",
+      provider: "chatgpt",
+      roleCapabilities: { canBeSource: true, canCapture: true }
+    });
+  });
 });

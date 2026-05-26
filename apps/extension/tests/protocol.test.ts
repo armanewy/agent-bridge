@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildBindSourceMessage, buildCaptureMessage } from "../src/protocol.js";
+import { buildBindSourceMessage, buildBrowserTabsDiscoveredMessage, buildCaptureMessage } from "../src/protocol.js";
 
 describe("extension protocol", () => {
   it("builds bindSource messages from active tab metadata", () => {
@@ -29,5 +29,27 @@ describe("extension protocol", () => {
 
   it("rejects empty selected-text captures", () => {
     expect(() => buildCaptureMessage({ url: "https://example.com" }, "  ")).toThrow("No selected text");
+  });
+
+  it("builds browser tab discovery messages", () => {
+    const message = buildBrowserTabsDiscoveredMessage(
+      [
+        {
+          id: 11,
+          windowId: 4,
+          title: "ChatGPT",
+          url: "https://chatgpt.com/",
+          active: true
+        }
+      ],
+      "allTabs",
+      "2026-01-01T00:00:00.000Z"
+    );
+
+    expect(message).toMatchObject({
+      type: "browserTabsDiscovered",
+      permissionMode: "allTabs",
+      tabs: [{ tabId: 11, title: "ChatGPT", url: "https://chatgpt.com/" }]
+    });
   });
 });

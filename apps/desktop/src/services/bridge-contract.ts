@@ -7,6 +7,7 @@ import type {
   HandoffCard,
   Handoff,
   Link,
+  LinkableComponent,
   Mission,
   Run,
   VerificationCommand,
@@ -15,7 +16,8 @@ import type {
   TargetEndpoint,
   WindowsDesktopWindowTarget,
   AuditEvent,
-  VerificationResult
+  VerificationResult,
+  WorkflowLink
 } from "@agentbridge/core";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 
@@ -23,6 +25,11 @@ export interface WindowRevalidation {
   status: "available" | "changed" | "unavailable";
   warnings: string[];
   current?: WindowsDesktopWindowTarget;
+}
+
+export interface ComponentDiscoveryResponse {
+  components: LinkableComponent[];
+  warnings: string[];
 }
 
 export interface PreviewRequest {
@@ -118,6 +125,18 @@ export interface AgentBridgeApi {
   listSources(): Promise<SourceEndpoint[]>;
   listTargets(): Promise<TargetEndpoint[]>;
   listLinks(): Promise<Link[]>;
+  listLinkableComponents(): Promise<LinkableComponent[]>;
+  discoverLinkableComponents(): Promise<ComponentDiscoveryResponse>;
+  listWorkflowLinks(): Promise<WorkflowLink[]>;
+  createWorkflowLink(input: {
+    name: string;
+    sourceComponentId: string;
+    workspaceComponentId?: string;
+    targetComponentId: string;
+    recipe: WorkflowLink["recipe"];
+    verificationCommandDefaults?: VerificationCommand[];
+  }): Promise<WorkflowLink>;
+  createTaskFromWorkflowLink(input: { workflowLinkId: string }): Promise<DeliveryPreview>;
   listCaptures(): Promise<Capture[]>;
   listMissions(): Promise<Mission[]>;
   getMissionDetail(id: string): Promise<MissionDetail | undefined>;

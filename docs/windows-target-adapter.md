@@ -24,6 +24,8 @@ Window metadata should include:
 - `className`
 - visibility/minimized state where available
 
+The desktop discovery service maps top-level windows into `LinkableComponent` records with app classification, capability badges, compatibility score, and risk level. Codex is shown as a preferred deep-link target when a repo is selected; terminal-like windows are detected but marked high risk.
+
 ## Target Binding
 
 - User selects a window or binds the foreground window.
@@ -84,3 +86,4 @@ Clipboard and send-key strategies must never be the default.
 - Terminal controls may not support safe text insertion through UIA.
 - Tabs inside native apps may not be visible as top-level UIA targets.
 - Clipboard fallback can leak sensitive text if not approved and restored carefully.
+- Window detection does not imply safe delivery. The Link Center must distinguish detected, compatible, linkable, actionable, and reliable components.

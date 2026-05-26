@@ -4,6 +4,7 @@
   "version": "0.1.0",
   "description": "Explicitly capture selected browser text for local AgentBridge Task Cards.",
   "permissions": ["activeTab", "scripting", "nativeMessaging"],
+  "optional_permissions": ["tabs"],
   "background": {
     "service_worker": "dist/src/service-worker.js",
     "type": "module"

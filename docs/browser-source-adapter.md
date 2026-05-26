@@ -7,6 +7,7 @@
 - Content script handles explicit selected-text reads and page-adapter extraction when invoked.
 - Popup/action UI exposes user-triggered commands:
   - bind current tab as source
+  - discover browser tabs for the Link Center
   - capture selected text
   - capture latest message where a page adapter supports it
 - Native messaging client sends structured events to the local AgentBridge host over Chrome native messaging.
@@ -17,6 +18,7 @@
 - Use `scripting` only when needed to inject/read selection on explicit actions.
 - Use `nativeMessaging` for local companion communication.
 - Do not request broad host permissions by default.
+- Optional all-tab discovery uses Chrome's optional `tabs` permission only after the user clicks "Discover browser tabs". If the user declines, AgentBridge falls back to the active tab path.
 - Request host permissions only for specific supported AI/web apps and only when a page adapter needs them.
 
 ## Source Binding Behavior
@@ -85,6 +87,28 @@ No background polling, repeated harvesting, or silent extraction is allowed.
   "userTriggered": true
 }
 ```
+
+### `browserTabsDiscovered`
+
+```json
+{
+  "type": "browserTabsDiscovered",
+  "permissionMode": "allTabs",
+  "tabs": [
+    {
+      "kind": "browserTab",
+      "browser": "chrome",
+      "tabId": 123,
+      "windowId": 45,
+      "title": "ChatGPT - AgentBridge notes",
+      "url": "https://chatgpt.com/",
+      "active": true
+    }
+  ]
+}
+```
+
+Discovery stores tab metadata as `LinkableComponent` records. It does not read page content.
 
 ### `getSourceStatus`
 

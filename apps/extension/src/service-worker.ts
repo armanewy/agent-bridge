@@ -1,4 +1,10 @@
-import { buildBindSourceMessage, buildCaptureMessage, type ExtensionMessage, type NativeHostMessage } from "./protocol.js";
+import {
+  buildBindSourceMessage,
+  buildBrowserTabsDiscoveredMessage,
+  buildCaptureMessage,
+  type ExtensionMessage,
+  type NativeHostMessage
+} from "./protocol.js";
 import { extractLatestChatGptAssistantMessage } from "./page-adapters/chatgpt.js";
 
 const nativeHostName = "com.agentbridge.native_host";
@@ -29,6 +35,10 @@ async function handleMessage(message: ExtensionMessage): Promise<unknown> {
       const tab = await getActiveTab();
       return sendNative(buildBindSourceMessage(tab));
     }
+    case "ui.discoverTabs": {
+      const { tabs, permissionMode } = await discoverTabs();
+      return sendNative(buildBrowserTabsDiscoveredMessage(tabs, permissionMode));
+    }
     case "ui.captureSelection": {
       const tab = await getActiveTab();
       if (typeof tab.id !== "number") {
@@ -46,6 +56,23 @@ async function handleMessage(message: ExtensionMessage): Promise<unknown> {
       return sendNative(buildCaptureMessage(tab, latestMessage, new Date().toISOString(), "latestMessage"));
     }
   }
+}
+
+async function discoverTabs(): Promise<{ tabs: chrome.tabs.Tab[]; permissionMode: "allTabs" | "activeTab" }> {
+  const hasTabsPermission = await chrome.permissions.contains({ permissions: ["tabs"] });
+  const granted = hasTabsPermission || (await chrome.permissions.request({ permissions: ["tabs"] }));
+
+  if (granted) {
+    return {
+      tabs: await chrome.tabs.query({}),
+      permissionMode: "allTabs"
+    };
+  }
+
+  return {
+    tabs: [await getActiveTab()],
+    permissionMode: "activeTab"
+  };
 }
 
 async function getActiveTab(): Promise<chrome.tabs.Tab> {

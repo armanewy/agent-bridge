@@ -6,3 +6,4 @@ export * from "./transform.js";
 export * from "./targets/codex.js";
 export * from "./safety.js";
 export * from "./adapter-registry.js";
+export * from "./components.js";

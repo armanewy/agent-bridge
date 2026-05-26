@@ -2,13 +2,17 @@ import { describe, expect, it } from "vitest";
 import {
   HandoffCardSchema,
   HandoffSchema,
+  LinkableComponentSchema,
   MissionSchema,
   TaskSpecSchema,
+  WorkflowLinkSchema,
   type Handoff,
   type HandoffCard,
   type Mission,
-  type TaskSpec
+  type TaskSpec,
+  type WorkflowLink
 } from "../src/types.js";
+import { browserTabComponent, componentStatusLabel } from "../src/components.js";
 
 const now = "2026-01-01T00:00:00.000Z";
 
@@ -91,5 +95,37 @@ describe("mission-first schemas", () => {
     };
 
     expect(HandoffSchema.parse(handoff).id).toBe("handoff_1");
+  });
+
+  it("parses LinkableComponent and classifies browser tabs", () => {
+    const component = browserTabComponent({
+      id: "src_1",
+      kind: "browserTab",
+      browser: "chrome",
+      tabId: 12,
+      title: "ChatGPT - AgentBridge",
+      url: "https://chatgpt.com/c/123",
+      boundAt: now
+    });
+
+    expect(LinkableComponentSchema.parse(component).provider).toBe("chatgpt");
+    expect(componentStatusLabel(component)).toBe("Capture ready");
+  });
+
+  it("parses WorkflowLink", () => {
+    const link: WorkflowLink = {
+      id: "workflow_1",
+      name: "ChatGPT to Codex",
+      sourceComponentId: "component_source_1",
+      workspaceComponentId: "component_repo_1",
+      targetComponentId: "component_target_1",
+      recipe: "implementationBrief",
+      verificationCommandDefaults: [{ kind: "test", command: "pnpm test" }],
+      enabled: true,
+      createdAt: now,
+      updatedAt: now
+    };
+
+    expect(WorkflowLinkSchema.parse(link).verificationCommandDefaults).toHaveLength(1);
   });
 });

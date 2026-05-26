@@ -1,5 +1,6 @@
 export type ExtensionMessage =
   | { type: "ui.bindCurrentTab" }
+  | { type: "ui.discoverTabs" }
   | { type: "ui.captureSelection" }
   | { type: "ui.captureLatestMessage" }
   | { type: "ui.healthCheck" };
@@ -21,6 +22,21 @@ export type NativeHostMessage =
         url: string;
         favIconUrl?: string;
       };
+    }
+  | {
+      type: "browserTabsDiscovered";
+      sentAt: string;
+      permissionMode: "allTabs" | "activeTab";
+      tabs: Array<{
+        kind: "browserTab";
+        browser: "chrome";
+        tabId?: number;
+        windowId?: number;
+        title: string;
+        url: string;
+        favIconUrl?: string;
+        active?: boolean;
+      }>;
     }
   | {
       type: "capture";
@@ -94,5 +110,31 @@ export function buildCaptureMessage(
     },
     text,
     userTriggered: true
+  };
+}
+
+export function buildBrowserTabsDiscoveredMessage(
+  tabs: Array<ActiveTabSnapshot & { active?: boolean | undefined }>,
+  permissionMode: "allTabs" | "activeTab",
+  sentAt = new Date().toISOString()
+): NativeHostMessage {
+  const discoveredTabs = tabs
+    .filter((tab) => typeof tab.url === "string" && tab.url.trim().length > 0)
+    .map((tab) => ({
+      kind: "browserTab" as const,
+      browser: "chrome" as const,
+      ...(typeof tab.id === "number" ? { tabId: tab.id } : {}),
+      ...(typeof tab.windowId === "number" ? { windowId: tab.windowId } : {}),
+      title: tab.title ?? "",
+      url: tab.url ?? "",
+      ...(tab.favIconUrl ? { favIconUrl: tab.favIconUrl } : {}),
+      ...(typeof tab.active === "boolean" ? { active: tab.active } : {})
+    }));
+
+  return {
+    type: "browserTabsDiscovered",
+    sentAt,
+    permissionMode,
+    tabs: discoveredTabs
   };
 }

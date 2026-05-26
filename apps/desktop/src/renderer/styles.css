@@ -132,6 +132,160 @@ nav {
   align-items: start;
 }
 
+.connect-screen,
+.connect-layout {
+  display: grid;
+  gap: 16px;
+}
+
+.connect-hero {
+  background: #fbfcfd;
+}
+
+.route-preview {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 28px minmax(0, 1fr) 28px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  margin-bottom: 14px;
+}
+
+.route-node {
+  min-height: 86px;
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 12px;
+  display: grid;
+  align-content: start;
+  gap: 6px;
+  background: #ffffff;
+}
+
+.route-node span {
+  color: #64737f;
+  font-size: 12px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.route-node strong {
+  overflow-wrap: anywhere;
+}
+
+.route-arrow {
+  color: #64737f;
+  font-weight: 800;
+  text-align: center;
+}
+
+.component-columns {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+  align-items: start;
+}
+
+.component-section {
+  min-height: 280px;
+}
+
+.component-list,
+.workflow-link-grid {
+  display: grid;
+  gap: 10px;
+}
+
+.component-card {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #25313a;
+  padding: 12px;
+  display: grid;
+  gap: 7px;
+  text-align: left;
+  width: 100%;
+}
+
+.component-card.selected {
+  border-color: #205f4b;
+  background: #f1faf6;
+}
+
+.component-title {
+  font-weight: 800;
+  overflow-wrap: anywhere;
+}
+
+.component-subtitle {
+  color: #64737f;
+  overflow-wrap: anywhere;
+}
+
+.component-action {
+  color: #205f4b;
+  font-weight: 700;
+}
+
+.badge-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  align-items: center;
+}
+
+.badge {
+  border-radius: 999px;
+  padding: 4px 8px;
+  background: #edf2f6;
+  color: #25313a;
+  font-size: 12px;
+  font-weight: 700;
+}
+
+.badge.good {
+  background: #d8eee6;
+  color: #205f4b;
+}
+
+.badge.danger {
+  background: #fff3d6;
+  color: #7a5200;
+}
+
+.badge.muted {
+  color: #64737f;
+}
+
+.workflow-link-card {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  padding: 14px;
+  display: grid;
+  gap: 12px;
+}
+
+.workflow-link-card h3 {
+  margin: 4px 0 0;
+}
+
+.workflow-route {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 20px minmax(0, 1fr) 20px minmax(0, 1fr);
+  gap: 8px;
+  align-items: center;
+}
+
+.workflow-route strong {
+  overflow-wrap: anywhere;
+}
+
+.workflow-route span {
+  color: #64737f;
+  font-weight: 800;
+  text-align: center;
+}
+
 .settings-layout,
 .advanced-layout {
   display: grid;
@@ -481,10 +635,18 @@ pre {
   }
 
   .home-grid,
+  .component-columns,
+  .route-preview,
+  .workflow-route,
   .two-column,
   .preview-grid,
   .prompt-columns {
     grid-template-columns: 1fr;
+  }
+
+  .route-arrow,
+  .workflow-route span {
+    display: none;
   }
 
   .ready-grid {

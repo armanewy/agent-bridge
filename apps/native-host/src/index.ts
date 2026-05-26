@@ -68,4 +68,20 @@ async function persistResponse(response: Awaited<ReturnType<typeof handleNativeH
       createdAt: new Date().toISOString()
     });
   }
+
+  if (response.components) {
+    for (const component of response.components) {
+      await store.saveLinkableComponent(component);
+    }
+    await store.appendAuditEvent({
+      id: `audit_${randomUUID()}`,
+      type: "sourceBound",
+      entityId: "browserTabsDiscovered",
+      details: {
+        componentCount: response.components.length,
+        receivedFrom: "nativeHost"
+      },
+      createdAt: new Date().toISOString()
+    });
+  }
 }

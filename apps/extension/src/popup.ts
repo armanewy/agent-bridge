@@ -6,6 +6,10 @@ document.querySelector<HTMLButtonElement>("#bind")?.addEventListener("click", ()
   void run({ type: "ui.bindCurrentTab" }, "Bound current tab.");
 });
 
+document.querySelector<HTMLButtonElement>("#discover")?.addEventListener("click", () => {
+  void run({ type: "ui.discoverTabs" }, "Sent linkable tabs to AgentBridge.");
+});
+
 document.querySelector<HTMLButtonElement>("#capture")?.addEventListener("click", () => {
   void run({ type: "ui.captureSelection" }, "Captured selected text.");
 });

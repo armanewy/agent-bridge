@@ -1,12 +1,20 @@
 # UI Model
 
-The desktop app defaults to a task-card-first Simple Mode. Internal Mission, HandoffCard, Source, Target, Link, and Audit models still exist, but the default user language is Task, Repo, Agent, Send, Verify, Result, and History.
+The desktop app defaults to a Connect-first Simple Mode. Internal Mission, HandoffCard, Source, Target, Link, and Audit models still exist, but the default user language is Component, Link, Task, Repo, Agent, Send, Verify, Result, and History.
 
 ## Simple Mode
 
-- Inbox: choose a recent capture, confirm the repo/agent, and create a Task Card.
+- Connect: detect linkable browser tabs, repos, desktop windows, and agent targets; select one source, one workspace, and one target; create a reusable Workflow Link.
 - Tasks: inspect task history, generated prompts, delivery attempts, artifacts, verification results, and follow-up drafts.
 - Settings: connect Chrome, choose a repo, configure Codex delivery, and set optional verification commands.
+
+The user-facing hierarchy is:
+
+```text
+Components -> Links -> Tasks
+```
+
+Capture Inbox is secondary to the selected browser source. A Task Card is created from a Workflow Link after a capture exists for that source.
 
 ## Advanced Mode
 

@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
-import type { BrowserTabSource, Capture } from "@agentbridge/core";
+import { browserTabComponent } from "@agentbridge/core";
+import type { BrowserTabSource, Capture, LinkableComponent } from "@agentbridge/core";
 
 export type NativeHostRequest =
   | { type: "healthCheck"; sentAt?: string }
@@ -15,6 +16,21 @@ export type NativeHostRequest =
         url: string;
         favIconUrl?: string;
       };
+    }
+  | {
+      type: "browserTabsDiscovered";
+      sentAt?: string;
+      permissionMode: "allTabs" | "activeTab";
+      tabs: Array<{
+        kind: "browserTab";
+        browser: "chrome";
+        tabId?: number;
+        windowId?: number;
+        title: string;
+        url: string;
+        favIconUrl?: string;
+        active?: boolean;
+      }>;
     }
   | {
       type: "capture";
@@ -38,6 +54,7 @@ export interface NativeHostResponse {
   error?: string;
   source?: BrowserTabSource;
   capture?: Capture;
+  components?: LinkableComponent[];
   receivedAt: string;
 }
 
@@ -61,6 +78,11 @@ export async function handleNativeHostMessage(
       await options.appendLog?.({ type: "bindSource", source, receivedAt });
       return { ok: true, type: "bindSource", source, receivedAt };
     }
+    case "browserTabsDiscovered": {
+      const components = createBrowserTabComponents(message, receivedAt);
+      await options.appendLog?.({ type: "browserTabsDiscovered", count: components.length, receivedAt });
+      return { ok: true, type: "browserTabsDiscovered", components, receivedAt };
+    }
     case "capture": {
       const capture = createCapture(message, receivedAt);
       await options.appendLog?.({ type: "capture", capture, receivedAt });
@@ -69,6 +91,23 @@ export async function handleNativeHostMessage(
     default:
       return { ok: false, type: message.type, error: `Unsupported message type: ${message.type}`, receivedAt };
   }
+}
+
+function createBrowserTabComponents(message: Record<string, unknown>, discoveredAt: string): LinkableComponent[] {
+  const tabs = Array.isArray(message.tabs) ? message.tabs : [];
+  return tabs
+    .filter(isRecord)
+    .map((tab) => createBrowserTabSource({ source: tab }, discoveredAt))
+    .map((source) => {
+      const component = browserTabComponent(source, discoveredAt);
+      return {
+        ...component,
+        metadata: {
+          ...component.metadata,
+          permissionMode: message.permissionMode === "allTabs" ? "allTabs" : "activeTab"
+        }
+      };
+    });
 }
 
 function createBrowserTabSource(message: Record<string, unknown>, boundAt: string): BrowserTabSource {

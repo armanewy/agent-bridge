@@ -12,6 +12,8 @@ import { MissionService } from "../services/mission-service.js";
 import { VerificationService } from "../services/verification-service.js";
 import { SetupService } from "../services/setup-service.js";
 import { HandoffCardDeliveryService } from "../services/handoff-card-delivery-service.js";
+import { ComponentDiscoveryService } from "../services/component-discovery-service.js";
+import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -71,6 +73,8 @@ app.whenReady().then(async () => {
   const windowsTargetService = new WindowsTargetService();
   const codexTargetService = new CodexTargetService(store, (url) => shell.openExternal(url));
   const handoffCardDeliveryService = new HandoffCardDeliveryService(store, codexTargetService);
+  const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
+  const workflowLinkService = new WorkflowLinkService(store, transformService);
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
@@ -80,6 +84,15 @@ app.whenReady().then(async () => {
     return stored.length > 0 ? stored : [];
   });
   ipcMain.handle("agentbridge:listLinks", () => linkService.listLinks());
+  ipcMain.handle("agentbridge:listLinkableComponents", () => componentDiscoveryService.listComponents());
+  ipcMain.handle("agentbridge:discoverLinkableComponents", () => componentDiscoveryService.discover());
+  ipcMain.handle("agentbridge:listWorkflowLinks", () => workflowLinkService.listWorkflowLinks());
+  ipcMain.handle("agentbridge:createWorkflowLink", (_event, input: CreateWorkflowLinkInput) =>
+    workflowLinkService.createWorkflowLink(input)
+  );
+  ipcMain.handle("agentbridge:createTaskFromWorkflowLink", (_event, input: CreateTaskFromWorkflowLinkInput) =>
+    workflowLinkService.createTaskFromWorkflowLink(input)
+  );
   ipcMain.handle("agentbridge:listMissions", () => missionService.listMissions());
   ipcMain.handle("agentbridge:getMissionDetail", (_event, id: string) => missionService.getMissionDetail(id));
   ipcMain.handle("agentbridge:createLink", (_event, input: Omit<Link, "id" | "createdAt" | "updatedAt" | "enabled">) =>
@@ -133,13 +146,13 @@ app.on("will-quit", () => {
 });
 
 function registerQuickActions(): void {
-  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openInbox"));
+  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openConnect"));
   const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(TRAY_ICON_SVG).toString("base64")}`);
   tray = new Tray(icon);
   tray.setToolTip("AgentBridge");
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Open AgentBridge", click: () => showMainWindow("openInbox") },
+      { label: "Open AgentBridge", click: () => showMainWindow("openConnect") },
       { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
       { label: "Open latest task", click: () => showMainWindow("openTasks") },
       { type: "separator" },
@@ -162,7 +175,7 @@ function registerAppMenu(dataDir: string, nativeHostLogPath: string): void {
       {
         label: "File",
         submenu: [
-          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openInbox") },
+          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openConnect") },
           { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
           { label: "Open Data Folder", click: () => void openDataFolder(dataDir) },
           { label: "Open Native Host Log", click: () => void openNativeHostLog(dataDir, nativeHostLogPath) }
@@ -209,7 +222,7 @@ function showAboutDialog(dataDir: string): void {
   void dialog.showMessageBox(options);
 }
 
-function showMainWindow(action?: "openInbox" | "openTasks" | "createTaskFromLatestCapture"): void {
+function showMainWindow(action?: "openConnect" | "openTasks" | "createTaskFromLatestCapture"): void {
   const window = mainWindow ?? BrowserWindow.getAllWindows()[0];
   if (!window) {
     void createWindow().then(() => {
