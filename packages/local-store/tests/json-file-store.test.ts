@@ -118,6 +118,38 @@ describe("JsonFileStore", () => {
     expect(await store.listCodexThreadRefs("C:/other")).toEqual([]);
   });
 
+  it("roundtrips ChatGPT desktop sources", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    await store.saveSource({
+      id: "src_chatgpt_desktop_1",
+      kind: "chatgptDesktop",
+      provider: "chatgpt",
+      appKind: "desktopApp",
+      processId: 123,
+      hwnd: "0x123",
+      executablePath: "C:/Users/example/AppData/Local/Programs/ChatGPT/ChatGPT.exe",
+      windowTitle: "ChatGPT",
+      sessionTitle: "AgentBridge planning",
+      fingerprint: "chatgpt_desktop_fingerprint",
+      capabilities: {
+        canReadSelectedText: true,
+        canReadLatestMessage: true,
+        canListSessions: false,
+        canSendTurn: false
+      },
+      confidence: "medium",
+      discoveredAt: now,
+      updatedAt: now,
+      boundAt: now
+    });
+
+    expect(await store.getSource("src_chatgpt_desktop_1")).toMatchObject({
+      kind: "chatgptDesktop",
+      sessionTitle: "AgentBridge planning"
+    });
+  });
+
   it("roundtrips extension heartbeat", async () => {
     const store = new JsonFileStore(tempDir);
     const heartbeat = {

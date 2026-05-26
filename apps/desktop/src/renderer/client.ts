@@ -83,7 +83,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async discoverLinkableComponents() {
       mockComponents = mergeMockComponents([
         ...mockComponents,
-        ...mockSources.map((source) => mockBrowserTabComponent(source)),
+        ...mockSources.filter((source): source is BrowserTabSource => source.kind === "browserTab").map((source) => mockBrowserTabComponent(source)),
         ...mockTargets.flatMap((target) => {
           const components = [mockTargetComponent(target)];
           if (target.kind === "codexDeepLink") {

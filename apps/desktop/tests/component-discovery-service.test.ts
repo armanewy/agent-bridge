@@ -35,6 +35,16 @@ describe("ComponentDiscoveryService", () => {
       openMode: "newThread",
       boundAt: now
     });
+    await store.saveCodexThreadRef({
+      id: "codex_thread_1",
+      threadId: "thread_123",
+      name: "Existing AgentBridge work",
+      repoPath: tempDir,
+      status: "idle",
+      source: "appServer",
+      lastSeenAt: now,
+      metadata: {}
+    });
 
     const windows = {
       async listTopLevelWindows() {
@@ -46,15 +56,40 @@ describe("ComponentDiscoveryService", () => {
             title: "Windows Terminal",
             executablePath: "C:/Windows/System32/WindowsTerminal.exe",
             boundAt: now
+          },
+          {
+            id: "target_windows_456",
+            kind: "windowsDesktopWindow",
+            hwnd: "456",
+            title: "ChatGPT",
+            executablePath: "C:/Users/example/AppData/Local/Programs/ChatGPT/ChatGPT.exe",
+            boundAt: now
           }
-        ];
+          ];
+      },
+      async inspectChatGptWindow() {
+        return {
+          success: true,
+          chatGptProbe: {
+            supportsWindowDetection: true,
+            supportsSessionList: false,
+            supportsSelectedText: true,
+            supportsLatestMessage: true,
+            confidence: "medium" as const,
+            activeConversationTitle: "AgentBridge planning",
+            rawUiaExcerpt: ["ControlType.Document |  | AgentBridge planning"],
+            errors: []
+          }
+        };
       }
-    } as Pick<WindowsTargetService, "listTopLevelWindows"> as WindowsTargetService;
+    } as Pick<WindowsTargetService, "listTopLevelWindows" | "inspectChatGptWindow"> as WindowsTargetService;
 
     const result = await new ComponentDiscoveryService(store, windows).discover();
 
     expect(result.components.some((component) => component.provider === "chatgpt")).toBe(true);
     expect(result.components.some((component) => component.provider === "codex")).toBe(true);
+    expect(result.components.some((component) => component.provider === "chatgptDesktop" && component.roleCapabilities.canReadSelectedText)).toBe(true);
+    expect(result.components.some((component) => component.provider === "codexThread" && component.backingRef.codexThreadId === "thread_123")).toBe(true);
     expect(result.components.some((component) => component.kind === "repo")).toBe(true);
     expect(result.components.some((component) => component.provider === "terminal" && component.riskLevel === "high")).toBe(true);
   });

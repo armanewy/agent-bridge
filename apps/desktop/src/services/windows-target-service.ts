@@ -19,6 +19,28 @@ export interface HelperResponse {
   candidateControls?: unknown[];
   strategyUsed?: string;
   message?: string;
+  chatGptProbe?: ChatGptDesktopProbeReport;
+  capturedText?: string;
+  visibleMessages?: ChatGptVisibleMessage[];
+}
+
+export interface ChatGptDesktopProbeReport {
+  supportsWindowDetection: boolean;
+  supportsSessionList: boolean;
+  supportsSelectedText: boolean;
+  supportsLatestMessage: boolean;
+  confidence: "high" | "medium" | "low";
+  activeConversationTitle?: string;
+  rawUiaExcerpt: string[];
+  errors: string[];
+}
+
+export interface ChatGptVisibleMessage {
+  index: number;
+  text: string;
+  controlType?: string;
+  automationId?: string;
+  name?: string;
 }
 
 export class WindowsTargetService {
@@ -26,6 +48,11 @@ export class WindowsTargetService {
 
   async listTopLevelWindows(): Promise<WindowsDesktopWindowTarget[]> {
     const response = await this.invoke("listTopLevelWindows");
+    return (response.windows ?? []).map((window) => toWindowsTarget(window));
+  }
+
+  async listChatGptWindows(): Promise<WindowsDesktopWindowTarget[]> {
+    const response = await this.invoke("listChatGptWindows");
     return (response.windows ?? []).map((window) => toWindowsTarget(window));
   }
 
@@ -41,6 +68,22 @@ export class WindowsTargetService {
 
   async findEditableTargets(hwnd: string): Promise<HelperResponse> {
     return this.invoke("findEditableTargets", { hwnd });
+  }
+
+  async inspectChatGptWindow(hwnd: string): Promise<HelperResponse> {
+    return this.invoke("inspectChatGptWindow", { hwnd });
+  }
+
+  async captureChatGptSelectedText(hwnd: string): Promise<HelperResponse> {
+    return this.invoke("captureChatGptSelectedText", { hwnd });
+  }
+
+  async captureChatGptVisibleMessages(hwnd: string): Promise<HelperResponse> {
+    return this.invoke("captureChatGptVisibleMessages", { hwnd });
+  }
+
+  async getChatGptActiveConversationCandidate(): Promise<HelperResponse> {
+    return this.invoke("getChatGptActiveConversationCandidate");
   }
 
   async deliverText(

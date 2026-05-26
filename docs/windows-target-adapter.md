@@ -26,6 +26,16 @@ Window metadata should include:
 
 The desktop discovery service maps top-level windows into `LinkableComponent` records with app classification, capability badges, compatibility score, and risk level. Codex is shown as a preferred deep-link target when a repo is selected; terminal-like windows are detected but marked high risk.
 
+ChatGPT Desktop is handled as a source probe, not as a generic delivery target. The helper exposes:
+
+- `listChatGptWindows`
+- `inspectChatGptWindow`
+- `getChatGptActiveConversationCandidate`
+- `captureChatGptSelectedText`
+- `captureChatGptVisibleMessages`
+
+These commands report whether UIA exposes the current visible conversation, selected text, and visible message text. They do not promise all internal ChatGPT Desktop tabs/conversations unless the UIA tree exposes them.
+
 ## Target Binding
 
 - User selects a window or binds the foreground window.
@@ -83,6 +93,7 @@ Clipboard and send-key strategies must never be the default.
 
 - Custom controls may not expose useful UIA patterns.
 - Electron and WebView applications vary in accessibility tree quality.
+- ChatGPT Desktop may expose only a window or WebView shell. In that case AgentBridge must mark the source low-confidence or unsupported rather than falling back to clipboard capture in Simple Mode.
 - Terminal controls may not support safe text insertion through UIA.
 - Tabs inside native apps may not be visible as top-level UIA targets.
 - Clipboard fallback can leak sensitive text if not approved and restored carefully.

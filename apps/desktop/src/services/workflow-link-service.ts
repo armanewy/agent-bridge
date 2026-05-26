@@ -42,11 +42,22 @@ export class WorkflowLinkService {
     if (!target?.roleCapabilities.canBeTarget) {
       throw new Error("Choose a target component that can receive work.");
     }
-    if (target.provider === "codex" && !workspace?.roleCapabilities.canBeWorkspace) {
+    if (isCodexTargetComponent(target) && !workspace?.roleCapabilities.canBeWorkspace) {
       throw new Error("Codex links need a repo workspace.");
     }
 
     const now = new Date().toISOString();
+    const componentCodexThreadId = typeof target.backingRef.codexThreadId === "string"
+      ? target.backingRef.codexThreadId
+      : typeof target.metadata["threadId"] === "string"
+        ? target.metadata["threadId"]
+        : undefined;
+    const codexThreadId = input.codexThreadId ?? componentCodexThreadId;
+    const codexIntegrationMode =
+      input.codexIntegrationMode ??
+      (typeof target.metadata["integrationMode"] === "string" && isCodexIntegrationMode(target.metadata["integrationMode"])
+        ? target.metadata["integrationMode"]
+        : "deepLink");
     const link: WorkflowLink = {
       id: `workflow_${randomUUID()}`,
       name: input.name,
@@ -55,10 +66,10 @@ export class WorkflowLinkService {
       targetComponentId: input.targetComponentId,
       recipe: input.recipe,
       verificationCommandDefaults: input.verificationCommandDefaults ?? [],
-      ...(input.codexThreadId ? { codexThreadId: input.codexThreadId } : {}),
+      ...(codexThreadId ? { codexThreadId } : {}),
       ...(input.codexThreadName ? { codexThreadName: input.codexThreadName } : {}),
-      codexOpenMode: input.codexOpenMode ?? (input.codexThreadId ? "existingThread" : "newThread"),
-      codexIntegrationMode: input.codexIntegrationMode ?? "deepLink",
+      codexOpenMode: input.codexOpenMode ?? (codexThreadId ? "existingThread" : "newThread"),
+      codexIntegrationMode,
       enabled: true,
       createdAt: now,
       updatedAt: now
@@ -118,6 +129,8 @@ export class WorkflowLinkService {
     const captures = await this.store.listRecentCaptures(50);
     const sourceId = component.backingRef.sourceId;
     const tabId = component.backingRef.tabId;
+    const sessionId = component.backingRef.sessionId;
+    const hwnd = component.backingRef.hwnd;
     const url = typeof component.metadata["url"] === "string" ? component.metadata["url"] : undefined;
 
     return captures.find((capture) => {
@@ -130,9 +143,22 @@ export class WorkflowLinkService {
         return false;
       }
 
-      return (typeof tabId === "number" && source.tabId === tabId) || (typeof url === "string" && source.url === url);
+      return (
+        (typeof tabId === "number" && source.tabId === tabId) ||
+        (typeof url === "string" && source.url === url) ||
+        (typeof sessionId === "string" && source.sessionId === sessionId) ||
+        (typeof hwnd === "string" && source.hwnd === hwnd)
+      );
     });
   }
+}
+
+function isCodexTargetComponent(component: LinkableComponent): boolean {
+  return component.provider === "codex" || component.provider === "codexThread";
+}
+
+function isCodexIntegrationMode(value: string): value is CodexIntegrationMode {
+  return value === "deepLink" || value === "appServer" || value === "sdk";
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {

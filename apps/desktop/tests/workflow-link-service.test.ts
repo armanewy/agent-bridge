@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { browserTabComponent, codexTargetComponent, repoComponent } from "@agentbridge/core";
+import { browserTabComponent, codexTargetComponent, codexThreadComponent, repoComponent } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { TransformService } from "../src/services/transform-service.js";
 import { WorkflowLinkService } from "../src/services/workflow-link-service.js";
@@ -168,5 +168,67 @@ describe("WorkflowLinkService", () => {
 
     expect(preview.handoffCard.captureId).toBe("cap_1");
     expect(preview.handoffCard.targetId).toBe(target.id);
+  });
+
+  it("preserves a Codex thread target selected through a thread component", async () => {
+    const store = new JsonFileStore(tempDir);
+    const now = new Date().toISOString();
+    const source = {
+      id: "src_1",
+      kind: "browserTab" as const,
+      browser: "chrome" as const,
+      title: "ChatGPT - Notes",
+      url: "https://chatgpt.com/",
+      boundAt: now
+    };
+    const sourceComponent = browserTabComponent(source);
+    const target = {
+      id: "target_1",
+      kind: "codexDeepLink" as const,
+      repoPath: tempDir,
+      openMode: "newThread" as const,
+      boundAt: now
+    };
+    const threadComponent = codexThreadComponent({
+      id: "codex_thread_1",
+      threadId: "thread_existing",
+      name: "Existing session",
+      repoPath: tempDir,
+      source: "appServer",
+      status: "idle",
+      lastSeenAt: now,
+      metadata: {}
+    }, { targetId: target.id });
+    const workspaceComponent = repoComponent({ repoPath: tempDir, repoName: "repo" }, "repo_1");
+
+    await store.saveSource(source);
+    await store.saveTarget(target);
+    await store.saveLinkableComponent(sourceComponent);
+    await store.saveLinkableComponent(threadComponent);
+    await store.saveLinkableComponent(workspaceComponent);
+    await store.saveCapture({
+      id: "cap_1",
+      sourceId: source.id,
+      captureType: "selectedText",
+      text: "Continue this existing Codex session.",
+      metadata: {},
+      createdAt: now,
+      userTriggered: true
+    });
+
+    const service = new WorkflowLinkService(store, new TransformService(store));
+    const link = await service.createWorkflowLink({
+      name: "ChatGPT to existing Codex thread",
+      sourceComponentId: sourceComponent.id,
+      workspaceComponentId: workspaceComponent.id,
+      targetComponentId: threadComponent.id,
+      recipe: "implementationBrief"
+    });
+    const preview = await service.createTaskFromWorkflowLink({ workflowLinkId: link.id });
+
+    expect(link.codexThreadId).toBe("thread_existing");
+    expect(link.codexIntegrationMode).toBe("appServer");
+    expect(preview.handoffCard.codexThreadId).toBe("thread_existing");
+    expect(preview.handoffCard.codexIntegrationMode).toBe("appServer");
   });
 });

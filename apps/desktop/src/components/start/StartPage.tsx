@@ -1,4 +1,4 @@
-import { Bot, CheckCircle, Chrome, ClipboardList, FolderOpen, Link2, Settings } from "lucide-react";
+import { Bot, Chrome, ClipboardList, FolderOpen, Link2, Monitor } from "lucide-react";
 import type {
   Capture,
   CodexDeepLinkTarget,
@@ -23,10 +23,12 @@ interface StartPageProps {
   selectedTargetComponentId?: string | undefined;
   selectedCodexThreadId?: string | undefined;
   manualCodexThreadId: string;
+  chatGptSourceMode: "chrome" | "desktop";
   linkError?: string | undefined;
   targetError?: string | undefined;
   onSelectCodexThread(threadId?: string): void;
   onManualCodexThreadIdChange(value: string): void;
+  onChatGptSourceModeChange(mode: "chrome" | "desktop"): void;
   onSaveManualCodexThread(): void;
   onChooseRepo(): void;
   onCreateWorkflowLink(): void;
@@ -34,6 +36,7 @@ interface StartPageProps {
   onOpenTasks(): void;
   onOpenAdvanced(): void;
   onOpenSettings(): void;
+  onProbeDesktopApps(): void;
   onConnectChrome(): void;
   onCheckChromeConnection(): void;
 }
@@ -51,10 +54,12 @@ export function StartPage({
   selectedTargetComponentId,
   selectedCodexThreadId,
   manualCodexThreadId,
+  chatGptSourceMode,
   linkError,
   targetError,
   onSelectCodexThread,
   onManualCodexThreadIdChange,
+  onChatGptSourceModeChange,
   onSaveManualCodexThread,
   onChooseRepo,
   onCreateWorkflowLink,
@@ -62,17 +67,19 @@ export function StartPage({
   onOpenTasks,
   onOpenAdvanced,
   onOpenSettings,
+  onProbeDesktopApps,
   onConnectChrome,
   onCheckChromeConnection
 }: StartPageProps): JSX.Element {
   const activeLink = workflowLinks.find((link) => {
     const linkedSource = components.find((component) => component.id === link.sourceComponentId);
-    return link.enabled && (!linkedSource || !isDemoComponent(linkedSource));
+    return link.enabled && (!linkedSource || (!isDemoComponent(linkedSource) && sourceMatchesMode(linkedSource, chatGptSourceMode)));
   });
   const candidateSourceComponent = activeLink
     ? components.find((component) => component.id === activeLink.sourceComponentId)
     : components.find((component) => component.id === selectedSourceComponentId);
   const sourceComponent = candidateSourceComponent && !isDemoComponent(candidateSourceComponent) ? candidateSourceComponent : undefined;
+  const matchingSourceComponent = sourceComponent && sourceMatchesMode(sourceComponent, chatGptSourceMode) ? sourceComponent : undefined;
   const workspaceComponent = activeLink?.workspaceComponentId
     ? components.find((component) => component.id === activeLink.workspaceComponentId)
     : components.find((component) => component.id === selectedWorkspaceComponentId);
@@ -82,10 +89,10 @@ export function StartPage({
   const codexTarget = targets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
   const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
   const realCaptures = captures.filter((capture) => capture.metadata["mode"] !== "mock");
-  const latestCapture = sourceComponent ? realCaptures.find((capture) => captureBelongsToComponent(capture, sourceComponent)) : undefined;
+  const latestCapture = matchingSourceComponent ? realCaptures.find((capture) => captureBelongsToComponent(capture, matchingSourceComponent)) : undefined;
   const latestTask = missions[0];
   const canCreateLink = Boolean(
-    sourceComponent?.roleCapabilities.canBeSource &&
+    matchingSourceComponent?.roleCapabilities.canBeSource &&
     (workspaceComponent?.roleCapabilities.canBeWorkspace || codexTarget) &&
     (targetComponent?.roleCapabilities.canBeTarget || codexTarget)
   );
@@ -98,20 +105,28 @@ export function StartPage({
           <div>
             <span className="eyebrow">Start</span>
             <h2>ChatGPT → Codex</h2>
-            <p>Connect this browser conversation to a local repo, then send scoped Task Cards to Codex.</p>
+            <p>Connect a ChatGPT conversation to a local repo, then send scoped Task Cards to Codex.</p>
           </div>
           <span className={activeLink ? "status-pill" : "status-pill muted"}>{activeLink ? "Linked" : "Setup needed"}</span>
         </div>
 
         <div className="start-step-list">
+          <div className="segmented-control source-mode-control" aria-label="ChatGPT source type">
+            <button type="button" className={chatGptSourceMode === "chrome" ? "selected" : ""} onClick={() => onChatGptSourceModeChange("chrome")}>
+              Chrome ChatGPT
+            </button>
+            <button type="button" className={chatGptSourceMode === "desktop" ? "selected" : ""} onClick={() => onChatGptSourceModeChange("desktop")}>
+              ChatGPT Desktop
+            </button>
+          </div>
           <StartStep
-            icon={<Chrome size={20} />}
-            label="Browser tab"
-            title={sourceComponent?.label ?? "No ChatGPT tabs found"}
-            detail={sourceComponent ? sourceComponent.subtitle : chromeConnectDetail(setupStatus)}
-            status={sourceComponent ? "ready" : "missing"}
-            actionLabel={sourceComponent ? "Change tab" : "Connect Chrome"}
-            onAction={sourceComponent ? onOpenAdvanced : onConnectChrome}
+            icon={chatGptSourceMode === "desktop" ? <Monitor size={20} /> : <Chrome size={20} />}
+            label="ChatGPT source"
+            title={matchingSourceComponent?.label ?? missingSourceTitle(chatGptSourceMode)}
+            detail={matchingSourceComponent ? sourceDetail(matchingSourceComponent) : missingSourceDetail(chatGptSourceMode, setupStatus)}
+            status={matchingSourceComponent ? "ready" : "missing"}
+            actionLabel={matchingSourceComponent ? (chatGptSourceMode === "desktop" ? "Probe again" : "Change tab") : missingSourceAction(chatGptSourceMode)}
+            onAction={chatGptSourceMode === "desktop" ? onProbeDesktopApps : matchingSourceComponent ? onOpenAdvanced : onConnectChrome}
           />
           <StartStep
             icon={<FolderOpen size={20} />}
@@ -133,11 +148,11 @@ export function StartPage({
           />
         </div>
 
-        {!sourceComponent ? (
+        {!matchingSourceComponent ? (
           <div className="warning-band">
-            <span>Install/connect Chrome, open ChatGPT, then use the AgentBridge extension to sync this tab. Ctrl+Shift+Y captures selected text.</span>
-            <button type="button" className="secondary-button" onClick={onCheckChromeConnection}>
-              Check connection
+            <span>{chatGptSourceMode === "desktop" ? "Open ChatGPT Desktop, then probe desktop apps. AgentBridge uses Windows UI Automation only when ChatGPT exposes a readable conversation candidate." : "Install/connect Chrome, open ChatGPT, then use the AgentBridge extension to sync this tab. Ctrl+Shift+Y captures selected text."}</span>
+            <button type="button" className="secondary-button" onClick={chatGptSourceMode === "desktop" ? onProbeDesktopApps : onCheckChromeConnection}>
+              {chatGptSourceMode === "desktop" ? "Probe desktop apps" : "Check connection"}
             </button>
           </div>
         ) : null}
@@ -156,7 +171,7 @@ export function StartPage({
         {activeLink ? (
           <ActiveLinkSummary
             link={activeLink}
-            source={sourceComponent}
+            source={matchingSourceComponent}
             workspace={workspaceComponent}
             target={targetComponent}
             latestCapture={latestCapture}
@@ -376,10 +391,44 @@ function captureBelongsToComponent(capture: Capture, component: LinkableComponen
     return false;
   }
   const url = typeof component.metadata["url"] === "string" ? component.metadata["url"] : undefined;
+  const sessionId = component.backingRef.sessionId;
+  const hwnd = component.backingRef.hwnd;
   return (
     (typeof component.backingRef.tabId === "number" && source.tabId === component.backingRef.tabId) ||
-    (typeof url === "string" && source.url === url)
+    (typeof url === "string" && source.url === url) ||
+    (typeof sessionId === "string" && source.sessionId === sessionId) ||
+    (typeof hwnd === "string" && source.hwnd === hwnd)
   );
+}
+
+function sourceMatchesMode(component: LinkableComponent, mode: "chrome" | "desktop"): boolean {
+  if (mode === "desktop") {
+    return component.provider === "chatgptDesktop" || component.kind === "chatgptDesktop";
+  }
+  return component.provider === "chatgpt" && component.kind === "browserTab";
+}
+
+function sourceDetail(component: LinkableComponent): string {
+  if (component.provider === "chatgptDesktop") {
+    const confidence = typeof component.metadata["confidence"] === "string" ? component.metadata["confidence"] : "unknown";
+    return `${component.subtitle} · UIA confidence ${confidence}`;
+  }
+  return component.subtitle;
+}
+
+function missingSourceTitle(mode: "chrome" | "desktop"): string {
+  return mode === "desktop" ? "No ChatGPT Desktop conversation found" : "No ChatGPT tabs found";
+}
+
+function missingSourceDetail(mode: "chrome" | "desktop", status?: SetupStatus): string {
+  if (mode === "desktop") {
+    return "Probe ChatGPT Desktop to see whether the current conversation is exposed through Windows UI Automation.";
+  }
+  return chromeConnectDetail(status);
+}
+
+function missingSourceAction(mode: "chrome" | "desktop"): string {
+  return mode === "desktop" ? "Probe ChatGPT Desktop" : "Connect Chrome";
 }
 
 function repoLabel(target?: CodexDeepLinkTarget): string | undefined {

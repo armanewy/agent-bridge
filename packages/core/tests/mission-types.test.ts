@@ -7,14 +7,17 @@ import {
   TaskSpecSchema,
   WorkflowLinkSchema,
   CodexThreadRefSchema,
+  DesktopAppSessionSchema,
+  SourceEndpointSchema,
   type Handoff,
   type HandoffCard,
   type Mission,
   type TaskSpec,
   type WorkflowLink,
-  type CodexThreadRef
+  type CodexThreadRef,
+  type DesktopAppSession
 } from "../src/types.js";
-import { browserTabComponent, componentStatusLabel, desktopWindowComponent } from "../src/components.js";
+import { browserTabComponent, chatGptDesktopSessionComponent, codexThreadComponent, componentStatusLabel, desktopWindowComponent } from "../src/components.js";
 
 const now = "2026-01-01T00:00:00.000Z";
 
@@ -147,6 +150,59 @@ describe("mission-first schemas", () => {
     };
 
     expect(CodexThreadRefSchema.parse(ref).threadId).toBe("thread_123");
+  });
+
+  it("parses ChatGPT desktop sessions and exposes them as source components", () => {
+    const session: DesktopAppSession = {
+      id: "desktop_session_1",
+      provider: "chatgpt",
+      appKind: "desktopApp",
+      processId: 123,
+      hwnd: "0x123",
+      executablePath: "C:/Users/example/AppData/Local/Programs/ChatGPT/ChatGPT.exe",
+      windowTitle: "ChatGPT",
+      sessionTitle: "AgentBridge planning",
+      fingerprint: "session_fingerprint",
+      capabilities: {
+        canReadSelectedText: true,
+        canReadLatestMessage: true,
+        canListSessions: false,
+        canSendTurn: false
+      },
+      confidence: "medium",
+      discoveredAt: now,
+      updatedAt: now
+    };
+    const source = {
+      ...session,
+      kind: "chatgptDesktop" as const,
+      provider: "chatgpt" as const,
+      boundAt: now
+    };
+
+    expect(DesktopAppSessionSchema.parse(session).fingerprint).toBe("session_fingerprint");
+    expect(SourceEndpointSchema.parse(source).kind).toBe("chatgptDesktop");
+    const component = chatGptDesktopSessionComponent(session);
+    expect(component.provider).toBe("chatgptDesktop");
+    expect(component.roleCapabilities.canBeSource).toBe(true);
+    expect(component.roleCapabilities.canReadSelectedText).toBe(true);
+  });
+
+  it("exposes Codex thread refs as session targets", () => {
+    const component = codexThreadComponent({
+      id: "codex_thread_1",
+      threadId: "thread_123",
+      name: "Existing work",
+      repoPath: "C:/repo",
+      status: "idle",
+      source: "appServer",
+      lastSeenAt: now,
+      metadata: {}
+    }, { targetId: "target_1" });
+
+    expect(component.kind).toBe("codexThread");
+    expect(component.backingRef.codexThreadId).toBe("thread_123");
+    expect(component.roleCapabilities.canStartTurn).toBe(true);
   });
 
   it("marks detected desktop windows as inspectable until a safe target route exists", () => {

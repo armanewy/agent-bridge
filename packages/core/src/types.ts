@@ -17,6 +17,9 @@ export type Link = z.infer<typeof LinkSchema>;
 
 export const LinkableComponentKindSchema = z.enum([
   "browserTab",
+  "chatgptDesktop",
+  "codexDesktop",
+  "codexThread",
   "desktopWindow",
   "repo",
   "agentTarget",
@@ -28,10 +31,13 @@ export type LinkableComponentKind = z.infer<typeof LinkableComponentKindSchema>;
 
 export const ComponentProviderSchema = z.enum([
   "chatgpt",
+  "chatgptDesktop",
   "claude",
   "gemini",
   "github",
   "codex",
+  "codexDesktop",
+  "codexThread",
   "vscode",
   "cursor",
   "terminal",
@@ -48,7 +54,12 @@ export const ComponentRoleCapabilitiesSchema = z.object({
   canCapture: z.boolean(),
   canDeliver: z.boolean(),
   canVerify: z.boolean(),
-  canObserve: z.boolean()
+  canObserve: z.boolean(),
+  canListSessions: z.boolean().optional(),
+  canReadSelectedText: z.boolean().optional(),
+  canReadLatestMessage: z.boolean().optional(),
+  canResumeThread: z.boolean().optional(),
+  canStartTurn: z.boolean().optional()
 });
 export type ComponentRoleCapabilities = z.infer<typeof ComponentRoleCapabilitiesSchema>;
 
@@ -68,7 +79,10 @@ export const LinkableComponentSchema = z.object({
     repoPath: z.string().optional(),
     hwnd: z.string().optional(),
     tabId: z.number().int().optional(),
-    windowId: z.number().int().optional()
+    windowId: z.number().int().optional(),
+    sessionId: z.string().optional(),
+    processId: z.number().int().optional(),
+    codexThreadId: z.string().optional()
   }),
   metadata: z.record(z.unknown()),
   discoveredAt: TimestampSchema,
@@ -89,7 +103,40 @@ export const BrowserTabSourceSchema = z.object({
 });
 export type BrowserTabSource = z.infer<typeof BrowserTabSourceSchema>;
 
-export const SourceEndpointSchema = z.discriminatedUnion("kind", [BrowserTabSourceSchema]);
+export const DesktopAppSessionCapabilitiesSchema = z.object({
+  canReadSelectedText: z.boolean(),
+  canReadLatestMessage: z.boolean(),
+  canListSessions: z.boolean(),
+  canSendTurn: z.boolean()
+});
+export type DesktopAppSessionCapabilities = z.infer<typeof DesktopAppSessionCapabilitiesSchema>;
+
+export const DesktopAppSessionSchema = z.object({
+  id: z.string().min(1),
+  provider: z.enum(["chatgpt", "codex", "unknown"]),
+  appKind: z.literal("desktopApp"),
+  processId: z.number().int().positive().optional(),
+  hwnd: z.string().optional(),
+  executablePath: z.string().optional(),
+  windowTitle: z.string().optional(),
+  sessionTitle: z.string().optional(),
+  sessionId: z.string().optional(),
+  fingerprint: z.string().min(1),
+  capabilities: DesktopAppSessionCapabilitiesSchema,
+  confidence: z.enum(["high", "medium", "low"]),
+  discoveredAt: TimestampSchema,
+  updatedAt: TimestampSchema
+});
+export type DesktopAppSession = z.infer<typeof DesktopAppSessionSchema>;
+
+export const ChatGptDesktopSourceSchema = DesktopAppSessionSchema.extend({
+  kind: z.literal("chatgptDesktop"),
+  provider: z.literal("chatgpt"),
+  boundAt: TimestampSchema
+});
+export type ChatGptDesktopSource = z.infer<typeof ChatGptDesktopSourceSchema>;
+
+export const SourceEndpointSchema = z.discriminatedUnion("kind", [BrowserTabSourceSchema, ChatGptDesktopSourceSchema]);
 export type SourceEndpoint = z.infer<typeof SourceEndpointSchema>;
 
 export const WindowsDesktopWindowTargetSchema = z.object({

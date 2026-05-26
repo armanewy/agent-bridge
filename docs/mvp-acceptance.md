@@ -20,6 +20,8 @@
 - Dry-run Codex delivery generates the exact deep link without opening Codex.
 - Approved Codex delivery opens `codex://threads/new?prompt=...&path=...` in Electron mode.
 - Existing ChatGPT tabs/conversations are supported through extension tab binding/discovery and explicit selected-text/latest-message capture.
+- ChatGPT Desktop is supported as a probed source candidate when Windows UI Automation exposes the current visible conversation, selected text, or visible message text.
+- ChatGPT Desktop source support must show confidence and must not claim full desktop conversation/tab enumeration unless the UIA tree exposes it.
 - A user can choose "New Codex thread" or save/select an existing Codex thread ID.
 - Existing Codex threads can be opened with `codex://threads/<thread-id>`.
 - Existing Codex thread continuation sends a prompt only when Codex App Server is available and `thread/resume` plus `turn/start` succeeds.
@@ -33,6 +35,7 @@
 - Capture happens without a user gesture.
 - Extension requests broad host permissions or registers all-page content scripts by default.
 - Simple Mode recommends clipboard/manual/mock capture.
+- ChatGPT Desktop support falls back to clipboard capture in Simple Mode.
 - Delivery happens without an approval preview.
 - Clipboard fallback runs without explicit approval.
 - Suspected secrets are sent without warning.
@@ -47,3 +50,4 @@
 - Generic Windows app delivery is available at the helper/service level but not yet a polished UI flow.
 - Codex App Server transport is optional and must be configured in development with `CODEX_APP_SERVER_URL`.
 - Existing-thread observation is not implemented yet.
+- ChatGPT Desktop UIA quality depends on the app's accessibility tree. If only a generic WebView shell is exposed, desktop source support is detection-only.

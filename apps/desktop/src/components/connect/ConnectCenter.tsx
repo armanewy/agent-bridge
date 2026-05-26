@@ -46,19 +46,23 @@ function componentStatusLabel(component: LinkableComponent): string {
 }
 
 function providerLabel(provider: ComponentProvider): string {
-  return {
+  const labels: Record<ComponentProvider, string> = {
     chatgpt: "ChatGPT",
+    chatgptDesktop: "ChatGPT Desktop",
     claude: "Claude",
     gemini: "Gemini",
     github: "GitHub",
     codex: "Codex",
+    codexDesktop: "Codex Desktop",
+    codexThread: "Codex Thread",
     vscode: "VS Code",
     cursor: "Cursor",
     terminal: "Terminal",
     repo: "Repo",
     browser: "Browser tab",
     unknown: "Unknown"
-  }[provider];
+  };
+  return labels[provider];
 }
 
 export function ConnectCenter({
@@ -84,7 +88,7 @@ export function ConnectCenter({
   const browserTabs = components.filter((component) => component.kind === "browserTab");
   const workspaces = components.filter((component) => component.roleCapabilities.canBeWorkspace);
   const targets = components.filter((component) =>
-    component.roleCapabilities.canBeTarget || ["agentTarget", "desktopWindow", "terminal", "ide"].includes(component.kind)
+    component.roleCapabilities.canBeTarget || ["agentTarget", "codexThread", "codexDesktop", "desktopWindow", "terminal", "ide"].includes(component.kind)
   );
   const selectedSource = components.find((component) => component.id === selectedSourceComponentId);
   const selectedWorkspace = components.find((component) => component.id === selectedWorkspaceComponentId);

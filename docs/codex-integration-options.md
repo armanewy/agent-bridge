@@ -57,3 +57,10 @@ Use three modes:
 3. Existing thread continuation: Codex App Server `thread/resume` plus `turn/start` sends the generated prompt into the selected thread.
 
 Keep SDK as a future implementation path for resume/run if app-server is unavailable or too unstable for packaged desktop use.
+
+## Current Implementation Status
+
+- `CodexAppServerClient` has mocked-test coverage for `thread/list`, `thread/loaded/list`, `thread/read`, `thread/resume`, and `turn/start`.
+- `CodexSessionService` merges app-server sessions, loaded sessions, manual thread refs, and existing deep-link targets into `CodexThreadRef` records.
+- Delivery routing uses app-server `thread/resume` plus `turn/start` for existing-thread continuation when configured.
+- Deep-link fallback opens existing threads without claiming the prompt was injected.

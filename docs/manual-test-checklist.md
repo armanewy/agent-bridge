@@ -35,6 +35,9 @@
 - Demo capture tools are only under Advanced.
 - Simple Mode does not show clipboard/manual/mock capture as a production path.
 - If no ChatGPT tabs are synced, Start shows `No ChatGPT tabs found` and `Connect Chrome`.
+- Switch Start source mode to `ChatGPT Desktop`, open ChatGPT Desktop, and run `Probe ChatGPT Desktop`.
+- If UIA exposes the current conversation, Start shows a ChatGPT Desktop source candidate with confidence.
+- If UIA does not expose content, Start keeps the source unsupported and does not suggest clipboard capture.
 - `Connect Chrome` registers or repairs the native host and opens the configured Chrome Web Store URL.
 - Codex target rejects invalid paths in Electron mode.
 - Task Card Preview shows task title, repo/agent, acceptance criteria, verification steps, redaction warnings, and expandable raw prompt/source details.
@@ -50,6 +53,10 @@
 
 - `healthCheck` returns success.
 - `listTopLevelWindows` includes Notepad when open.
+- `listChatGptWindows` lists ChatGPT Desktop windows when the app is open.
+- `inspectChatGptWindow` returns a capability report with window detection, selected-text support, latest-message support, confidence, and raw UIA excerpt.
+- `captureChatGptSelectedText` only succeeds when ChatGPT Desktop exposes selected text through UIA.
+- `captureChatGptVisibleMessages` only succeeds when ChatGPT Desktop exposes visible message text through UIA.
 - `findEditableTargets` returns Notepad edit controls.
 - `deliverText` with `dryRun` never writes text.
 - Clipboard fallback is not used unless explicitly requested.

@@ -33,6 +33,7 @@ import { StartPage } from "../components/start/StartPage.js";
 
 type View = "start" | "tasks" | "settings" | "advanced";
 type AdvancedView = "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
+type ChatGptSourceMode = "chrome" | "desktop";
 
 const api = getAgentBridgeApi();
 
@@ -68,6 +69,7 @@ export function App(): JSX.Element {
   const [selectedTargetComponentId, setSelectedTargetComponentId] = useState<string | undefined>();
   const [selectedCodexThreadId, setSelectedCodexThreadId] = useState<string | undefined>();
   const [manualCodexThreadId, setManualCodexThreadId] = useState("");
+  const [chatGptSourceMode, setChatGptSourceMode] = useState<ChatGptSourceMode>("chrome");
   const [linkError, setLinkError] = useState<string | undefined>();
   const [discoveryWarnings, setDiscoveryWarnings] = useState<string[]>([]);
   const [preview, setPreview] = useState<DeliveryPreview | undefined>();
@@ -88,6 +90,16 @@ export function App(): JSX.Element {
     }, 5000);
     return () => window.clearInterval(timer);
   }, []);
+
+  useEffect(() => {
+    setSelectedSourceComponentId((current) => {
+      const currentComponent = components.find((component) => component.id === current);
+      if (currentComponent?.roleCapabilities.canBeSource && isSourceForMode(currentComponent, chatGptSourceMode) && !isDemoSourceComponent(currentComponent)) {
+        return current;
+      }
+      return components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, chatGptSourceMode) && !isDemoSourceComponent(component))?.id;
+    });
+  }, [chatGptSourceMode, components]);
 
   useEffect(() => {
     const handleQuickAction = (event: Event): void => {
@@ -159,10 +171,10 @@ export function App(): JSX.Element {
     );
     setSelectedSourceComponentId((current) => {
       const currentComponent = nextComponents.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeSource && !isDemoSourceComponent(currentComponent)) {
+      if (currentComponent?.roleCapabilities.canBeSource && isSourceForMode(currentComponent, chatGptSourceMode) && !isDemoSourceComponent(currentComponent)) {
         return current;
       }
-      return nextComponents.find((component) => component.roleCapabilities.canBeSource && !isDemoSourceComponent(component))?.id;
+      return nextComponents.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, chatGptSourceMode) && !isDemoSourceComponent(component))?.id;
     });
     setSelectedWorkspaceComponentId((current) => {
       const currentComponent = nextComponents.find((component) => component.id === current);
@@ -201,10 +213,10 @@ export function App(): JSX.Element {
     setDiscoveryWarnings(result.warnings);
     setSelectedSourceComponentId((current) => {
       const currentComponent = result.components.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeSource && !isDemoSourceComponent(currentComponent)) {
+      if (currentComponent?.roleCapabilities.canBeSource && isSourceForMode(currentComponent, chatGptSourceMode) && !isDemoSourceComponent(currentComponent)) {
         return current;
       }
-      return result.components.find((component) => component.roleCapabilities.canBeSource && !isDemoSourceComponent(component))?.id;
+      return result.components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, chatGptSourceMode) && !isDemoSourceComponent(component))?.id;
     });
     setSelectedWorkspaceComponentId((current) => {
       const currentComponent = result.components.find((component) => component.id === current);
@@ -288,7 +300,7 @@ export function App(): JSX.Element {
       setLinkError("Select a source and target first.");
       return;
     }
-    if (target.provider === "codex" && !workspace) {
+    if (isCodexTargetComponent(target) && !workspace) {
       setLinkError("Select a repo workspace for Codex links.");
       return;
     }
@@ -566,10 +578,16 @@ export function App(): JSX.Element {
               selectedTargetComponentId={selectedTargetComponentId}
               selectedCodexThreadId={selectedCodexThreadId}
               manualCodexThreadId={manualCodexThreadId}
+              chatGptSourceMode={chatGptSourceMode}
               linkError={linkError}
               targetError={targetError}
               onSelectCodexThread={setSelectedCodexThreadId}
               onManualCodexThreadIdChange={setManualCodexThreadId}
+              onChatGptSourceModeChange={(mode) => {
+                setChatGptSourceMode(mode);
+                const nextSource = components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, mode) && !isDemoSourceComponent(component));
+                setSelectedSourceComponentId(nextSource?.id);
+              }}
               onSaveManualCodexThread={() => void saveManualCodexThread()}
               onChooseRepo={() => void chooseRepoFolder()}
               onCreateWorkflowLink={() => void createWorkflowLink()}
@@ -577,6 +595,7 @@ export function App(): JSX.Element {
               onOpenTasks={() => setView("tasks")}
               onOpenAdvanced={() => setView("advanced")}
               onOpenSettings={() => setView("settings")}
+              onProbeDesktopApps={() => void discoverComponents()}
               onConnectChrome={() => void connectChrome()}
               onCheckChromeConnection={() => void refresh()}
             />
@@ -855,11 +874,26 @@ function isDemoSourceComponent(component: LinkableComponent): boolean {
   return typeof component.backingRef.sourceId === "string" && component.backingRef.sourceId.includes("mock");
 }
 
+function isSourceForMode(component: LinkableComponent, mode: ChatGptSourceMode): boolean {
+  if (mode === "desktop") {
+    return component.provider === "chatgptDesktop" || component.kind === "chatgptDesktop";
+  }
+  return component.provider === "chatgpt" && component.kind === "browserTab";
+}
+
+function isCodexTargetComponent(component: LinkableComponent): boolean {
+  return component.provider === "codex" || component.provider === "codexThread";
+}
+
 function describeSource(source: SourceEndpoint): { title: string; subtitle: string; detail?: string } {
   if (source.kind === "browserTab") {
     return { title: source.title || "Browser tab", subtitle: source.url, detail: source.boundAt };
   }
-  return { title: source.kind, subtitle: source.id };
+  if (source.kind === "chatgptDesktop") {
+    return { title: source.sessionTitle ?? source.windowTitle ?? "ChatGPT Desktop", subtitle: source.executablePath ?? source.hwnd ?? source.fingerprint, detail: source.boundAt };
+  }
+  const fallback = source as SourceEndpoint & { kind: string; id: string };
+  return { title: fallback.kind, subtitle: fallback.id };
 }
 
 function describeTarget(target: TargetEndpoint): { title: string; subtitle: string; detail?: string } {
