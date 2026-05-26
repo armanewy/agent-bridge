@@ -1,0 +1,22 @@
+{
+  "name": "agentbridge",
+  "version": "0.1.0",
+  "private": true,
+  "packageManager": "pnpm@9.15.4",
+  "scripts": {
+    "build": "pnpm -r build",
+    "test": "pnpm -r test",
+    "lint": "pnpm -r lint",
+    "dev:desktop": "pnpm --filter @agentbridge/desktop dev",
+    "dev:extension": "pnpm --filter @agentbridge/extension dev",
+    "dev:native-host": "pnpm --filter @agentbridge/native-host dev",
+    "dev:win-uia-helper": "dotnet run --project apps/win-uia-helper/AgentBridge.WinUiaHelper.csproj",
+    "build:win-uia-helper": "dotnet build apps/win-uia-helper/AgentBridge.WinUiaHelper.csproj",
+    "test:win-uia-helper": "dotnet test apps/win-uia-helper/tests/AgentBridge.WinUiaHelper.Tests.csproj"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

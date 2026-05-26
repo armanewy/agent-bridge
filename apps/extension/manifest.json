@@ -1,0 +1,22 @@
+{
+  "manifest_version": 3,
+  "name": "AgentBridge",
+  "version": "0.1.0",
+  "description": "Explicitly bind browser tabs and capture selected text for local AgentBridge handoffs.",
+  "permissions": ["activeTab", "scripting", "nativeMessaging"],
+  "background": {
+    "service_worker": "dist/src/service-worker.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "AgentBridge",
+    "default_popup": "popup.html"
+  },
+  "content_scripts": [
+    {
+      "matches": ["http://*/*", "https://*/*"],
+      "js": ["dist/src/content-script.js"],
+      "run_at": "document_idle"
+    }
+  ]
+}

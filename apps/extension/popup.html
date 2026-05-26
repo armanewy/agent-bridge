@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>AgentBridge</title>
+    <style>
+      body {
+        width: 280px;
+        margin: 0;
+        padding: 12px;
+        font-family: system-ui, sans-serif;
+      }
+
+      button {
+        width: 100%;
+        margin: 0 0 8px;
+        padding: 8px;
+      }
+
+      #status {
+        min-height: 36px;
+        font-size: 12px;
+        color: #333;
+        white-space: pre-wrap;
+      }
+    </style>
+  </head>
+  <body>
+    <button id="bind">Bind current tab as source</button>
+    <button id="capture">Capture selected text</button>
+    <button id="health">Check native host</button>
+    <div id="status" role="status"></div>
+    <script type="module" src="dist/src/popup.js"></script>
+  </body>
+</html>

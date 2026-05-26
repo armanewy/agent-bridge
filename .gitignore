@@ -1,0 +1,14 @@
+node_modules/
+dist/
+coverage/
+.vite/
+*.tsbuildinfo
+
+bin/
+obj/
+
+.agentbridge/
+agentbridge-dev-store.json
+
+.DS_Store
+Thumbs.db
