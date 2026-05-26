@@ -21,6 +21,10 @@ const api: AgentBridgeApi = {
   saveManualCodexThreadRef: (input) => ipcRenderer.invoke("agentbridge:saveManualCodexThreadRef", input),
   listProviders: () => ipcRenderer.invoke("agentbridge:listProviders"),
   getProviderStatus: (providerId: string) => ipcRenderer.invoke("agentbridge:getProviderStatus", providerId),
+  createAgentSession: (providerId, input) => ipcRenderer.invoke("agentbridge:createAgentSession", providerId, input),
+  resumeAgentSession: (providerId, sessionRefId) => ipcRenderer.invoke("agentbridge:resumeAgentSession", providerId, sessionRefId),
+  sendProviderMessage: (providerId, sessionRefId, message, context) =>
+    ipcRenderer.invoke("agentbridge:sendProviderMessage", providerId, sessionRefId, message, context),
   listAgentSessions: (providerId?: string) => ipcRenderer.invoke("agentbridge:listAgentSessions", providerId),
   listAgentTurns: (sessionRefId: string) => ipcRenderer.invoke("agentbridge:listAgentTurns", sessionRefId),
   listAgentEvents: (filter) => ipcRenderer.invoke("agentbridge:listAgentEvents", filter),

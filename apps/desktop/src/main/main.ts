@@ -30,6 +30,7 @@ import { CodexAppServerClient } from "../services/codex-app-server-client.js";
 import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import { ProviderRegistryService } from "../services/provider-registry-service.js";
+import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -38,7 +39,7 @@ import type {
   VerificationRunRequest
 } from "../services/bridge-contract.js";
 import type { RepoCommandConfig } from "../services/repo-context-service.js";
-import type { Link, WindowsDesktopWindowTarget } from "@agentbridge/core";
+import type { Link, PlannerRequest, WindowsDesktopWindowTarget } from "@agentbridge/core";
 import { defaultAgentBridgeDataDir } from "@agentbridge/local-store";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
@@ -104,6 +105,7 @@ app.whenReady().then(async () => {
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
   const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
+  providerRegistryService.registerProvider(new OpenAIPlannerProvider(store));
 
   ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
   ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
@@ -122,6 +124,17 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle("agentbridge:listProviders", () => providerRegistryService.listProviderProfiles());
   ipcMain.handle("agentbridge:getProviderStatus", (_event, providerId: string) => providerRegistryService.getProviderStatus(providerId));
+  ipcMain.handle(
+    "agentbridge:createAgentSession",
+    (_event, providerId: string, input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }) =>
+      providerRegistryService.createSession(providerId, input)
+  );
+  ipcMain.handle("agentbridge:resumeAgentSession", (_event, providerId: string, sessionRefId: string) =>
+    providerRegistryService.resumeSession(providerId, sessionRefId)
+  );
+  ipcMain.handle("agentbridge:sendProviderMessage", (_event, providerId: string, sessionRefId: string, message: string, context?: PlannerRequest) =>
+    providerRegistryService.sendMessage(providerId, sessionRefId, message, context)
+  );
   ipcMain.handle("agentbridge:listAgentSessions", (_event, providerId?: string) => providerRegistryService.listSessions(providerId));
   ipcMain.handle("agentbridge:listAgentTurns", (_event, sessionRefId: string) => providerRegistryService.listTurns(sessionRefId));
   ipcMain.handle("agentbridge:listAgentEvents", (_event, filter?: { providerId?: string; sessionRefId?: string; turnId?: string; type?: string }) =>

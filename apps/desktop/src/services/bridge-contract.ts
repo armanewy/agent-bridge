@@ -23,6 +23,7 @@ import type {
   AgentProviderProfile,
   AgentSessionRef,
   AgentTurn,
+  PlannerRequest,
   VerificationResult,
   WorkflowLink
 } from "@agentbridge/core";
@@ -185,6 +186,17 @@ export interface AgentBridgeApi {
   saveManualCodexThreadRef(input: { threadId: string; name?: string; repoPath?: string }): Promise<CodexThreadRef>;
   listProviders(): Promise<AgentProviderProfile[]>;
   getProviderStatus(providerId: string): Promise<AgentProviderProfile | undefined>;
+  createAgentSession(
+    providerId: string,
+    input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }
+  ): Promise<AgentSessionRef>;
+  resumeAgentSession(providerId: string, sessionRefId: string): Promise<AgentSessionRef>;
+  sendProviderMessage(
+    providerId: string,
+    sessionRefId: string,
+    message: string,
+    context?: PlannerRequest
+  ): Promise<AgentTurn>;
   listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
   listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
   listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;

@@ -155,6 +155,51 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     async getProviderStatus(providerId: string) {
       return mockProviderProfiles.find((profile) => profile.id === providerId);
     },
+    async createAgentSession(providerId, input = {}) {
+      const profile = mockProviderProfiles.find((item) => item.id === providerId);
+      if (!profile) {
+        throw new Error(`Provider ${providerId} not found.`);
+      }
+      const session: AgentSessionRef = {
+        id: `agent_session_${mockAgentSessions.length + 1}`,
+        providerId,
+        providerKind: profile.kind,
+        externalSessionId: `mock_external_${mockAgentSessions.length + 1}`,
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.repoPath ? { repoPath: input.repoPath } : {}),
+        status: "active",
+        createdAt: now(),
+        lastSeenAt: now(),
+        metadata: input.metadata ?? {}
+      };
+      mockAgentSessions = [session, ...mockAgentSessions];
+      return session;
+    },
+    async resumeAgentSession(_providerId, sessionRefId) {
+      const session = mockAgentSessions.find((item) => item.id === sessionRefId);
+      if (!session) {
+        throw new Error(`Agent session ${sessionRefId} not found.`);
+      }
+      const resumed: AgentSessionRef = { ...session, status: "active", lastSeenAt: now() };
+      mockAgentSessions = mockAgentSessions.map((item) => (item.id === resumed.id ? resumed : item));
+      return resumed;
+    },
+    async sendProviderMessage(providerId, sessionRefId, message, context) {
+      const turn: AgentTurn = {
+        id: `agent_turn_${mockAgentTurns.length + 1}`,
+        providerId,
+        sessionRefId,
+        role: "assistant",
+        content: `Mock response to: ${message}`,
+        status: "completed",
+        artifactIds: [],
+        createdAt: now(),
+        completedAt: now(),
+        metadata: context?.metadata ?? {}
+      };
+      mockAgentTurns = [...mockAgentTurns, turn];
+      return turn;
+    },
     async listAgentSessions(providerId?: string) {
       return mockAgentSessions.filter((session) => !providerId || session.providerId === providerId);
     },
