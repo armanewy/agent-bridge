@@ -6,7 +6,7 @@
 - A Chrome extension can explicitly capture selected text.
 - The native host persists browser sources and captures locally.
 - The desktop app lists real native-host captures by default; mock capture remains an explicit development action.
-- The desktop app offers `Create Mission from latest capture` for the newest persisted capture.
+- The desktop app offers `Create Mission from selected capture` after the user selects a capture and target.
 - The desktop app can list source/capture state from the local store.
 - A user can configure a Codex deep-link target by repository path.
 - A deterministic transform creates a structured handoff.
@@ -18,7 +18,7 @@
 ## Fail Criteria
 
 - Capture happens without a user gesture.
-- Extension requests broad host permissions by default.
+- Extension requests broad host permissions or registers all-page content scripts by default.
 - Delivery happens without an approval preview.
 - Clipboard fallback runs without explicit approval.
 - Suspected secrets are sent without warning.

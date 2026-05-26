@@ -11,12 +11,5 @@
   "action": {
     "default_title": "AgentBridge",
     "default_popup": "popup.html"
-  },
-  "content_scripts": [
-    {
-      "matches": ["http://*/*", "https://*/*"],
-      "js": ["dist/src/content-script.js"],
-      "run_at": "document_idle"
-    }
-  ]
+  }
 }

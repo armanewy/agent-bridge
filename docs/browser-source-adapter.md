@@ -23,6 +23,7 @@
 
 - On "Bind current tab as source", query the active tab and create a `BrowserTabSource` with title, URL, tab/window IDs, browser, and timestamp.
 - Send source metadata to the native host for local persistence.
+- Do not register broad all-page content scripts for MVP capture; inject capture code with `chrome.scripting.executeScript` only after a user action.
 - Treat tab reload, URL change, or tab close as status changes rather than automatic capture triggers.
 - Rebinding is explicit and updates the stored source metadata.
 

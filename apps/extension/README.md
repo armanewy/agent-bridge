@@ -13,10 +13,10 @@ Then load `apps/extension` as an unpacked extension in Chrome.
 ## Permissions
 
 - `activeTab`: access the user-invoked active tab.
-- `scripting`: read selected text when the user clicks capture.
+- `scripting`: inject a small capture function only after the user clicks a popup action.
 - `nativeMessaging`: send local events to the AgentBridge native host.
 
-No broad host permissions are requested in this skeleton.
+No broad host permissions are requested. The extension does not register all-page content scripts; selected text and ChatGPT latest-message capture run through explicit `chrome.scripting.executeScript` calls after user action.
 
 ## Manual Test Checklist
 
