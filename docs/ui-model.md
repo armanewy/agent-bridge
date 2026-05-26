@@ -1,20 +1,29 @@
 # UI Model
 
-The desktop app defaults to a Start-first Simple Mode. Internal Mission, HandoffCard, Source, Target, Link, Component, and Audit models still exist, but the default user language is Browser tab, Repo, Codex, Link, Task Card, Send, Verify, Result, and History.
+The desktop app defaults to an intent-first Workbench. Internal Mission, HandoffCard, Source, Target, Link, Component, and Audit models still exist, but the default user language is Intent, Mission, Planner, Codex, Verify, Review, Follow-up, and Artifacts.
 
 ## Simple Mode
 
-- Start: build and use one active route, `ChatGPT/browser tab -> repo -> Codex`.
+- Workbench: state intent once, let AgentBridge plan, send to Codex, verify, review, and retry.
 - Tasks: inspect task history, generated prompts, delivery attempts, artifacts, verification results, and follow-up drafts.
-- Settings: connect Chrome, choose a repo, configure Codex delivery, and set optional verification commands.
+- Settings: sign in, inspect hosted Planner/Codex status, configure workspace defaults, and set optional verification commands.
 
 The user-facing hierarchy is:
 
 ```text
-Browser tab -> Repo -> Codex -> Task Card
+Intent -> Mission -> TaskSpec -> Codex -> Verification -> Planner Review
 ```
 
-The Start page hides empty Task Card previews and demo data. It shows the active link, latest real capture if available, and the primary action: Create Task Card.
+The Workbench must not require Chrome, ChatGPT Desktop, copy/paste, OpenAI API keys, or a mandatory repo picker in Simple Mode. Repo/workspace is shown as a chip: inferred, selected, not needed, or required for the next action.
+
+## Lazy-User Acceptance
+
+- No OpenAI API key in Simple Mode.
+- No Chrome extension in Simple Mode.
+- No ChatGPT Desktop probe in Simple Mode.
+- No mandatory repo picker before intent.
+- No copy/paste required.
+- One intent can start a mission.
 
 ## Advanced Mode
 
@@ -27,6 +36,7 @@ Advanced groups the operator views that should not be required for daily use:
 - Links: saved source-to-target routing definitions.
 - Audit: local provenance events.
 - Demo tools: development-only mock capture actions.
+- Legacy Link Center: external browser/source routing experiments.
 
 ## Task Card Preview
 

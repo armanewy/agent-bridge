@@ -2,6 +2,40 @@
 
 AgentBridge is local-first. Mission artifacts, staged files, prompts, verification logs, and provider records are stored under the local AgentBridge data directory by default.
 
+## Hosted Planner Threat Model
+
+Hosted planner mode removes OpenAI API-key setup from Simple Mode, but it introduces cloud payload risk. The default policy is payload minimization, not repo mirroring.
+
+Threats:
+
+- Hosted planner payload leakage.
+- Secret upload through artifacts or logs.
+- Unwanted repo reads during workspace inference.
+- Unwanted file writes from autonomous follow-up.
+- Autonomous command execution beyond configured verification.
+- Provider hallucination loops.
+- Hosted planner cost runaway.
+- Parallel mission conflicts in the same repo.
+
+Default mitigations:
+
+- Redact before hosted planner calls.
+- Keep repo files local by default.
+- Require approval for file upload.
+- Run only configured verification commands by default.
+- Enforce max iterations and planner-call budgets.
+- Require worktree/branch isolation for serious parallel loops.
+- Report delivery modes truthfully, especially Codex open-only fallback.
+
+High-severity blockers:
+
+- Private key detected.
+- API key/token detected.
+- Unknown shell command.
+- File write outside workspace.
+- Provider request to upload a repo tree.
+- Repeated failed autonomous loop.
+
 ## File Transfer Policy
 
 Autopilot policies can restrict provider file upload and staged-file import:

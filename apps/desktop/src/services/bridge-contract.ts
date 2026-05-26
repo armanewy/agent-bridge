@@ -22,6 +22,7 @@ import type {
   WindowsDesktopWindowTarget,
   AuditEvent,
   AgentEvent,
+  AgentBridgeCloudAuthStatus,
   AgentProviderProfile,
   AgentSessionRef,
   AgentTurn,
@@ -31,7 +32,8 @@ import type {
   PlatformCapabilities,
   ReviewResult,
   VerificationResult,
-  WorkflowLink
+  WorkflowLink,
+  WorkspaceCandidate
 } from "@agentbridge/core";
 import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
@@ -121,6 +123,20 @@ export interface PlatformStatus {
   stagingRoot: string;
   logsDir: string;
   defaultShell: string;
+}
+
+export interface AgentBridgeCurrentUser {
+  id: string;
+  email?: string;
+}
+
+export interface AgentBridgeAuthStatus {
+  status: AgentBridgeCloudAuthStatus;
+  signedIn: boolean;
+  cloudBaseUrl: string;
+  mode: "development" | "production";
+  user?: AgentBridgeCurrentUser;
+  error?: string;
 }
 
 export interface MissionDetail {
@@ -221,6 +237,13 @@ export interface AgentBridgeApi {
   listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
   listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
   listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
+  getAgentBridgeAuthStatus(): Promise<AgentBridgeAuthStatus>;
+  signInAgentBridgeDevMode(): Promise<AgentBridgeAuthStatus>;
+  signOutAgentBridge(): Promise<AgentBridgeAuthStatus>;
+  getAgentBridgeCurrentUser(): Promise<AgentBridgeCurrentUser | undefined>;
+  setAgentBridgeCloudBaseUrl(url: string): Promise<AgentBridgeAuthStatus>;
+  inferWorkspaceForMission(missionId: string): Promise<WorkspaceCandidate[]>;
+  confirmWorkspaceCandidate(candidateId: string): Promise<WorkspaceCandidate | undefined>;
   createWorkbenchMission(input?: CreateWorkbenchMissionInput): Promise<Mission>;
   sendUserMessageToPlanner(missionId: string, text: string): Promise<PlannerResponse>;
   createTaskSpecFromLatestPlannerTurn(missionId: string): Promise<HandoffCard>;

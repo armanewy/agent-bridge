@@ -507,7 +507,142 @@ export const AgentProviderCapabilitySchema = z.enum([
 ]);
 export type AgentProviderCapability = z.infer<typeof AgentProviderCapabilitySchema>;
 
-export const AgentProviderAuthModeSchema = z.enum(["apiKey", "localApp", "appServer", "cli", "none", "unknown"]);
+export const PlannerProviderModeSchema = z.enum([
+  "hostedAgentBridge",
+  "userOpenAiApiKey",
+  "codexLocalPlanner",
+  "localModelPlaceholder"
+]);
+export type PlannerProviderMode = z.infer<typeof PlannerProviderModeSchema>;
+
+export const AgentBridgeCloudAuthStatusSchema = z.enum(["signedOut", "signedIn", "expired", "unavailable"]);
+export type AgentBridgeCloudAuthStatus = z.infer<typeof AgentBridgeCloudAuthStatusSchema>;
+
+export const WorkspaceCandidateSourceSchema = z.enum([
+  "codexAppServerThread",
+  "codexDeepLinkTarget",
+  "agentBridgeHistory",
+  "githubUrl",
+  "providerSelfReport",
+  "windowTitle",
+  "userSelected"
+]);
+export type WorkspaceCandidateSource = z.infer<typeof WorkspaceCandidateSourceSchema>;
+
+export const WorkspaceCandidateSchema = z.object({
+  id: z.string().min(1),
+  repoName: z.string().optional(),
+  repoPath: z.string().optional(),
+  branch: z.string().optional(),
+  remoteUrl: z.string().url().optional(),
+  source: WorkspaceCandidateSourceSchema,
+  confidence: z.number().int().min(0).max(100),
+  evidence: z.array(z.string()),
+  requiresConfirmation: z.boolean(),
+  createdAt: TimestampSchema
+});
+export type WorkspaceCandidate = z.infer<typeof WorkspaceCandidateSchema>;
+
+export const PlannerPayloadPolicySchema = z.object({
+  includeIntent: z.boolean(),
+  includeTaskSpec: z.boolean(),
+  includeMissionSummary: z.boolean(),
+  includeRepoIdentity: z.enum(["never", "nameOnly", "nameAndBranch", "fullPathIfLocalOnly"]),
+  includeDiffSummary: z.boolean(),
+  includeCommandOutputs: z.enum(["never", "excerptsOnly", "fullIfBelowLimit"]),
+  includeArtifacts: z.enum(["never", "approvedOnly", "policyAllowed"]),
+  maxPayloadBytes: z.number().int().positive(),
+  maxLogExcerptBytes: z.number().int().positive(),
+  redactBeforeSend: z.boolean()
+});
+export type PlannerPayloadPolicy = z.infer<typeof PlannerPayloadPolicySchema>;
+
+export function createDefaultPlannerPayloadPolicy(): PlannerPayloadPolicy {
+  return {
+    includeIntent: true,
+    includeTaskSpec: true,
+    includeMissionSummary: true,
+    includeRepoIdentity: "nameOnly",
+    includeDiffSummary: true,
+    includeCommandOutputs: "excerptsOnly",
+    includeArtifacts: "approvedOnly",
+    maxPayloadBytes: 64 * 1024,
+    maxLogExcerptBytes: 8 * 1024,
+    redactBeforeSend: true
+  };
+}
+
+export const HostedPlannerCreateSessionRequestSchema = z.object({
+  missionId: z.string().optional(),
+  title: z.string().optional(),
+  mode: PlannerProviderModeSchema.default("hostedAgentBridge"),
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerCreateSessionRequest = z.input<typeof HostedPlannerCreateSessionRequestSchema>;
+
+export const HostedPlannerCreateSessionResponseSchema = z.object({
+  sessionId: z.string().min(1),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerCreateSessionResponse = z.infer<typeof HostedPlannerCreateSessionResponseSchema>;
+
+export const HostedPlannerMessageRequestSchema = z.object({
+  sessionId: z.string().min(1),
+  missionId: z.string().optional(),
+  payload: z.record(z.unknown()),
+  policy: PlannerPayloadPolicySchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerMessageRequest = z.input<typeof HostedPlannerMessageRequestSchema>;
+
+export const HostedPlannerMessageResponseSchema = z.object({
+  sessionId: z.string().min(1),
+  turnId: z.string().min(1),
+  content: z.string().min(1),
+  requestId: z.string().min(1),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerMessageResponse = z.infer<typeof HostedPlannerMessageResponseSchema>;
+
+export const HostedPlannerTaskSpecRequestSchema = z.object({
+  sessionId: z.string().optional(),
+  missionId: z.string().optional(),
+  payload: z.record(z.unknown()),
+  policy: PlannerPayloadPolicySchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerTaskSpecRequest = z.input<typeof HostedPlannerTaskSpecRequestSchema>;
+
+export const HostedPlannerTaskSpecResponseSchema = z.object({
+  taskSpec: TaskSpecSchema,
+  requestId: z.string().min(1),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerTaskSpecResponse = z.infer<typeof HostedPlannerTaskSpecResponseSchema>;
+
+export const HostedPlannerReviewRequestSchema = z.object({
+  sessionId: z.string().optional(),
+  missionId: z.string().min(1),
+  payload: z.record(z.unknown()),
+  policy: PlannerPayloadPolicySchema.optional(),
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerReviewRequest = z.input<typeof HostedPlannerReviewRequestSchema>;
+
+export const HostedPlannerReviewResponseSchema = z.object({
+  reviewSummary: z.string().min(1),
+  statusSuggestion: z.enum(["passed", "needs_review", "follow_up_needed"]),
+  followUpTaskSpec: TaskSpecSchema.optional(),
+  requestId: z.string().min(1),
+  createdAt: TimestampSchema,
+  metadata: z.record(z.unknown()).default({})
+});
+export type HostedPlannerReviewResponse = z.infer<typeof HostedPlannerReviewResponseSchema>;
+
+export const AgentProviderAuthModeSchema = z.enum(["apiKey", "agentBridgeCloud", "localApp", "appServer", "cli", "none", "unknown"]);
 export type AgentProviderAuthMode = z.infer<typeof AgentProviderAuthModeSchema>;
 
 export const AgentProviderStatusSchema = z.enum(["available", "needsAuth", "unavailable", "unsupported"]);

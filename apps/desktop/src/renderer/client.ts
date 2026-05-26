@@ -37,7 +37,8 @@ import type {
   HandoffCard,
   PlannerResponse,
   ReviewResult,
-  TaskSpec
+  TaskSpec,
+  WorkspaceCandidate
 } from "@agentbridge/core";
 
 const now = () => new Date().toISOString();
@@ -94,6 +95,9 @@ let mockProviderProfiles: AgentProviderProfile[] = [
 let mockAgentSessions: AgentSessionRef[] = [];
 let mockAgentTurns: AgentTurn[] = [];
 let mockAgentEvents: AgentEvent[] = [];
+let mockAuthSignedIn = false;
+let mockCloudBaseUrl = "http://127.0.0.1:8787";
+let mockWorkspaceCandidates: WorkspaceCandidate[] = [];
 let mockExtensionId = "";
 let mockExtensionConnected = false;
 let mockCodexAppServerStatus: CodexAppServerStatus = {
@@ -243,6 +247,63 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         .filter((event) => !filter.sessionRefId || event.sessionRefId === filter.sessionRefId)
         .filter((event) => !filter.turnId || event.turnId === filter.turnId)
         .filter((event) => !filter.type || event.type === filter.type);
+    },
+    async getAgentBridgeAuthStatus() {
+      return {
+        status: mockAuthSignedIn ? "signedIn" : "signedOut",
+        signedIn: mockAuthSignedIn,
+        cloudBaseUrl: mockCloudBaseUrl,
+        mode: "development",
+        ...(mockAuthSignedIn ? { user: { id: "user_dev", email: "dev@agentbridge.local" } } : {})
+      };
+    },
+    async signInAgentBridgeDevMode() {
+      mockAuthSignedIn = true;
+      return this.getAgentBridgeAuthStatus();
+    },
+    async signOutAgentBridge() {
+      mockAuthSignedIn = false;
+      return this.getAgentBridgeAuthStatus();
+    },
+    async getAgentBridgeCurrentUser() {
+      return mockAuthSignedIn ? { id: "user_dev", email: "dev@agentbridge.local" } : undefined;
+    },
+    async setAgentBridgeCloudBaseUrl(url: string) {
+      mockCloudBaseUrl = url.replace(/\/+$/, "");
+      return this.getAgentBridgeAuthStatus();
+    },
+    async inferWorkspaceForMission(missionId: string) {
+      const mission = mockMissions.find((item) => item.id === missionId);
+      mockWorkspaceCandidates = [
+        ...mockTargets
+          .filter((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink")
+          .map((target) => ({
+            id: `workspace_candidate_${target.id}`,
+            repoName: target.repoPath.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? target.repoPath,
+            repoPath: target.repoPath,
+            source: "codexDeepLinkTarget" as const,
+            confidence: 95,
+            evidence: [`Mock Codex target ${target.id}.`],
+            requiresConfirmation: false,
+            createdAt: now()
+          })),
+        ...(mission?.goal.includes("github.com")
+          ? [{
+              id: "workspace_candidate_github",
+              repoName: "mock/github",
+              remoteUrl: "https://github.com/mock/github",
+              source: "githubUrl" as const,
+              confidence: 80,
+              evidence: ["Mock GitHub URL in mission."],
+              requiresConfirmation: true,
+              createdAt: now()
+            }]
+          : [])
+      ];
+      return mockWorkspaceCandidates;
+    },
+    async confirmWorkspaceCandidate(candidateId: string) {
+      return mockWorkspaceCandidates.find((candidate) => candidate.id === candidateId);
     },
     async createWorkbenchMission(input = {}) {
       const mission: Mission = {

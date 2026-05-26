@@ -35,6 +35,8 @@ import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/
 import { PlatformService } from "../services/platform-service.js";
 import { ArtifactBrokerService } from "../services/artifact-broker-service.js";
 import { AutopilotService } from "../services/autopilot-service.js";
+import { AuthService, FetchAuthTransport, MemoryAuthStorage } from "../services/auth-service.js";
+import { WorkspaceResolverService } from "../services/workspace-resolver-service.js";
 import type {
   CodexDeliveryRequest,
   ConfigureNativeHostRequest,
@@ -99,6 +101,9 @@ app.whenReady().then(async () => {
   const dataDir = platformService.getUserDataDir();
   const store = createDesktopStore(dataDir);
   const artifactBrokerService = new ArtifactBrokerService(store, platformService);
+  const cloudBaseUrl = process.env.AGENTBRIDGE_CLOUD_URL ?? "http://127.0.0.1:8787";
+  const authService = new AuthService(new MemoryAuthStorage(), cloudBaseUrl, app.isPackaged ? "production" : "development", new FetchAuthTransport(cloudBaseUrl));
+  const workspaceResolverService = new WorkspaceResolverService(store);
   const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);
@@ -171,6 +176,13 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:listAgentEvents", (_event, filter?: { providerId?: string; sessionRefId?: string; turnId?: string; type?: string }) =>
     providerRegistryService.listEvents(filter)
   );
+  ipcMain.handle("agentbridge:getAgentBridgeAuthStatus", () => authService.getAuthStatus());
+  ipcMain.handle("agentbridge:signInAgentBridgeDevMode", () => authService.signInDevMode());
+  ipcMain.handle("agentbridge:signOutAgentBridge", () => authService.signOut());
+  ipcMain.handle("agentbridge:getAgentBridgeCurrentUser", () => authService.getCurrentUser());
+  ipcMain.handle("agentbridge:setAgentBridgeCloudBaseUrl", (_event, url: string) => authService.setCloudBaseUrl(url));
+  ipcMain.handle("agentbridge:inferWorkspaceForMission", (_event, missionId: string) => workspaceResolverService.inferForMission(missionId));
+  ipcMain.handle("agentbridge:confirmWorkspaceCandidate", (_event, candidateId: string) => workspaceResolverService.confirmWorkspace(candidateId));
   ipcMain.handle("agentbridge:createWorkbenchMission", (_event, input?: CreateWorkbenchMissionInput) =>
     workbenchService.createWorkbenchMission(input)
   );

@@ -3,6 +3,11 @@
 ## Pass Criteria
 
 - Simple Mode's lowest-friction production path is the built-in Workbench: OpenAI Planner -> Codex Executor -> Verification -> Planner Review.
+- Production Simple Mode uses the hosted AgentBridge Planner by default; no OpenAI API key is required for normal users.
+- BYOK OpenAI planning remains Advanced only.
+- User intent can start a mission before repo selection.
+- Repo/workspace is inferred when possible and requested only when Codex new-thread creation, verification, or repo file operations require it.
+- Repo files stay local unless explicit policy and user approval allow file upload.
 - Browser extensions, ChatGPT Desktop probes, and external browser-tab imports are Advanced adapters, not default requirements.
 - The desktop default navigation item is `Workbench`.
 - The packaged desktop app opens at 760x940, has minimum size 680x760, and the Start screen has no horizontal scrolling at that size.
@@ -11,6 +16,7 @@
 - Workbench shows Codex delivery status and whether existing-thread continuation is App Server capable or open-only fallback.
 - User can choose a repo, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
 - User can choose a repo, enter one intent, select Manual/Supervised/Autonomous, and start an Autopilot mission.
+- User can also enter intent before choosing a repo while the mission is still in Bridge mode.
 - Autopilot creates durable steps for planning, TaskSpec creation, Codex delivery, verification, Planner review, follow-up, steering, and approval requests.
 - Autopilot stops when verification passes, max iterations are reached, the user stops it, a provider fails, or an approval/risk boundary is hit.
 - Steering text is stored as a mission artifact and is sent to Codex through App Server `turn/steer` when an active App Server session is available.
@@ -19,6 +25,7 @@
 - Mission artifacts include planner responses, TaskSpec, Codex prompt, delivery result, verification logs, git diff, Planner review, follow-up prompt, and local artifact files where produced.
 - Artifact file exchange is local-first: files are stored under the AgentBridge artifact root, staged separately for Codex, and never written into the repo or uploaded without policy support.
 - Artifact file exchange is policy-gated: risky files pause Autopilot for approval before provider transfer, and artifact tray actions can stage/exclude files for Planner/Codex follow-up.
+- Hosted planner payloads are minimized: intent, summaries, TaskSpec, verification summaries, and approved artifacts only.
 - WorkflowLink, LinkableComponent, browser captures, ChatGPT Desktop, extension setup, and demo tools are hidden under Advanced.
 - If Chrome is connected but no ChatGPT tab has been synced, only the Advanced legacy link center discusses syncing external ChatGPT tabs.
 - The desktop app registers or repairs the native messaging host for the configured production extension ID.
@@ -66,7 +73,7 @@
 
 ## Known Limitations
 
-- Default Workbench planning requires an OpenAI API key supplied through environment variables.
+- Hosted planner implementation is the production target; current BYOK planner still requires an OpenAI API key until cloud auth/provider code lands.
 - Production builds need a stable Chrome extension ID and Web Store listing URL.
 - Development builds can still use manual extension ID entry in Settings for optional unpacked-extension testing.
 - The Tasks detail view shows source capture excerpt, TaskSpec, artifacts, delivery attempts, timeline, next action, and verification status.

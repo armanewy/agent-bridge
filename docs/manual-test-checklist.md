@@ -34,10 +34,12 @@
 - Workbench screen fits in the compact window without horizontal scrolling.
 - Simple Mode shows the Workbench only: repo, Planner, Codex, task state, verification, and review.
 - Simple Mode does not require Chrome, ChatGPT Desktop, clipboard capture, manual capture, or demo data.
-- With no `OPENAI_API_KEY`/`AGENTBRIDGE_OPENAI_API_KEY`, Workbench shows OpenAI Planner as `needsAuth`.
-- With no repo selected, Workbench asks the user to choose a repo before Codex delivery.
+- Production Simple Mode does not ask for `OPENAI_API_KEY`/`AGENTBRIDGE_OPENAI_API_KEY`; hosted planner sign-in is the default target.
+- BYOK OpenAI API key setup is visible only in Advanced.
+- With no repo selected, Workbench accepts intent and asks for workspace only when new Codex thread creation, verification, or repo file operations require it.
 - User can choose repo, create a Workbench task, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
 - User can enter one intent, choose Supervised mode, click `Start Mission`, and see the mission timeline advance.
+- User can start a hosted-planner mission without Chrome, ChatGPT Desktop, manual copy/paste, or a mandatory repo picker.
 - If Supervised mode reaches Codex delivery, a pending approval card appears before sending to Codex.
 - Resolving an approval with `Approve` continues the same Autopilot run.
 - `Stop` cancels an active Autopilot run and records the stop reason.
@@ -84,6 +86,7 @@
 - Confirm verification runs only configured commands.
 - Confirm failed verification can ask Planner for review and draft a follow-up.
 - Confirm no provider file upload happens unless policy allows it.
+- Confirm hosted planner payload preview/minimization excludes repo files by default.
 - Add a secret-looking `.env` artifact and confirm Autopilot pauses for approval before provider transfer.
 - Confirm local artifact files are staged under the AgentBridge staging root, not written directly into the repo.
 

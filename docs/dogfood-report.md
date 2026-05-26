@@ -2,8 +2,8 @@
 
 ## Current Workflow
 
-- Desktop defaults to Workbench: choose repo -> ask OpenAI Planner -> generate TaskSpec -> send to Codex -> verify -> ask Planner to review.
-- Workbench now also supports an intent-first Autopilot path: choose repo -> write intent -> pick Manual/Supervised/Autonomous -> start mission.
+- Target default workflow: sign in -> connect Codex -> enter intent -> hosted Planner -> TaskSpec -> Codex -> verify -> Planner review.
+- Workbench supports an intent-first Autopilot path: write intent -> pick Manual/Supervised/Autonomous -> start mission. Repo selection should happen only when the next action needs workspace access.
 - Codex delivery uses the Codex Executor provider, backed by the existing deep-link/App Server services.
 - Codex provider events are stored for turn start, progress/tool events where available, completion/failure, errors, and steering.
 - Verification captures git diff and command outputs, stores a VerificationResult, and can be sent back to Planner for review.
@@ -27,7 +27,8 @@
 
 ## What Still Feels Annoying
 
-- Planner requires an OpenAI API key in the environment.
+- Current BYOK planner still requires an OpenAI API key in the environment until hosted planner code lands.
+- Hosted planner must remove OpenAI API-key friction from Simple Mode.
 - Running the renderer in browser mode cannot open Codex deep links like Electron can.
 - Deep-link-only Codex delivery still cannot observe real Codex execution; App Server sessions provide the stronger event/steering path.
 - Browser-tab discovery is still opt-in in Advanced because all-tab metadata needs the optional Chrome `tabs` permission.
@@ -51,5 +52,20 @@
 - Continue if a developer uses at least five Task Cards per workday after setup.
 - Continue if successful Planner-to-Codex Task Card creation stays under 10 seconds after the Planner answer.
 - Continue if verification artifacts are actually used to decide follow-up prompts.
+- Continue if average user interventions stay at or below 3 per mission.
+- Continue if cost per useful hosted-planner mission is low enough for an individual subscription.
 - Kill or pivot if users mostly treat it as a clipboard wrapper and ignore Task history.
 - Kill or pivot if the Workbench is less useful than asking the Planner and Codex separately.
+- Kill or pivot if setup takes longer than manual GPT -> Codex usage.
+- Kill or pivot if no reliable verification or worktree isolation exists for autonomous/parallel loops.
+
+## Dogfood Metrics
+
+- Time from intent to first Codex turn.
+- User interventions per mission.
+- Autonomous iterations before stop.
+- Verification pass/fail rate and false-pass rate.
+- Worktree conflict rate.
+- Cost per mission.
+- Missions run in parallel.
+- Manual copy/paste used: yes/no.

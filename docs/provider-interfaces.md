@@ -50,6 +50,17 @@ Examples:
 
 ## Provider Types
 
+### PlannerProviderMode
+
+AgentBridge supports multiple planner modes, but only one should be the Simple Mode default:
+
+- `hostedAgentBridge`: default production mode. The desktop signs in to AgentBridge Cloud and uses the hosted planner API. Normal users do not provide an OpenAI API key.
+- `userOpenAiApiKey`: Advanced/BYOK mode. The existing API-key planner remains available for power users and local development.
+- `codexLocalPlanner`: Advanced/no-cloud dogfood mode. A separate Codex session can act as planner/reviewer when implemented.
+- `localModelPlaceholder`: future local model mode.
+
+Simple Mode must prefer `hostedAgentBridge` once cloud auth is available. BYOK, local Codex planner, browser imports, and desktop probes are Advanced options.
+
 ### PlannerProvider
 
 Used for planning and review loops.

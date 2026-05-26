@@ -1,11 +1,11 @@
 # AgentBridge
 
-AgentBridge is a local-first desktop app for turning AI guidance into durable, repo-aware work for coding agents.
+AgentBridge is a local-first desktop app for turning intent into durable, verifiable work for coding agents.
 
 The narrow product loop is now:
 
 ```text
-OpenAI Planner
+AgentBridge hosted Planner
 -> TaskSpec
 -> Codex executor
 -> verification artifacts
@@ -13,17 +13,20 @@ OpenAI Planner
 -> optional Codex follow-up
 ```
 
-The default path does not require a browser extension, external ChatGPT tab, clipboard capture, or ChatGPT Desktop probing. The built-in Planner creates scoped coding direction inside AgentBridge; Codex executes through deep links or Codex App Server.
+The default production path does not require a browser extension, external ChatGPT tab, clipboard capture, ChatGPT Desktop probing, or an OpenAI API key in Simple Mode. The hosted AgentBridge Planner creates scoped coding direction; Codex executes through deep links or Codex App Server.
 
 `http://127.0.0.1:5173` is development-only. The product surface is the packaged desktop app.
 
 ## Default Workbench Flow
 
 1. Launch AgentBridge.
-2. Choose the local repo Codex should work in.
-3. Describe the desired outcome once.
-4. Start a Manual, Supervised, or Autonomous mission.
-5. AgentBridge asks the OpenAI Planner, creates a TaskSpec, sends it to Codex, runs configured verification, asks Planner to review, and drafts/sends follow-up work when policy allows it.
+2. Sign in to AgentBridge.
+3. Connect Codex or use deep-link fallback.
+4. Describe the desired outcome once.
+5. Start a Manual, Supervised, or Autonomous mission.
+6. AgentBridge asks the hosted Planner, creates a TaskSpec, sends it to Codex, runs configured verification when a workspace is available, asks Planner to review, and drafts/sends follow-up work when policy allows it.
+
+Repo/workspace selection is optional until the next action requires it. AgentBridge should infer workspace from Codex sessions/history when possible.
 
 The detailed manual controls are still available in the expandable Workbench details panel:
 
@@ -40,7 +43,7 @@ AgentBridge stores local work records so the task can be resumed and audited:
 - `Mission`: the durable user task.
 - `TaskSpec`: the structured agent-ready task.
 - `HandoffCard`: one dispatch to Codex or another target.
-- `RepoContextPack`: repo path, branch/status, changed files, and verification commands.
+- `RepoContextPack`: repo path, branch/status, changed files, and verification commands when workspace access is needed.
 - `Artifact`: captured text, generated prompt, delivery result, git diff, test output, follow-up prompt, and related evidence.
 - `VerificationResult`: pass/fail/needs-review status and command results.
 
@@ -145,6 +148,8 @@ Implemented:
 - Repo context with branch/status/changed-files and test/lint/typecheck command settings.
 - Codex new-thread deep links, existing-thread deep-link open fallback, and App Server client support.
 - Task Card Preview with explicit delivery mode and warnings.
+- Hosted planner architecture docs for Simple Mode without OpenAI API-key friction.
+- Repo-minimal policy docs for Bridge, Workspace, Verification, and Artifact/file modes.
 - Mission-aware delivery attempts and audit provenance.
 - User-triggered verification runner that stores git diff and command output artifacts.
 - Failed verification follow-up HandoffCard drafts.
@@ -152,7 +157,7 @@ Implemented:
 
 ## Known Limitations
 
-- OpenAI Planner requires `OPENAI_API_KEY` or `AGENTBRIDGE_OPENAI_API_KEY` in the environment.
+- Hosted planner provider is the production target. Current BYOK planner requires `OPENAI_API_KEY` or `AGENTBRIDGE_OPENAI_API_KEY` until cloud auth/provider code lands.
 - Codex deep-link result observation is unavailable by design; Codex App Server sessions provide the event monitoring and steering path.
 - Existing Codex thread continuation requires Codex App Server; deep links can only open an existing thread.
 - Legacy ChatGPT/browser/Desktop capture is Advanced-only and still experimental.
