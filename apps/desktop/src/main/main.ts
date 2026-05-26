@@ -45,6 +45,8 @@ const TRAY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height
   <rect width="32" height="32" rx="7" fill="#11181d"/>
   <path d="M8 22.5 14.5 7h3L24 22.5h-3.3l-1.2-3.2h-7l-1.2 3.2H8Zm5.5-6h5L16 9.8l-2.5 6.7Z" fill="#9ee493"/>
 </svg>`;
+const CHATGPT_USER_AGENT =
+  "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/125.0.0.0 Safari/537.36";
 
 let mainWindow: BrowserWindow | undefined;
 let chatGptWindow: BrowserWindow | undefined;
@@ -174,9 +176,10 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:openChromeExtensionFolder", () => openChromeExtensionFolder());
   ipcMain.handle("agentbridge:openEmbeddedChatGpt", async (_event, input?: { url?: string }) => {
     const window = await showEmbeddedChatGptWindow(input?.url);
+    const targetUrl = normalizeChatGptUrl(input?.url);
     return sourceService.bindEmbeddedChatGptSource({
       title: window.getTitle() || "ChatGPT in AgentBridge",
-      url: window.webContents.getURL() || "https://chatgpt.com/"
+      url: window.webContents.getURL() || targetUrl
     });
   });
   ipcMain.handle("agentbridge:captureEmbeddedChatGptSelection", async () => {
@@ -338,18 +341,33 @@ async function showEmbeddedChatGptWindow(rawUrl?: string): Promise<BrowserWindow
       minWidth: 760,
       minHeight: 640,
       title: "ChatGPT - AgentBridge",
+      show: true,
       webPreferences: {
         contextIsolation: true,
         nodeIntegration: false,
-        sandbox: true
+        sandbox: true,
+        partition: "persist:agentbridge-chatgpt"
       }
+    });
+    chatGptWindow.webContents.setUserAgent(CHATGPT_USER_AGENT);
+    chatGptWindow.webContents.setWindowOpenHandler(({ url }) => {
+      if (isAllowedChatGptNavigation(url)) {
+        chatGptWindow?.loadURL(url).catch((error: unknown) => console.error("Failed to open ChatGPT popup URL", error));
+        return { action: "deny" };
+      }
+      shell.openExternal(url).catch((error: unknown) => console.error("Failed to open external URL", error));
+      return { action: "deny" };
     });
     chatGptWindow.on("closed", () => {
       chatGptWindow = undefined;
     });
-    await chatGptWindow.loadURL(targetUrl);
+    void chatGptWindow.loadURL(targetUrl).catch((error: unknown) => {
+      console.error("Failed to load ChatGPT in AgentBridge window", error);
+    });
   } else if (rawUrl?.trim() && chatGptWindow.webContents.getURL() !== targetUrl) {
-    await chatGptWindow.loadURL(targetUrl);
+    void chatGptWindow.loadURL(targetUrl).catch((error: unknown) => {
+      console.error("Failed to load ChatGPT conversation in AgentBridge window", error);
+    });
   }
 
   if (chatGptWindow.isMinimized()) {
@@ -357,7 +375,28 @@ async function showEmbeddedChatGptWindow(rawUrl?: string): Promise<BrowserWindow
   }
   chatGptWindow.show();
   chatGptWindow.focus();
+  chatGptWindow.moveTop();
+  chatGptWindow.setAlwaysOnTop(true, "pop-up-menu");
+  setTimeout(() => {
+    if (chatGptWindow && !chatGptWindow.isDestroyed()) {
+      chatGptWindow.setAlwaysOnTop(false);
+    }
+  }, 750);
   return chatGptWindow;
+}
+
+function isAllowedChatGptNavigation(rawUrl: string): boolean {
+  try {
+    const parsed = new URL(rawUrl);
+    return parsed.protocol === "https:" && (
+      parsed.hostname === "chatgpt.com" ||
+      parsed.hostname === "chat.openai.com" ||
+      parsed.hostname.endsWith(".openai.com") ||
+      parsed.hostname.endsWith(".auth0.com")
+    );
+  } catch {
+    return false;
+  }
 }
 
 function normalizeChatGptUrl(rawUrl?: string): string {

@@ -305,17 +305,20 @@ function SourceSetupPanel({
   onOpenEmbeddedChatGpt(url?: string): void;
   onAction(): void;
 }): JSX.Element {
-  const showEmbeddedUrl = mode === "chrome" && !setupStatus?.extensionIdKnown && !setupStatus?.extensionConnected;
+  const showEmbeddedUrl = mode === "chrome";
   return (
     <div className="warning-band stacked">
       <div className="warning-row">
         <span>{sourceBlockedCopy(mode, setupStatus, sourceComponent)}</span>
-        <button type="button" className="secondary-button" onClick={onAction}>
-          {sourceActionLabel(mode, setupStatus, sourceComponent)}
+        <button type="button" className="secondary-button" onClick={mode === "chrome" ? () => onOpenEmbeddedChatGpt() : onAction}>
+          {mode === "chrome" ? "Open ChatGPT here" : sourceActionLabel(mode, setupStatus, sourceComponent)}
         </button>
       </div>
       {showEmbeddedUrl ? (
         <div className="inline-form">
+          <button type="button" className="secondary-button" onClick={() => onOpenEmbeddedChatGpt()}>
+            Open new/current ChatGPT session
+          </button>
           <input
             value={embeddedChatGptUrl}
             onChange={(event) => onEmbeddedChatGptUrlChange(event.currentTarget.value)}
@@ -521,7 +524,7 @@ function sourceDetail(component: LinkableComponent): string {
 }
 
 function missingSourceTitle(mode: "chrome" | "desktop"): string {
-  return mode === "desktop" ? "No ChatGPT Desktop conversation found" : "No ChatGPT tabs found";
+  return mode === "desktop" ? "No ChatGPT Desktop conversation found" : "No ChatGPT source connected";
 }
 
 function missingSourceDetail(mode: "chrome" | "desktop", status?: SetupStatus): string {
@@ -543,12 +546,12 @@ function sourceBlockedCopy(mode: "chrome" | "desktop", status?: SetupStatus, com
     return "Open ChatGPT Desktop, then probe desktop apps. AgentBridge uses Windows UI Automation only when ChatGPT exposes a readable conversation candidate.";
   }
   if (status?.extensionConnected) {
-    return "Chrome is connected, but no ChatGPT tab has been synced yet. In your existing ChatGPT tab, open the AgentBridge extension and click Sync this ChatGPT tab.";
+    return "Chrome is connected, but no external ChatGPT tab has been synced. For fewer setup steps, open ChatGPT inside AgentBridge; use the extension only when you need to bind an existing external browser tab.";
   }
   if (!status?.extensionIdKnown) {
-    return "Open ChatGPT inside AgentBridge. No extension is required for this path.";
+    return "Open ChatGPT inside AgentBridge. It keeps its own ChatGPT login/session and can also open a pasted existing ChatGPT conversation URL.";
   }
-  return "Connect Chrome, install/open the AgentBridge extension, then sync your existing ChatGPT tab. Ctrl+Shift+Y captures selected text after the tab is synced.";
+  return "Open ChatGPT inside AgentBridge for the no-extension path, or connect Chrome if you need to bind an existing external browser tab.";
 }
 
 function sourceActionLabel(mode: "chrome" | "desktop", status?: SetupStatus, component?: LinkableComponent): string {
@@ -561,10 +564,7 @@ function sourceActionLabel(mode: "chrome" | "desktop", status?: SetupStatus, com
     }
     return "Change tab";
   }
-  if (!status?.extensionIdKnown) {
-    return "Open ChatGPT here";
-  }
-  return status?.extensionConnected ? "Refresh after sync" : "Connect Chrome";
+  return "Open ChatGPT here";
 }
 
 function sourceAction(
@@ -589,10 +589,7 @@ function sourceAction(
     }
     return actions.onOpenAdvanced;
   }
-  if (!status?.extensionIdKnown) {
-    return actions.onOpenEmbeddedChatGpt;
-  }
-  return status?.extensionConnected ? actions.onCheckChromeConnection : actions.onConnectChrome;
+  return actions.onOpenEmbeddedChatGpt;
 }
 
 function repoLabel(target?: CodexDeepLinkTarget): string | undefined {
