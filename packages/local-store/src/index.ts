@@ -1,5 +1,6 @@
 import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
+import { randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { homedir } from "node:os";
 import {
@@ -239,6 +240,7 @@ interface StoreData {
 
 export class JsonFileStore implements LocalStore {
   private readonly filePath: string;
+  private writeQueue: Promise<void> = Promise.resolve();
 
   constructor(private readonly rootDir: string, fileName = "agentbridge-store.json") {
     this.filePath = join(rootDir, fileName);
@@ -913,9 +915,13 @@ export class JsonFileStore implements LocalStore {
   }
 
   private async update(mutator: (data: StoreData) => void): Promise<void> {
-    const data = await this.read();
-    mutator(data);
-    await this.write(data);
+    const operation = this.writeQueue.then(async () => {
+      const data = await this.read();
+      mutator(data);
+      await this.write(data);
+    });
+    this.writeQueue = operation.catch(() => undefined);
+    await operation;
   }
 
   private async read(): Promise<StoreData> {
@@ -933,7 +939,7 @@ export class JsonFileStore implements LocalStore {
 
   private async write(data: StoreData): Promise<void> {
     await mkdir(this.rootDir, { recursive: true });
-    const tmpPath = `${this.filePath}.tmp`;
+    const tmpPath = `${this.filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
     await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
     await rename(tmpPath, this.filePath);
   }
