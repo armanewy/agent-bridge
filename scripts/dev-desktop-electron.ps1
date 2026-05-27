@@ -39,6 +39,16 @@ function Wait-ForViteServer {
   throw "Timed out waiting for Vite dev server at $Url. See $viteOut and $viteErr."
 }
 
+function Stop-ProcessTree {
+  param([Parameter(Mandatory=$true)][int]$ProcessId)
+
+  $children = Get-CimInstance Win32_Process | Where-Object { $_.ParentProcessId -eq $ProcessId }
+  foreach ($child in $children) {
+    Stop-ProcessTree -ProcessId $child.ProcessId
+  }
+  Stop-Process -Id $ProcessId -Force -ErrorAction SilentlyContinue
+}
+
 $devPort = if ($env:AGENTBRIDGE_DESKTOP_DEV_PORT) { [int]$env:AGENTBRIDGE_DESKTOP_DEV_PORT } else { Get-FreeTcpPort }
 $devServerUrl = "http://127.0.0.1:$devPort/"
 
@@ -48,7 +58,7 @@ try {
 
   $vite = Start-Process `
     -FilePath $pnpmCommand `
-    -ArgumentList @("--filter", "@agentbridge/desktop", "dev", "--", "--port", "$devPort", "--strictPort") `
+    -ArgumentList @("--filter", "@agentbridge/desktop", "exec", "vite", "--host", "127.0.0.1", "--port", "$devPort", "--strictPort") `
     -WorkingDirectory $repoRoot `
     -WindowStyle Hidden `
     -RedirectStandardOutput $viteOut `
@@ -61,7 +71,7 @@ try {
     pnpm --filter @agentbridge/desktop exec electron .
   } finally {
     if (!$vite.HasExited) {
-      Stop-Process -Id $vite.Id -Force
+      Stop-ProcessTree -ProcessId $vite.Id
     }
   }
 } finally {
