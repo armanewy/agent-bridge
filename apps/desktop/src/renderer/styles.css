@@ -197,6 +197,15 @@ nav {
   min-height: 104px;
 }
 
+.inline-blocker {
+  border: 1px solid #efcd86;
+  border-radius: 8px;
+  background: #fff8e6;
+  color: #5f4a11;
+  padding: 10px 12px;
+  font-weight: 700;
+}
+
 .intent-actions,
 .steering-row {
   display: flex;
@@ -223,38 +232,6 @@ nav {
 
 .steering-row input {
   flex: 1 1 240px;
-}
-
-.workbench-status-strip {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 8px;
-}
-
-.status-chip {
-  border: 1px solid #dce3e9;
-  border-radius: 8px;
-  background: #f7f9fb;
-  color: #526270;
-  padding: 8px 10px;
-  font-size: 12px;
-  line-height: 1.3;
-  min-width: 0;
-}
-
-.status-chip strong {
-  display: block;
-  color: #172026;
-}
-
-.status-chip.ready {
-  border-color: #b9dccf;
-  background: #eaf7f0;
-}
-
-.status-chip.warning {
-  border-color: #f1c86b;
-  background: #fff8e8;
 }
 
 .muted-inline {
@@ -333,12 +310,6 @@ nav {
   color: #0f563f;
   background: #e4f5ed;
   border-color: #b9dccf;
-}
-
-.latest-provider-event {
-  margin: 0;
-  color: #526270;
-  font-size: 13px;
 }
 
 .pending-decision {

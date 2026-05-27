@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2, FileText, GitBranch, Play, Send, Square, Wrench } from "lucide-react";
+import { Bot, CheckCircle2, FileText, Play, Send, Square, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   AgentProviderProfile,
@@ -14,7 +14,6 @@ import type {
 import type { AutopilotStatus, CodexAppServerStatus, MissionDetail } from "../../services/bridge-contract.js";
 
 interface WorkbenchPageProps {
-  missions: Mission[];
   missionDetail?: MissionDetail | undefined;
   selectedMissionId?: string | undefined;
   codexTarget?: CodexDeepLinkTarget | undefined;
@@ -27,7 +26,6 @@ interface WorkbenchPageProps {
   error?: string | undefined;
   onChooseRepo(): void;
   onUseWorkspaceCandidate(candidate: WorkspaceCandidate): void;
-  onSelectMission(id: string): void;
   onCreateMission(): void;
   onAskPlanner(text: string): void;
   onGenerateTaskSpec(): void;
@@ -45,7 +43,6 @@ interface WorkbenchPageProps {
 }
 
 export function WorkbenchPage({
-  missions,
   missionDetail,
   selectedMissionId,
   codexTarget,
@@ -58,7 +55,6 @@ export function WorkbenchPage({
   error,
   onChooseRepo,
   onUseWorkspaceCandidate,
-  onSelectMission,
   onCreateMission,
   onAskPlanner,
   onGenerateTaskSpec,
@@ -89,7 +85,6 @@ export function WorkbenchPage({
   const ownedFiles = missionDetail?.fileOwnership ?? [];
   const plannerResponses = missionDetail?.artifacts.filter((artifact) => artifact.kind === "modelResponse") ?? [];
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
-  const latestProviderEvent = missionDetail?.agentEvents?.[0];
   const codexSessionRows = useMemo(() => {
     const fromThreads: AgentSessionRef[] = codexThreads.map((thread) => ({
       id: `codex_session_${thread.threadId}`,
@@ -117,12 +112,16 @@ export function WorkbenchPage({
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard);
-  const canStartMission = Boolean(intentText.trim());
+  const canStartMission = Boolean(intentText.trim() && planner?.status === "available" && codex?.status === "available");
   const activeRun = autopilotStatus?.run;
   const missionWorkspace = missionDetail?.mission.repoContext;
   const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
   const needsWorkspaceForNewCodexThread = Boolean(selectedMissionId && taskCard && !selectedSession && !missionWorkspace);
-  const shouldShowWorkspaceSurface = Boolean(missionWorkspace || needsWorkspaceForNewCodexThread);
+  const shouldShowWorkspaceSurface = needsWorkspaceForNewCodexThread;
+  const blockers = [
+    planner?.status !== "available" ? "Sign in to start." : undefined,
+    codex?.status !== "available" ? "Codex is not ready." : undefined
+  ].filter((item): item is string => Boolean(item));
   const latestPayloadSummary = parsePlannerPayloadSummary(
     missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
   );
@@ -139,24 +138,16 @@ export function WorkbenchPage({
       <section className="panel intent-panel">
         <div className="panel-heading compact-heading">
           <div>
-            <span className="eyebrow">Mission</span>
             <h2>What do you want done?</h2>
-            <p>State the goal once. AgentBridge plans first, then asks for a workspace only when Codex or verification needs it.</p>
           </div>
-          <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} />
+          {activeRun || missionDetail ? <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} /> : null}
         </div>
-        <div className="workbench-status-strip">
-          <StatusChip label="Account" value={planner?.status === "available" ? "signed in" : "sign in needed"} tone={planner?.status === "available" ? "ready" : "warning"} />
-          <StatusChip label="Planner" value={planner?.displayName ?? "unknown"} tone={planner?.status === "available" ? "ready" : "warning"} />
-          <StatusChip label="Codex" value={codex?.status ?? "unknown"} tone={codex?.status === "available" ? "ready" : "warning"} />
-          <StatusChip label="Workflow" value="Planner ↔ Codex" tone="ready" />
-          {missionWorkspace ? <StatusChip label="Workspace" value="selected" tone="ready" /> : null}
-        </div>
+        {blockers.length ? <div className="inline-blocker">{blockers.join(" ")}</div> : null}
         <textarea
           className="planner-input intent-input"
           value={intentText}
           onChange={(event) => setIntentText(event.target.value)}
-          placeholder="Example: Simplify the Workbench UI and remove irrelevant panels."
+          placeholder="Describe the task..."
         />
         <div className="intent-actions">
           <label className="field-label">
@@ -179,11 +170,6 @@ export function WorkbenchPage({
           ) : null}
         </div>
         <MissionTimeline status={autopilotStatus} />
-        {latestProviderEvent ? (
-          <p className="latest-provider-event">
-            Latest provider event: <strong>{latestProviderEvent.type}</strong>
-          </p>
-        ) : null}
         {autopilotStatus?.pendingDecision ? (
           <div className="pending-decision">
             <strong>{autopilotStatus.pendingDecision.prompt}</strong>
@@ -206,7 +192,7 @@ export function WorkbenchPage({
             <input
               value={steeringText}
               onChange={(event) => setSteeringText(event.target.value)}
-              placeholder="Steer this mission..."
+              placeholder="Steer..."
             />
             <button
               type="button"
@@ -231,12 +217,9 @@ export function WorkbenchPage({
       {shouldShowWorkspaceSurface ? (
         <section className="panel workbench-repo-strip">
           <div>
-            <span className="eyebrow">Workspace</span>
-            <h2>{missionWorkspace ? repoName(missionWorkspace.repoPath) : "Workspace required"}</h2>
+            <h2>Workspace required</h2>
             <p>
-              {missionWorkspace
-                ? missionWorkspace.repoPath
-                : bestWorkspaceCandidate
+              {bestWorkspaceCandidate
                   ? `${bestWorkspaceCandidate.repoName ?? repoName(bestWorkspaceCandidate.repoPath ?? "")} · inferred from ${bestWorkspaceCandidate.source} · ${bestWorkspaceCandidate.confidence}% confidence`
                   : "Choose a workspace to create a new Codex thread."}
             </p>
@@ -248,7 +231,7 @@ export function WorkbenchPage({
               </button>
             ) : null}
             <button type="button" className="secondary-button" onClick={onChooseRepo}>
-              {missionWorkspace ? "Change workspace" : "Choose workspace"}
+              Choose workspace
             </button>
           </div>
         </section>
@@ -257,7 +240,7 @@ export function WorkbenchPage({
       {error ? <div className="error-banner">{error}</div> : null}
 
       <details className="workbench-details">
-        <summary>Show planner, Codex, and task details</summary>
+        <summary>Details</summary>
       <div className="workbench-grid">
         <section className="panel workbench-pane">
           <div className="panel-heading compact-heading">
@@ -365,31 +348,6 @@ export function WorkbenchPage({
       <PlannerPayloadPanel summary={latestPayloadSummary} open={payloadPanelOpen} onToggle={() => setPayloadPanelOpen((current) => !current)} />
       <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} onRevealFile={onRevealArtifactFile} />
       </details>
-
-      {missions.length > 0 ? (
-        <section className="panel recent-workbench-tasks">
-          <div className="panel-heading compact-heading">
-            <div>
-              <span className="eyebrow">Recent</span>
-              <h2>Tasks</h2>
-            </div>
-          </div>
-          <div className="compact-list">
-            {missions.slice(0, 6).map((mission) => (
-              <button
-                key={mission.id}
-                type="button"
-                className={mission.id === selectedMissionId ? "compact-row selected" : "compact-row"}
-                onClick={() => onSelectMission(mission.id)}
-              >
-                <GitBranch size={15} />
-                <span>{mission.title}</span>
-                <em>{mission.status}</em>
-              </button>
-            ))}
-          </div>
-        </section>
-      ) : null}
     </div>
   );
 }
@@ -633,15 +591,6 @@ function ArtifactList({ title, items }: { title: string; items: string[] }): JSX
 
 function StatusPill({ status }: { status?: string | undefined }): JSX.Element {
   return <span className={status === "available" || status === "passed" || status === "delivered" ? "status-pill" : "status-pill muted"}>{status ?? "unknown"}</span>;
-}
-
-function StatusChip({ label, value, tone }: { label: string; value: string; tone: "ready" | "warning" | "muted" }): JSX.Element {
-  return (
-    <span className={`status-chip ${tone}`}>
-      <strong>{label}</strong>
-      {value}
-    </span>
-  );
 }
 
 function plannerCopy(profile?: AgentProviderProfile): string {

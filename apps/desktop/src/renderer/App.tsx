@@ -864,7 +864,7 @@ export function App(): JSX.Element {
         <header className="topbar">
           <div>
             <h1>{titleForView(view)}</h1>
-            <p>{subtitleForView(view)}</p>
+            {subtitleForView(view) ? <p>{subtitleForView(view)}</p> : null}
           </div>
           <button type="button" className="secondary-button" onClick={() => void refresh()}>
             <RefreshCw size={16} />
@@ -874,7 +874,6 @@ export function App(): JSX.Element {
 
         {view === "workbench" ? (
           <WorkbenchPage
-            missions={missions}
             missionDetail={missionDetail}
             selectedMissionId={selectedMissionId}
             codexTarget={codexTarget}
@@ -887,7 +886,6 @@ export function App(): JSX.Element {
             error={workbenchError}
             onChooseRepo={() => void chooseRepoFolder()}
             onUseWorkspaceCandidate={(candidate) => void useWorkspaceCandidate(candidate)}
-            onSelectMission={(id) => void selectMission(id)}
             onCreateMission={() => void createWorkbenchMission()}
             onAskPlanner={(text) => void askWorkbenchPlanner(text)}
             onGenerateTaskSpec={() => void generateWorkbenchTaskSpec()}
@@ -1456,7 +1454,7 @@ function titleForView(view: View): string {
 
 function subtitleForView(view: View): string {
   return {
-    workbench: "Plan a task, send it to Codex, verify, then review the result.",
+    workbench: "",
     tasks: "Task history, verification results, artifacts, and follow-up drafts.",
     settings: "Configure OpenAI Planner, Codex Executor, repo, and local diagnostics.",
     advanced: "Components, captures, links, sources, targets, audit, and demo tools."
