@@ -1,5 +1,6 @@
 param(
   [switch]$MockPlanner,
+  [switch]$NoDevSignIn,
   [int]$CloudPort = 0,
   [string]$EnvFile = ".env.local"
 )
@@ -73,6 +74,46 @@ function Wait-ForHttp {
   throw "Timed out waiting for $Name at $Url. See $cloudOut and $cloudErr."
 }
 
+function Get-DesktopDataDir {
+  if ($env:AGENTBRIDGE_STORE_DIR) {
+    return $env:AGENTBRIDGE_STORE_DIR
+  }
+  if ($env:APPDATA) {
+    return Join-Path $env:APPDATA "@agentbridge\desktop"
+  }
+  if ($IsMacOS) {
+    return Join-Path $HOME "Library/Application Support/@agentbridge/desktop"
+  }
+  $configHome = $env:XDG_CONFIG_HOME
+  if (!$configHome) {
+    $configHome = Join-Path $HOME ".config"
+  }
+  return Join-Path $configHome "@agentbridge/desktop"
+}
+
+function Set-DesktopDevAuth {
+  param([Parameter(Mandatory=$true)][string]$CloudBaseUrl)
+
+  $login = Invoke-RestMethod -Method Post -Uri "$CloudBaseUrl/v1/auth/session/dev-login" -ContentType "application/json"
+  $dataDir = Get-DesktopDataDir
+  $authPath = Join-Path $dataDir "agentbridge-auth.json"
+  New-Item -ItemType Directory -Force -Path $dataDir | Out-Null
+
+  $auth = @{}
+  if (Test-Path $authPath) {
+    $existing = Get-Content $authPath -Raw | ConvertFrom-Json
+    if ($existing) {
+      foreach ($property in $existing.PSObject.Properties) {
+        $auth[$property.Name] = [string]$property.Value
+      }
+    }
+  }
+  $auth["agentbridge.cloud.token"] = $login.token
+  $auth["agentbridge.cloud.user"] = ($login.user | ConvertTo-Json -Compress)
+  $auth | ConvertTo-Json -Depth 5 | Set-Content -Path $authPath -Encoding UTF8
+  Write-Host "Dev auth: signed in to local AgentBridge Cloud as $($login.user.email)"
+}
+
 Push-Location $repoRoot
 try {
   Import-DotEnvFile -Path (Join-Path $repoRoot $EnvFile)
@@ -112,6 +153,9 @@ try {
 
   try {
     Wait-ForHttp -Url "$env:AGENTBRIDGE_CLOUD_URL/health" -Process $cloud -Name "AgentBridge Cloud"
+    if (!$NoDevSignIn) {
+      Set-DesktopDevAuth -CloudBaseUrl $env:AGENTBRIDGE_CLOUD_URL
+    }
     Write-Host "AgentBridge Cloud: $env:AGENTBRIDGE_CLOUD_URL"
     Write-Host "Planner mode: $(if ($env:AGENTBRIDGE_CLOUD_MOCK) { 'mock' } else { 'OpenAI' })"
     pnpm desktop:dev

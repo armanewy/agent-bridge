@@ -118,7 +118,7 @@ pnpm dev:native-host
 pnpm test:win-uia-helper
 ```
 
-`pnpm dev:local` is the lowest-friction local app launcher. It loads optional gitignored `.env.local` configuration, starts AgentBridge Cloud on a free local port, falls back to deterministic mock planner mode when `OPENAI_API_KEY` is unset, then opens the Electron desktop with `AGENTBRIDGE_CLOUD_URL` already wired. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself.
+`pnpm dev:local` is the lowest-friction local app launcher. It loads optional gitignored `.env.local` configuration, starts AgentBridge Cloud on a free local port, seeds development auth for that local Cloud process, falls back to deterministic mock planner mode when `OPENAI_API_KEY` is unset, then opens the Electron desktop with `AGENTBRIDGE_CLOUD_URL` already wired. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself.
 
 For OpenAI-backed local planner runs, set `OPENAI_API_KEY` in your shell or copy `.env.example` to `.env.local` and fill it in. Do not commit `.env.local`.
 

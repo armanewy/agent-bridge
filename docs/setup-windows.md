@@ -42,7 +42,7 @@ For the full local product loop, use:
 pnpm dev:local
 ```
 
-This starts AgentBridge Cloud on a free local port, loads optional `.env.local` values, and opens the Electron app with the cloud URL configured. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself. Put `OPENAI_API_KEY=...` in `.env.local` for OpenAI-backed hosted planner runs, or omit it to use deterministic mock planner mode.
+This starts AgentBridge Cloud on a free local port, loads optional `.env.local` values, seeds development auth for that local Cloud process, and opens the Electron app with the cloud URL configured. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself. Put `OPENAI_API_KEY=...` in `.env.local` for OpenAI-backed hosted planner runs, or omit it to use deterministic mock planner mode.
 
 ## Package Desktop App
 
