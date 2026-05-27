@@ -11,6 +11,8 @@ AgentBridge Cloud hosts the default Planner provider. The desktop authenticates 
 - `MAX_PLANNER_PAYLOAD_BYTES`: default `65536`.
 - `AGENTBRIDGE_CLOUD_ALLOW_FILE_UPLOADS`: default `false`; file payloads are rejected unless explicitly enabled.
 
+For local development, prefer process environment variables. `pnpm dev:local` also loads gitignored `.env.local` for convenience, using the same variable names as production-like runs. It does not read ad hoc secret files.
+
 ## Routes
 
 ```text

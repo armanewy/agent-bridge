@@ -10,6 +10,9 @@ release/
 .vite/
 *.log
 *.tsbuildinfo
+.env
+.env.*
+!.env.example
 packages/*/src/**/*.d.ts
 packages/*/src/**/*.d.ts.map
 packages/*/src/**/*.js
