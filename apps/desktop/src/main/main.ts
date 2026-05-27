@@ -64,6 +64,22 @@ let mainWindow: BrowserWindow | undefined;
 let chatGptWindow: BrowserWindow | undefined;
 let tray: Tray | undefined;
 
+const hasSingleInstanceLock = app.requestSingleInstanceLock();
+
+if (!hasSingleInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    if (!mainWindow) {
+      return;
+    }
+    if (mainWindow.isMinimized()) {
+      mainWindow.restore();
+    }
+    mainWindow.focus();
+  });
+}
+
 async function createWindow(): Promise<void> {
   mainWindow = new BrowserWindow({
     width: 760,
@@ -84,8 +100,26 @@ async function createWindow(): Promise<void> {
   } else {
     await mainWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"));
   }
+
+  mainWindow.webContents.on("context-menu", (_event, params) => {
+    const window = mainWindow;
+    if (!params.isEditable) {
+      return;
+    }
+    Menu.buildFromTemplate([
+      { role: "undo", enabled: params.editFlags.canUndo },
+      { role: "redo", enabled: params.editFlags.canRedo },
+      { type: "separator" },
+      { role: "cut", enabled: params.editFlags.canCut },
+      { role: "copy", enabled: params.editFlags.canCopy },
+      { role: "paste", enabled: params.editFlags.canPaste },
+      { type: "separator" },
+      { role: "selectAll", enabled: params.editFlags.canSelectAll }
+    ]).popup(window ? { window } : {});
+  });
 }
 
+if (hasSingleInstanceLock) {
 app.whenReady().then(async () => {
   const platformService = new PlatformService({
     platform: process.platform,
@@ -372,6 +406,7 @@ app.on("window-all-closed", () => {
     app.quit();
   }
 });
+}
 
 app.on("activate", () => {
   if (BrowserWindow.getAllWindows().length === 0) {
