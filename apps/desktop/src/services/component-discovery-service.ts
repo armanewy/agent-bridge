@@ -103,7 +103,7 @@ export class ComponentDiscoveryService {
             },
             riskLevel: "medium",
             status: "unavailable",
-            compatibilityScore: 20,
+            fitScore: 20,
             backingRef: { repoPath: target.repoPath },
             metadata: { repoPath: target.repoPath },
             discoveredAt: target.boundAt,
@@ -162,7 +162,7 @@ export function mergeComponents(components: LinkableComponent[]): LinkableCompon
       byId.set(component.id, component);
     }
   }
-  return [...byId.values()].sort((a, b) => b.compatibilityScore - a.compatibilityScore || a.label.localeCompare(b.label));
+  return [...byId.values()].sort((a, b) => b.fitScore - a.fitScore || a.label.localeCompare(b.label));
 }
 
 function hashId(value: string): string {

@@ -94,7 +94,7 @@ export const LinkableComponentSchema = z.object({
   roleCapabilities: ComponentRoleCapabilitiesSchema,
   riskLevel: z.enum(["low", "medium", "high"]),
   status: z.enum(["available", "permission_needed", "unsupported", "unavailable"]),
-  compatibilityScore: z.number().int().min(0).max(100),
+  fitScore: z.number().int().min(0).max(100),
   backingRef: z.object({
     sourceId: z.string().optional(),
     targetId: z.string().optional(),

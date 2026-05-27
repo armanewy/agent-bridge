@@ -26,7 +26,7 @@
 - Desktop app menu, About dialog, data folder/log actions, and clear local data action.
 - LinkableComponent and WorkflowLink models with v3 local-store persistence.
 - Browser-tab discovery protocol through the extension/native host, with optional `tabs` permission.
-- Desktop-window discovery as detected components with compatibility and risk badges.
+- Desktop-window discovery as detected components with fit and risk badges.
 - Capability badges for Capture, Send, Verify, Observe, Official route, Risky, and Unsupported.
 - Workflow Link to Task Card creation using the latest matching capture.
 - Repo folder picker for the focused Codex setup flow.

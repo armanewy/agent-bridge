@@ -13,7 +13,7 @@ Mission-first objects now sit above the original handoff router model:
 - `Artifact`: durable evidence such as captures, generated prompts, diffs, logs, and results.
 - `VerificationPlan` / `VerificationResult`: explicit validation plan and outcome.
 
-The legacy `Handoff` remains for compatibility and can reference `missionId` and `handoffCardId`.
+`Handoff` is the provider-neutral delivery record used by the current local pipeline.
 
 ### LinkableComponent
 
@@ -35,7 +35,7 @@ interface LinkableComponent {
   };
   riskLevel: "low" | "medium" | "high";
   status: "available" | "permission_needed" | "unsupported" | "unavailable";
-  compatibilityScore: number;
+  fitScore: number;
   backingRef: {
     sourceId?: string;
     targetId?: string;
@@ -71,7 +71,7 @@ interface WorkflowLink {
 
 ### Link
 
-Legacy saved route from one source endpoint to one target endpoint with a selected transform and delivery policy. `WorkflowLink` is the preferred user-facing route.
+Saved route from one source endpoint to one target endpoint with a selected transform and delivery policy.
 
 ```ts
 interface Link {

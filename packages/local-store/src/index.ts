@@ -912,8 +912,7 @@ export class JsonFileStore implements LocalStore {
       return empty;
     }
 
-    const parsed = JSON.parse(await readFile(this.filePath, "utf8")) as StoreData;
-    return migrate(parsed);
+    return JSON.parse(await readFile(this.filePath, "utf8")) as StoreData;
   }
 
   private async write(data: StoreData): Promise<void> {
@@ -1002,14 +1001,6 @@ export function defaultAgentBridgeDataDir(): string {
 
   const base = process.env.XDG_CONFIG_HOME ?? join(homedir(), ".config");
   return join(base, "AgentBridge");
-}
-
-function migrate(data: StoreData): StoreData {
-  return {
-    ...createEmptyStore(),
-    ...data,
-    version: CURRENT_STORE_VERSION
-  };
 }
 
 function normalizePath(value?: string): string | undefined {

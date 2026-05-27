@@ -1,4 +1,4 @@
-import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
@@ -100,7 +100,7 @@ describe("JsonFileStore", () => {
       },
       riskLevel: "low",
       status: "available",
-      compatibilityScore: 90,
+      fitScore: 90,
       backingRef: { sourceId: "src_1", tabId: 10 },
       metadata: { url: "https://chatgpt.com/" },
       discoveredAt: now,
@@ -515,107 +515,6 @@ describe("JsonFileStore", () => {
     await store.saveDeliveryAttempt(attempt);
 
     expect(await store.listDeliveryAttempts("handoff_1")).toEqual([attempt]);
-  });
-
-  it("loads a v1-shaped store without losing existing handoffs", async () => {
-    const now = new Date().toISOString();
-    const handoff: Handoff = {
-      id: "handoff_legacy",
-      captureId: "cap_1",
-      sourceId: "src_1",
-      targetId: "target_1",
-      transformId: "rawRelay",
-      prompt: "Legacy handoff",
-      structured: {
-        goal: "Relay",
-        context: "Legacy handoff",
-        constraints: [],
-        acceptanceCriteria: [],
-        suggestedFiles: [],
-        verificationSteps: [],
-        originalCaptureRef: "cap_1"
-      },
-      redactionFindings: [],
-      createdAt: now
-    };
-    await writeFile(
-      join(tempDir, "agentbridge-store.json"),
-      JSON.stringify({
-        version: 1,
-        links: {},
-        sources: {},
-        targets: {},
-        captures: {},
-        handoffs: { [handoff.id]: handoff },
-        deliveryAttempts: {},
-        approvals: {},
-        auditEvents: [],
-        settings: {}
-      }),
-      "utf8"
-    );
-
-    const store = new JsonFileStore(tempDir);
-
-    expect(await store.getHandoff("handoff_legacy")).toEqual(handoff);
-    expect(await store.listMissions()).toEqual([]);
-  });
-
-  it("loads a v4-shaped store with empty provider sections", async () => {
-    const mission: Mission = {
-      id: "mission_v4",
-      title: "Existing mission",
-      goal: "Remain readable after migration.",
-      status: "draft",
-      sourceIds: [],
-      captureIds: [],
-      handoffCardIds: [],
-      artifactIds: [],
-      runIds: [],
-      createdAt: new Date().toISOString(),
-      updatedAt: new Date().toISOString()
-    };
-    await writeFile(
-      join(tempDir, "agentbridge-store.json"),
-      JSON.stringify({
-        version: 4,
-        links: {},
-        linkableComponents: {},
-        workflowLinks: {},
-        codexThreadRefs: {},
-        sources: {},
-        targets: {},
-        captures: {},
-        handoffs: {},
-        deliveryAttempts: {},
-        missions: { [mission.id]: mission },
-        handoffCards: {},
-        artifacts: {},
-        runs: {},
-        runSteps: {},
-        verificationResults: {},
-        approvals: {},
-        auditEvents: [],
-        settings: {}
-      }),
-      "utf8"
-    );
-
-    const store = new JsonFileStore(tempDir);
-
-    expect(await store.getMission(mission.id)).toEqual(mission);
-    expect(await store.listProviderProfiles()).toEqual([]);
-    expect(await store.listAgentSessions()).toEqual([]);
-    expect(await store.listAgentEvents()).toEqual([]);
-    expect(await store.listAutopilotPolicies()).toEqual([]);
-    expect(await store.listAutopilotRunsForMission(mission.id)).toEqual([]);
-    expect(await store.listPendingUserDecisions()).toEqual([]);
-    expect(await store.listArtifactFilesForMission(mission.id)).toEqual([]);
-    expect(await store.listArtifactBundlesForMission(mission.id)).toEqual([]);
-    expect(await store.listWorkflowTemplates()).toEqual([]);
-    expect(await store.listCompletionContractsForMission(mission.id)).toEqual([]);
-    expect(await store.listMissionWorkspaces(mission.id)).toEqual([]);
-    expect(await store.listMissionQueueItems()).toEqual([]);
   });
 
   it("roundtrips mission, handoff card, and artifact", async () => {

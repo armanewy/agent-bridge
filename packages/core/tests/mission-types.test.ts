@@ -25,9 +25,9 @@ const taskSpec: TaskSpec = {
   title: "Implement mission model",
   goal: "Promote handoffs into durable task cards.",
   background: "Captured product direction asks for mission-first task memory.",
-  instructions: ["Add schemas", "Preserve compatibility"],
+  instructions: ["Add schemas", "Keep the model focused"],
   requirements: ["Mission parses", "HandoffCard parses"],
-  constraints: ["Do not break existing Handoff"],
+  constraints: ["Keep the change scoped"],
   nonGoals: ["Do not add providers"],
   acceptanceCriteria: ["Tests pass"],
   suggestedFiles: ["packages/core/src/types.ts"],
@@ -78,7 +78,7 @@ describe("mission-first schemas", () => {
     expect(HandoffCardSchema.parse(card).taskSpec.goal).toContain("task cards");
   });
 
-  it("keeps existing Handoff parse-compatible", () => {
+  it("parses Handoff", () => {
     const handoff: Handoff = {
       id: "handoff_1",
       captureId: "cap_1",

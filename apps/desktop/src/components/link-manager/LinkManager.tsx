@@ -55,10 +55,10 @@ export function LinkManager({
       </div>
 
       <div className="link-picker-grid">
-        <label className="field-label" htmlFor="legacy-source">
+        <label className="field-label" htmlFor="import-source">
           Source
           <select
-            id="legacy-source"
+            id="import-source"
             value={selectedSourceId ?? ""}
             onChange={(event) => onSourceChange(event.currentTarget.value)}
           >
@@ -72,10 +72,10 @@ export function LinkManager({
             ))}
           </select>
         </label>
-        <label className="field-label" htmlFor="legacy-target">
+        <label className="field-label" htmlFor="import-target">
           Target
           <select
-            id="legacy-target"
+            id="import-target"
             value={selectedTargetId ?? ""}
             onChange={(event) => onTargetChange(event.currentTarget.value)}
           >

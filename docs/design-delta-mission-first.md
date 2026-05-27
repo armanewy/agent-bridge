@@ -31,7 +31,7 @@ Mission
 - `Run` and `RunStep`: execution history for a mission.
 - `VerificationPlan` and `VerificationResult`: explicit, user-approved validation state.
 
-Existing `Handoff` remains parse-compatible and gains optional `missionId` and `handoffCardId` fields for migration.
+`Handoff` remains the provider-neutral delivery record used by the current local pipeline.
 
 ## Current Delta
 

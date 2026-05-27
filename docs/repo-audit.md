@@ -45,7 +45,7 @@ spikes/             Isolated explorations that should not affect MVP stability
 
 ## Constraints Discovered
 
-- Empty repo means the initial scaffold can be created without migration concerns.
+- Empty repo means the initial scaffold can be created directly.
 - The workspace path contains a space: `C:\Users\aoztu\Documents\Agent Bridge`. Scripts must quote paths correctly.
 - The MVP should stay local-first and Windows-first while keeping adapter interfaces portable.
 - Browser capture must be explicit and user-triggered.

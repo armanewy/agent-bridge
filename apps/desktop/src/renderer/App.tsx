@@ -45,7 +45,7 @@ import { WorkbenchPage } from "../components/workbench/WorkbenchPage.js";
 import { extractTaskSpecJson } from "../shared/task-spec-import.js";
 
 type View = "workbench" | "tasks" | "settings" | "advanced";
-type AdvancedView = "legacy" | "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
+type AdvancedView = "imports" | "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
 type ChatGptSourceMode = "chrome" | "desktop";
 
 const api = getAgentBridgeApi();
@@ -977,8 +977,8 @@ export function App(): JSX.Element {
                 </div>
               </div>
               <div className="segmented-control advanced-tabs">
-                <button type="button" className={advancedView === "legacy" ? "selected" : ""} onClick={() => setAdvancedView("legacy")}>
-                  Legacy Link Center
+                <button type="button" className={advancedView === "imports" ? "selected" : ""} onClick={() => setAdvancedView("imports")}>
+                  Import Center
                 </button>
                 <button type="button" className={advancedView === "components" ? "selected" : ""} onClick={() => setAdvancedView("components")}>
                   Components
@@ -1003,7 +1003,7 @@ export function App(): JSX.Element {
                 </button>
               </div>
             </section>
-            {advancedView === "legacy" ? (
+            {advancedView === "imports" ? (
               <div className="start-screen">
                 <StartPage
                   components={components}
@@ -1186,10 +1186,11 @@ function initialViewFromUrl(): View {
 
 function initialAdvancedViewFromUrl(): AdvancedView {
   if (typeof window === "undefined") {
-    return "legacy";
+    return "imports";
   }
   const value = new URLSearchParams(window.location.search).get("advancedView");
   switch (value) {
+    case "imports":
     case "components":
     case "captures":
     case "links":
@@ -1199,7 +1200,7 @@ function initialAdvancedViewFromUrl(): AdvancedView {
     case "demo":
       return value;
     default:
-      return "legacy";
+      return "imports";
   }
 }
 

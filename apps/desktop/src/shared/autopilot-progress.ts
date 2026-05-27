@@ -51,7 +51,7 @@ export function buildAutopilotProgressView(status: AutopilotProgressInput | unde
 
   const currentStep = orderedSteps.find((step) => step.id === run?.currentStepId) ?? orderedSteps.at(-1);
   const problemStep = [...orderedSteps].reverse().find((step) => step.status === "blocked" || step.status === "failed");
-  const detail = normalizeProgressText(firstNonEmpty(run?.stopReason, problemStep ? stepDetail(problemStep) : undefined));
+  const detail = firstNonEmpty(run?.stopReason, problemStep ? stepDetail(problemStep) : undefined);
   const severity = severityFor(run?.status);
   return {
     title: progressTitle(run?.status, currentStep),
@@ -129,7 +129,7 @@ function nextActionCopy(
   if (pendingDecision) {
     return "Choose an approval option to continue.";
   }
-  if (isPlannerUnavailable(problemStep, detail)) {
+  if (isMissingChatGptPlan(problemStep, detail)) {
     return "Plan with ChatGPT, then stop this run and start again.";
   }
   if (run?.status === "blocked") {
@@ -163,55 +163,26 @@ function severityFor(status: AutopilotRun["status"] | undefined): AutopilotProgr
   return "active";
 }
 
-function isPlannerUnavailable(step: AutopilotStep | undefined, detail: string | undefined): boolean {
+function isMissingChatGptPlan(step: AutopilotStep | undefined, detail: string | undefined): boolean {
   const failureKind = typeof step?.metadata.failureKind === "string" ? step.metadata.failureKind : "";
   const text = `${detail ?? ""} ${failureKind}`.toLowerCase();
-  return text.includes("providerunavailable") || text.includes("quota") || text.includes("billing") || text.includes("http 429");
+  return text.includes("plan with chatgpt") || text.includes("providerunavailable");
 }
 
 function stepTitle(step: AutopilotStep): string {
-  const title = typeof step.metadata.title === "string" && step.metadata.title.trim() ? step.metadata.title.trim() : STEP_TITLES[step.kind];
-  if (title === "Ask Planner") {
-    return "Plan with ChatGPT";
-  }
-  if (title === "Planner review") {
-    return "Review evidence";
-  }
-  return title;
+  return typeof step.metadata.title === "string" && step.metadata.title.trim() ? step.metadata.title.trim() : STEP_TITLES[step.kind];
 }
 
 function stepDetail(step: AutopilotStep): string | undefined {
   if (typeof step.metadata.error === "string" && step.metadata.error.trim()) {
-    return normalizeProgressText(step.metadata.error);
+    return step.metadata.error;
   }
   if (typeof step.metadata.reason === "string" && step.metadata.reason.trim()) {
-    return normalizeProgressText(step.metadata.reason);
+    return step.metadata.reason;
   }
   return undefined;
 }
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
   return values.find((value) => value?.trim())?.trim();
-}
-
-function normalizeProgressText(value: string | undefined): string | undefined {
-  const trimmed = value?.trim();
-  if (!trimmed) {
-    return undefined;
-  }
-  if (isLegacyRemotePlannerText(trimmed)) {
-    return "This run was created before the ChatGPT handoff cleanup. Plan with ChatGPT, then stop this run and start again.";
-  }
-  return trimmed;
-}
-
-function isLegacyRemotePlannerText(value: string): boolean {
-  const text = value.toLowerCase();
-  return (
-    text.includes("hosted planner") ||
-    text.includes("openai quota") ||
-    text.includes("api billing") ||
-    text.includes("agentbridge cloud returned http 429") ||
-    text.includes("platform.openai.com/docs/guides/error-codes")
-  );
 }

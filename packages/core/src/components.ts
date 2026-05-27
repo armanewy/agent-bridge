@@ -85,7 +85,7 @@ export function chatGptDesktopSessionComponent(session: DesktopAppSession, disco
     },
     riskLevel: session.confidence === "low" ? "medium" : "low",
     status: session.capabilities.canReadSelectedText || session.capabilities.canReadLatestMessage ? "available" : "unsupported",
-    compatibilityScore: session.confidence === "high" ? 88 : session.confidence === "medium" ? 72 : 42,
+    fitScore: session.confidence === "high" ? 88 : session.confidence === "medium" ? 72 : 42,
     backingRef: {
       ...(session.hwnd ? { hwnd: session.hwnd } : {}),
       ...(session.processId ? { processId: session.processId } : {}),
@@ -123,7 +123,7 @@ export function browserTabComponent(source: BrowserTabSource, discoveredAt = sou
     },
     riskLevel: "low",
     status: "available",
-    compatibilityScore: isKnownProvider ? 90 : 72,
+    fitScore: isKnownProvider ? 90 : 72,
     backingRef: {
       sourceId: source.id,
       ...(typeof source.tabId === "number" ? { tabId: source.tabId } : {}),
@@ -161,7 +161,7 @@ export function codexThreadComponent(
     },
     riskLevel: "low",
     status: "available",
-    compatibilityScore: integrationMode === "appServer" ? 98 : 76,
+    fitScore: integrationMode === "appServer" ? 98 : 76,
     backingRef: {
       ...(options.targetId ? { targetId: options.targetId } : {}),
       ...(thread.repoPath ? { repoPath: thread.repoPath } : {}),
@@ -197,7 +197,7 @@ export function repoComponent(repoContext: RepoContextPack, idSuffix: string, di
     },
     riskLevel: "low",
     status: "available",
-    compatibilityScore: repoContext.testCommand || repoContext.lintCommand || repoContext.typecheckCommand ? 92 : 82,
+    fitScore: repoContext.testCommand || repoContext.lintCommand || repoContext.typecheckCommand ? 92 : 82,
     backingRef: {
       repoPath: repoContext.repoPath
     },
@@ -227,7 +227,7 @@ export function targetComponent(target: TargetEndpoint, discoveredAt = new Date(
     },
     riskLevel: "high",
     status: "permission_needed",
-    compatibilityScore: 35,
+    fitScore: 35,
     backingRef: {
       targetId: target.parentTargetId
     },
@@ -251,7 +251,7 @@ export function codexTargetComponent(target: CodexDeepLinkTarget, discoveredAt =
     },
     riskLevel: "low",
     status: "available",
-    compatibilityScore: 96,
+    fitScore: 96,
     backingRef: {
       targetId: target.id,
       repoPath: target.repoPath
@@ -286,7 +286,7 @@ export function desktopWindowComponent(target: WindowsDesktopWindowTarget, disco
     },
     riskLevel: classification.riskLevel,
     status: isTerminal ? "permission_needed" : classification.provider === "unknown" ? "unsupported" : "available",
-    compatibilityScore: scoreDesktopCompatibility(classification.provider),
+    fitScore: scoreDesktopFit(classification.provider),
     backingRef: {
       targetId: target.id,
       hwnd: target.hwnd
@@ -345,7 +345,7 @@ export function providerLabel(provider: ComponentProvider): string {
   }[provider];
 }
 
-function scoreDesktopCompatibility(provider: ComponentProvider): number {
+function scoreDesktopFit(provider: ComponentProvider): number {
   if (provider === "codexDesktop") {
     return 88;
   }

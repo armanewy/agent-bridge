@@ -42,48 +42,6 @@ describe("autopilot progress view", () => {
     expect(view?.steps[0]).toMatchObject({ title: "Plan with ChatGPT", status: "blocked" });
   });
 
-  it("hides legacy remote planner errors from persisted runs", () => {
-    const run: AutopilotRun = {
-      id: "autopilot_run_legacy",
-      missionId: "mission_1",
-      policyId: "policy_supervised_default",
-      status: "blocked",
-      iteration: 0,
-      maxIterations: 3,
-      currentStepId: "autopilot_step_legacy",
-      startedAt: "2026-01-01T00:00:00.000Z",
-      updatedAt: "2026-01-01T00:00:05.000Z",
-      stopReason:
-        "Provider is unavailable. OpenAI quota or billing is blocking the hosted planner; update the key/billing or paste a ChatGPT TaskSpec JSON to skip the hosted planner."
-    };
-    const step: AutopilotStep = {
-      id: "autopilot_step_legacy",
-      autopilotRunId: run.id,
-      missionId: run.missionId,
-      kind: "plan",
-      status: "blocked",
-      inputArtifactIds: [],
-      outputArtifactIds: [],
-      startedAt: "2026-01-01T00:00:01.000Z",
-      completedAt: "2026-01-01T00:00:05.000Z",
-      metadata: {
-        title: "Ask Planner",
-        error: "AgentBridge Cloud returned HTTP 429. For more information, read https://platform.openai.com/docs/guides/error-codes/api-errors.",
-        failureKind: "providerUnavailable"
-      }
-    };
-
-    const view = buildAutopilotProgressView({ run, steps: [step] });
-    const rendered = JSON.stringify(view);
-
-    expect(view?.detail).toContain("ChatGPT handoff");
-    expect(view?.steps[0]).toMatchObject({ title: "Plan with ChatGPT" });
-    expect(rendered).not.toContain("hosted planner");
-    expect(rendered).not.toContain("OpenAI quota");
-    expect(rendered).not.toContain("TaskSpec JSON");
-    expect(rendered).not.toContain("platform.openai.com");
-  });
-
   it("builds a readable ChatGPT planner request", () => {
     const prompt = buildChatGptPlannerPrompt("Add a test.");
 

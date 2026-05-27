@@ -55,12 +55,12 @@
 - Mock capture is labeled demo-only.
 - Demo capture tools are only under Advanced.
 - Simple Mode does not show clipboard/manual/mock capture as a production path.
-- Advanced -> Legacy Link Center contains the old external ChatGPT/browser/capture/link flow.
+- Advanced -> Import Center contains the external ChatGPT/browser/capture/link flow.
 - Advanced -> Components/Captures/Links/Sources/Targets/Audit expose raw records.
-- Advanced legacy adapter: with no extension configured, Start shows `Open ChatGPT here`.
-- Advanced legacy adapter: clicking `Open ChatGPT here` opens ChatGPT in an AgentBridge-owned window and binds it as the source.
-- Advanced legacy adapter: pasting an existing ChatGPT conversation URL and clicking `Open existing conversation` opens that conversation in the AgentBridge-owned window and binds that URL as the source.
-- Advanced legacy adapter: after selecting text in that AgentBridge-owned ChatGPT window, `Capture selection` saves a real local capture without installing a browser extension.
+- Advanced import adapter: with no extension configured, Start shows `Open ChatGPT here`.
+- Advanced import adapter: clicking `Open ChatGPT here` opens ChatGPT in an AgentBridge-owned window and binds it as the source.
+- Advanced import adapter: pasting an existing ChatGPT conversation URL and clicking `Open existing conversation` opens that conversation in the AgentBridge-owned window and binds that URL as the source.
+- Advanced import adapter: after selecting text in that AgentBridge-owned ChatGPT window, `Capture selection` saves a real local capture without installing a browser extension.
 - If no ChatGPT tabs are synced and an extension is configured, Start shows `No ChatGPT tabs found` and `Connect Chrome`.
 - If Chrome is connected but no ChatGPT tab is synced, Start says to sync the existing ChatGPT tab from the extension and does not show repo/Codex steps yet.
 - Switch Start source mode to `ChatGPT Desktop`, open ChatGPT Desktop, and run `Probe ChatGPT Desktop`.

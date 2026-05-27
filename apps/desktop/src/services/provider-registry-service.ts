@@ -137,7 +137,7 @@ export function defaultProviderProfiles(): AgentProviderProfile[] {
       },
       metadata: {
         adapter: "placeholder",
-        reason: "Codex Executor provider wrapper is not implemented yet; legacy Codex services remain available."
+        reason: "Codex executor uses the current local delivery services."
       }
     }
   ];

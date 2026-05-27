@@ -24,7 +24,7 @@ Window metadata should include:
 - `className`
 - visibility/minimized state where available
 
-The desktop discovery service maps top-level windows into `LinkableComponent` records with app classification, capability badges, compatibility score, and risk level. Codex is shown as a preferred deep-link target when a repo is selected; terminal-like windows are detected but marked high risk.
+The desktop discovery service maps top-level windows into `LinkableComponent` records with app classification, capability badges, fit score, and risk level. Codex is shown as a preferred deep-link target when a repo is selected; terminal-like windows are detected but marked high risk.
 
 ChatGPT Desktop is handled as a source probe, not as a generic delivery target. The helper exposes:
 
