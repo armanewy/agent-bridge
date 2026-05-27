@@ -1,5 +1,6 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
 import { randomUUID } from "node:crypto";
+import { fileURLToPath } from "node:url";
 import OpenAI from "openai";
 import {
   HostedPlannerReviewResponseSchema,
@@ -657,6 +658,6 @@ class CloudHttpError extends Error {
   }
 }
 
-if (process.argv[1]?.endsWith("apps/cloud/dist/index.js")) {
+if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   void startServer();
 }
