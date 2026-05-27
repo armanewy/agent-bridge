@@ -160,7 +160,13 @@ export class CodexTargetService {
       if (!input.dryRun) {
         await this.openDeepLink(deepLink);
       }
-      return { deepLink, warnings: [], markDelivered: !input.dryRun };
+      return {
+        deepLink,
+        warnings: input.dryRun
+          ? []
+          : ["Opened Codex new-thread link only. AgentBridge cannot confirm a Codex chat or turn started without Codex App Server."],
+        markDelivered: false
+      };
     }
 
     if (!route.threadId) {

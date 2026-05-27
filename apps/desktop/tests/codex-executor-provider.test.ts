@@ -22,15 +22,16 @@ afterEach(async () => {
 });
 
 describe("CodexExecutorProvider", () => {
-  it("reports available when a deep-link target exists", async () => {
+  it("does not report available when only deep-link fallback exists", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveTarget(createCodexDeepLinkTarget({ id: "target_1", repoPath: tempDir }));
     const provider = createProvider(store);
 
     const status = await provider.status();
 
-    expect(status.status).toBe("available");
+    expect(status.status).toBe("unavailable");
     expect(status.metadata.deepLinkTargetCount).toBe(1);
+    expect(status.metadata.deepLinkFallbackAvailable).toBe(true);
   });
 
   it("sends a new-thread dry run through Codex deep link routing", async () => {
@@ -171,6 +172,25 @@ describe("CodexExecutorProvider", () => {
     expect(opened).toEqual(["codex://threads/thread_123"]);
     expect(result.deliveryMode).toBe("openOnlyFallback");
     expect(result.warnings).toEqual([expect.stringContaining("Prompt was staged")]);
+  });
+
+  it("opens a new-thread deep link as an unconfirmed fallback, not a confirmed Codex session", async () => {
+    const opened: string[] = [];
+    const store = new JsonFileStore(tempDir);
+    const provider = createProvider(store, { openExternal: async (url) => { opened.push(url); } });
+
+    const result = await provider.sendTask({
+      missionId: "mission_5",
+      taskSpec: sampleTaskSpec(),
+      repoContext: { repoPath: tempDir },
+      dryRun: false,
+      metadata: {}
+    });
+
+    expect(opened[0]).toContain("codex://threads/new?");
+    expect(result.deliveryMode).toBe("openOnlyFallback");
+    expect(result.success).toBe(true);
+    expect(result.warnings).toEqual([expect.stringContaining("cannot confirm a Codex chat or turn")]);
   });
 
   it("stages artifact files and includes a manifest in the Codex prompt", async () => {

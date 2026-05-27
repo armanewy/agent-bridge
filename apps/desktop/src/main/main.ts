@@ -116,7 +116,7 @@ app.whenReady().then(async () => {
   const workspaceResolverService = new WorkspaceResolverService(store);
   const workflowTemplateService = new WorkflowTemplateService(store);
   await workflowTemplateService.ensureDefaultTemplate();
-  const worktreeManagerService = new WorktreeManagerService(store);
+  const worktreeManagerService = new WorktreeManagerService(store, join(dataDir, "worktrees"));
   const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
   const sourceService = new SourceService(store);
   const linkService = new LinkService(store);

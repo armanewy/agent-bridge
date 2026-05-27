@@ -204,7 +204,7 @@ export class WorkbenchService {
       artifactIds: unique([...mission.artifactIds, artifact.id, ...result.artifactIds]),
       updatedAt: this.now()
     });
-    await this.appendRunStep(missionId, "delivery", "Send TaskSpec to Codex", result.success ? "passed" : "failed", [
+    await this.appendRunStep(missionId, "delivery", "Send TaskSpec to Codex", result.success ? statusForExecutorDelivery(result) : "failed", [
       artifact.id,
       ...result.artifactIds
     ]);
@@ -329,7 +329,7 @@ export class WorkbenchService {
       dryRun: false,
       metadata: { handoffId: `provider_handoff_${card.id}`, followUp: true }
     });
-    await this.appendRunStep(missionId, "followUp", "Send follow-up to Codex", result.success ? "passed" : "failed", result.artifactIds);
+    await this.appendRunStep(missionId, "followUp", "Send follow-up to Codex", result.success ? statusForExecutorDelivery(result) : "failed", result.artifactIds);
     return result;
   }
 
@@ -582,6 +582,10 @@ function buildPlannerReviewSummary(summary: string, artifacts: Artifact[]): stri
       ? "No failed command output artifacts were detected."
       : failedOutputs.map((artifact) => [`${artifact.title}:`, excerpt(artifact.content, 1400) ?? "No output."].join("\n")).join("\n\n")
   ].join("\n");
+}
+
+function statusForExecutorDelivery(result: ExecutorTaskResult): RunStep["status"] {
+  return result.deliveryMode === "openOnlyFallback" ? "needs_review" : "passed";
 }
 
 function excerpt(value: string | undefined, maxLength: number): string | undefined {

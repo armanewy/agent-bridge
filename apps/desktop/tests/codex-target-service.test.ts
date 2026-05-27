@@ -51,7 +51,7 @@ describe("CodexTargetService", () => {
     await expect(store.getHandoffCard("card_1")).resolves.toMatchObject({ deliveryAttemptIds: [expect.any(String)] });
   });
 
-  it("marks the mission delivered on successful send", async () => {
+  it("opens a new-thread deep link without marking the mission delivered", async () => {
     const target = await new CodexTargetService(new JsonFileStore(tempDir)).configureTarget(tempDir);
     const store = new JsonFileStore(tempDir);
     await store.saveMission(createMission());
@@ -66,9 +66,14 @@ describe("CodexTargetService", () => {
       handoffId: "handoff_1"
     });
 
-    await expect(store.getMission("mission_1")).resolves.toMatchObject({ status: "delivered" });
+    await expect(store.getMission("mission_1")).resolves.toMatchObject({ status: "draft" });
     await expect(store.listDeliveryAttempts("handoff_1")).resolves.toEqual([
-      expect.objectContaining({ missionId: "mission_1", handoffCardId: "card_1", success: true })
+      expect.objectContaining({
+        missionId: "mission_1",
+        handoffCardId: "card_1",
+        success: true,
+        warnings: [expect.stringContaining("cannot confirm a Codex chat or turn")]
+      })
     ]);
   });
 

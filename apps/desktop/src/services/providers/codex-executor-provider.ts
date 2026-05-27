@@ -80,7 +80,7 @@ export class CodexExecutorProvider implements ExecutorProvider {
     ]);
     const codexTargets = targets.filter((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
     const deepLinkFallbackAvailable = codexTargets.length > 0 && this.options.canUseCodexDeepLinks !== false;
-    const available = deepLinkFallbackAvailable || appServerStatus.available;
+    const available = appServerStatus.available;
     return {
       ...this.profile(),
       status: available ? "available" : "unavailable",
@@ -92,6 +92,7 @@ export class CodexExecutorProvider implements ExecutorProvider {
         appServerMessage: appServerStatus.message,
         fallbackAvailable: deepLinkFallbackAvailable,
         deepLinkFallbackAvailable,
+        fallbackMeaning: "Deep links can open Codex, but AgentBridge cannot confirm a chat or turn without Codex App Server.",
         canUseCodexDeepLinks: this.options.canUseCodexDeepLinks !== false,
         canStreamEvents: appServerStatus.available
       }
@@ -525,6 +526,9 @@ function executorDeliveryMode(mode: unknown, dryRun: boolean): ExecutorTaskResul
     return "existingSession";
   }
   if (mode === "existingDeepLinkOpen") {
+    return "openOnlyFallback";
+  }
+  if (mode === "newDeepLink") {
     return "openOnlyFallback";
   }
   return "newSession";

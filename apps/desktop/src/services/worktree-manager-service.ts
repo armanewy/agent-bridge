@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import { spawn } from "node:child_process";
+import { mkdir } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { join } from "node:path";
 import type { MissionWorkspace, MissionWorkspaceStrategy } from "@agentbridge/core";
@@ -8,7 +9,7 @@ import type { LocalStore } from "@agentbridge/local-store";
 export class WorktreeManagerService {
   private readonly workspaces = new Map<string, MissionWorkspace>();
 
-  constructor(private readonly store?: LocalStore) {}
+  constructor(private readonly store?: LocalStore, private readonly worktreeRoot?: string) {}
 
   async createMissionWorkspace(input: {
     missionId: string;
@@ -38,8 +39,12 @@ export class WorktreeManagerService {
     }
 
     const branchName = `agentbridge/${suffix}`;
-    const workingPath = input.strategy === "gitWorktree" ? join(input.baseRepoPath, "..", `.agentbridge-${suffix}`) : input.baseRepoPath;
+    const root = this.worktreeRoot ?? join(input.baseRepoPath, "..");
+    const workingPath = input.strategy === "gitWorktree" ? join(root, `.agentbridge-${suffix}`) : input.baseRepoPath;
     await ensureCleanWorkingTree(input.baseRepoPath);
+    if (input.strategy === "gitWorktree") {
+      await mkdir(root, { recursive: true });
+    }
     if (input.strategy === "gitWorktree" && existsSync(workingPath)) {
       throw new Error(`Mission worktree path already exists: ${workingPath}`);
     }
