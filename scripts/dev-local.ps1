@@ -110,7 +110,8 @@ function Set-DesktopDevAuth {
   }
   $auth["agentbridge.cloud.token"] = $login.token
   $auth["agentbridge.cloud.user"] = ($login.user | ConvertTo-Json -Compress)
-  $auth | ConvertTo-Json -Depth 5 | Set-Content -Path $authPath -Encoding UTF8
+  $utf8NoBom = [System.Text.UTF8Encoding]::new($false)
+  [System.IO.File]::WriteAllText($authPath, ($auth | ConvertTo-Json -Depth 5), $utf8NoBom)
   Write-Host "Dev auth: signed in to local AgentBridge Cloud as $($login.user.email)"
 }
 

@@ -158,7 +158,7 @@ export class FileAuthStorage implements AuthStorage {
 
   private async read(): Promise<Record<string, string>> {
     try {
-      return JSON.parse(await readFile(this.filePath, "utf8")) as Record<string, string>;
+      return JSON.parse(stripBom(await readFile(this.filePath, "utf8"))) as Record<string, string>;
     } catch (error) {
       if (isNotFoundError(error)) {
         return {};
@@ -210,4 +210,8 @@ async function cloudErrorMessage(response: Response): Promise<string> {
 
 function isNotFoundError(error: unknown): boolean {
   return error instanceof Error && "code" in error && (error as { code?: string }).code === "ENOENT";
+}
+
+function stripBom(value: string): string {
+  return value.charCodeAt(0) === 0xfeff ? value.slice(1) : value;
 }

@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { describe, expect, it } from "vitest";
@@ -51,6 +51,30 @@ describe("AuthService", () => {
       await expect(second.getAuthStatus()).resolves.toMatchObject({
         status: "signedIn",
         signedIn: true
+      });
+    } finally {
+      await rm(tempDir, { recursive: true, force: true });
+    }
+  });
+
+  it("reads auth files with a UTF-8 BOM", async () => {
+    const tempDir = await mkdtemp(join(tmpdir(), "agentbridge-auth-bom-"));
+    try {
+      const authPath = join(tempDir, "auth.json");
+      await writeFile(
+        authPath,
+        `\uFEFF${JSON.stringify({
+          "agentbridge.cloud.token": "dev_token",
+          "agentbridge.cloud.user": JSON.stringify({ id: "user_dev", email: "dev@agentbridge.local" })
+        })}`,
+        "utf8"
+      );
+      const service = new AuthService(new FileAuthStorage(authPath));
+
+      await expect(service.getAuthStatus()).resolves.toMatchObject({
+        status: "signedIn",
+        signedIn: true,
+        user: { email: "dev@agentbridge.local" }
       });
     } finally {
       await rm(tempDir, { recursive: true, force: true });
