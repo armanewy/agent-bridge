@@ -1,4 +1,4 @@
-import { mkdir, readFile, rename, writeFile } from "node:fs/promises";
+import { mkdir, readFile, rename, rm, writeFile } from "node:fs/promises";
 import { existsSync } from "node:fs";
 import { randomUUID } from "node:crypto";
 import { join } from "node:path";
@@ -941,8 +941,30 @@ export class JsonFileStore implements LocalStore {
     await mkdir(this.rootDir, { recursive: true });
     const tmpPath = `${this.filePath}.${process.pid}.${Date.now()}.${randomUUID()}.tmp`;
     await writeFile(tmpPath, `${JSON.stringify(data, null, 2)}\n`, "utf8");
-    await rename(tmpPath, this.filePath);
+    await renameWithRetry(tmpPath, this.filePath);
   }
+}
+
+async function renameWithRetry(source: string, destination: string): Promise<void> {
+  const maxAttempts = 8;
+  for (let attempt = 1; attempt <= maxAttempts; attempt += 1) {
+    try {
+      await rename(source, destination);
+      return;
+    } catch (error) {
+      const code = (error as NodeJS.ErrnoException).code;
+      const retryable = code === "EPERM" || code === "EACCES";
+      if (!retryable || attempt === maxAttempts) {
+        await rm(source, { force: true }).catch(() => undefined);
+        throw error;
+      }
+      await sleep(25 * attempt);
+    }
+  }
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export function createEmptyStore(): StoreData {
