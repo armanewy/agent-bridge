@@ -17,6 +17,7 @@ export class CodexAppServerError extends Error {
 
 export interface CodexAppServerTransport {
   request(method: string, params?: unknown): Promise<unknown>;
+  notify?(method: string, params?: unknown): Promise<void>;
 }
 
 export interface CodexAppServerThread {
@@ -24,6 +25,14 @@ export interface CodexAppServerThread {
   name?: string;
   cwd?: string;
   status?: CodexThreadRef["status"];
+  metadata: Record<string, unknown>;
+}
+
+export interface CodexThreadStartResult {
+  threadId: string;
+  sessionId?: string;
+  name?: string;
+  cwd?: string;
   metadata: Record<string, unknown>;
 }
 
@@ -70,7 +79,48 @@ export class CodexAppServerClient {
   }
 
   async initialize(): Promise<void> {
-    await this.request("initialize", {});
+    await this.request("initialize", defaultInitializeParams());
+  }
+
+  async startThread(options: { cwd?: string; title?: string; goal?: string; model?: string } = {}): Promise<CodexThreadStartResult> {
+    const result = await this.request("thread/start", {
+      serviceName: "agentbridge",
+      ...(options.cwd ? { cwd: options.cwd } : {}),
+      ...(options.model ? { model: options.model } : {})
+    });
+    const record = isRecord(result) ? result : {};
+    const thread = isRecord(record["thread"]) ? record["thread"] : record;
+    const threadId = stringValue(thread["id"]) ?? stringValue(thread["threadId"]) ?? stringValue(thread["sessionId"]);
+    if (!threadId) {
+      throw new CodexAppServerError("turnStartFailed", "Codex App Server did not return a thread id.");
+    }
+
+    if (options.title?.trim()) {
+      await this.setThreadName(threadId, options.title.trim()).catch(() => undefined);
+    }
+    const goal = options.goal?.trim() ?? options.title?.trim();
+    if (goal) {
+      await this.setThreadGoal(threadId, goal).catch(() => undefined);
+    }
+    const sessionId = stringValue(thread["sessionId"]);
+    const name = options.title?.trim() ?? stringValue(thread["name"]);
+    const cwd = options.cwd ?? stringValue(thread["cwd"]);
+
+    return {
+      threadId,
+      ...(sessionId ? { sessionId } : {}),
+      ...(name ? { name } : {}),
+      ...(cwd ? { cwd } : {}),
+      metadata: record
+    };
+  }
+
+  async setThreadName(threadId: string, name: string): Promise<void> {
+    await this.request("thread/name/set", { threadId, name });
+  }
+
+  async setThreadGoal(threadId: string, objective: string): Promise<void> {
+    await this.request("thread/goal/set", { threadId, objective: objective.slice(0, 4000), status: "active" });
   }
 
   async listThreads(filter: { cwd?: string; searchTerm?: string } = {}): Promise<CodexAppServerThread[]> {
@@ -98,11 +148,12 @@ export class CodexAppServerClient {
     try {
       const result = await this.request("turn/start", {
         threadId,
-        input: { type: "text", text },
+        input: [{ type: "text", text }],
         ...(options.cwd ? { cwd: options.cwd } : {})
       });
       const record = isRecord(result) ? result : {};
-      const turnId = stringValue(record["turnId"]) ?? stringValue(record["id"]);
+      const turn = isRecord(record["turn"]) ? record["turn"] : record;
+      const turnId = stringValue(turn["id"]) ?? stringValue(record["turnId"]) ?? stringValue(record["id"]);
       return {
         threadId,
         ...(turnId ? { turnId } : {}),
@@ -121,8 +172,8 @@ export class CodexAppServerClient {
     try {
       const result = await this.request("turn/steer", {
         threadId,
-        input: { type: "text", text },
-        ...(options.turnId ? { turnId: options.turnId } : {})
+        input: [{ type: "text", text }],
+        ...(options.turnId ? { expectedTurnId: options.turnId } : {})
       });
       const record = isRecord(result) ? result : {};
       const turnId = stringValue(record["turnId"]) ?? stringValue(record["id"]) ?? options.turnId;
@@ -222,8 +273,15 @@ export class JsonRpcStdioTransport implements CodexAppServerTransport {
 
   async request(method: string, params?: unknown): Promise<unknown> {
     await this.ensureProcess();
-    if (!this.initialized && method !== "initialize") {
-      await this.send("initialize", { clientInfo: { name: "AgentBridge", version: "0.1.0" } });
+    if (!this.initialized) {
+      if (method === "initialize") {
+        const result = await this.send("initialize", params ?? defaultInitializeParams());
+        await this.notify("initialized", {});
+        this.initialized = true;
+        return result;
+      }
+      await this.send("initialize", defaultInitializeParams());
+      await this.notify("initialized", {});
       this.initialized = true;
     }
     return this.send(method, params ?? {});
@@ -255,13 +313,30 @@ export class JsonRpcStdioTransport implements CodexAppServerTransport {
       return Promise.reject(new Error("Codex App Server process is not running."));
     }
     const id = this.nextId++;
-    const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params });
+    const payload = JSON.stringify({ id, method, params });
     return new Promise((resolve, reject) => {
       this.pending.set(id, { resolve, reject });
       this.child?.stdin.write(`${payload}\n`, (error) => {
         if (error) {
           this.pending.delete(id);
           reject(error);
+        }
+      });
+    });
+  }
+
+  async notify(method: string, params: unknown = {}): Promise<void> {
+    await this.ensureProcess();
+    if (!this.child) {
+      throw new Error("Codex App Server process is not running.");
+    }
+    const payload = JSON.stringify({ method, params });
+    await new Promise<void>((resolve, reject) => {
+      this.child?.stdin.write(`${payload}\n`, (error) => {
+        if (error) {
+          reject(error);
+        } else {
+          resolve();
         }
       });
     });
@@ -282,7 +357,7 @@ export class JsonRpcStdioTransport implements CodexAppServerTransport {
       } catch {
         continue;
       }
-      if (typeof message.id !== "number") {
+      if (typeof message.id !== "number" || (!("result" in message) && !("error" in message))) {
         continue;
       }
       const pending = this.pending.get(message.id);
@@ -297,6 +372,19 @@ export class JsonRpcStdioTransport implements CodexAppServerTransport {
       }
     }
   }
+}
+
+function defaultInitializeParams(): Record<string, unknown> {
+  return {
+    clientInfo: {
+      name: "agentbridge",
+      title: "AgentBridge",
+      version: "0.1.0"
+    },
+    capabilities: {
+      experimentalApi: true
+    }
+  };
 }
 
 export function findCodexExecutable(): string | undefined {

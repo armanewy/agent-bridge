@@ -18,7 +18,8 @@ export class WorktreeManagerService {
     baseBranch?: string;
   }): Promise<MissionWorkspace> {
     const now = new Date().toISOString();
-    const suffix = safeName(input.missionId);
+    const mission = await this.store?.getMission(input.missionId);
+    const suffix = safeMissionWorkspaceName(mission?.title ?? mission?.goal ?? input.missionId, input.missionId);
     await ensureGitRepo(input.baseRepoPath);
 
     if (input.strategy === "none") {
@@ -150,6 +151,18 @@ function stream(readable: NodeJS.ReadableStream): Promise<string> {
   });
 }
 
-function safeName(value: string): string {
-  return value.replace(/[^a-zA-Z0-9_-]+/g, "-").slice(0, 48) || "mission";
+function safeMissionWorkspaceName(label: string, missionId: string): string {
+  const readable = label
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "")
+    .replace(/-{2,}/g, "-")
+    .split("-")
+    .filter((part) => !STOP_WORDS.has(part))
+    .slice(0, 5)
+    .join("-");
+  const unique = missionId.replace(/^mission[_-]?/, "").replace(/[^a-zA-Z0-9]/g, "").slice(0, 8);
+  return [readable || "mission", unique].filter(Boolean).join("-").slice(0, 64);
 }
+
+const STOP_WORDS = new Set(["a", "an", "and", "as", "for", "in", "of", "the", "to", "when", "with"]);

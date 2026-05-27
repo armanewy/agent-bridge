@@ -39,7 +39,7 @@ describe("WorktreeManagerService", () => {
     });
 
     expect(workspace.strategy).toBe("branch");
-    expect(workspace.branchName).toBe("agentbridge/mission-branch");
+    expect(workspace.branchName).toBe("agentbridge/mission-branch-branch");
   });
 
   it("creates a git worktree and detects changed files", async () => {
@@ -59,6 +59,33 @@ describe("WorktreeManagerService", () => {
     expect(await service.abandonWorkspace(workspace.id)).toMatchObject({ status: "abandoned" });
   });
 
+  it("uses the mission title for readable worktree names", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission({
+      id: "mission_12345678-aaaa-bbbb-cccc-123456789abc",
+      title: "Add regression coverage for missing evidence",
+      goal: "Add regression coverage for missing evidence",
+      status: "draft",
+      sourceIds: [],
+      captureIds: [],
+      handoffCardIds: [],
+      artifactIds: [],
+      runIds: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString()
+    });
+    const service = new WorktreeManagerService(store);
+
+    const workspace = await service.createMissionWorkspace({
+      missionId: "mission_12345678-aaaa-bbbb-cccc-123456789abc",
+      baseRepoPath: repoPath,
+      strategy: "gitWorktree"
+    });
+
+    expect(workspace.worktreeName).toBe(".agentbridge-add-regression-coverage-missing-evidence-12345678");
+    expect(workspace.branchName).toBe("agentbridge/add-regression-coverage-missing-evidence-12345678");
+  });
+
   it("blocks isolated workspace creation from a dirty base repository", async () => {
     const service = new WorktreeManagerService();
     await writeFile(join(repoPath, "dirty.txt"), "dirty\n", "utf8");
@@ -72,7 +99,7 @@ describe("WorktreeManagerService", () => {
 
   it("blocks git worktree path collisions", async () => {
     const service = new WorktreeManagerService();
-    await mkdir(join(tempDir, ".agentbridge-mission-collision"));
+    await mkdir(join(tempDir, ".agentbridge-mission-collision-collisio"));
 
     await expect(service.createMissionWorkspace({
       missionId: "mission collision",

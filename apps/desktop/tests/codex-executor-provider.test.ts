@@ -64,7 +64,7 @@ describe("CodexExecutorProvider", () => {
     const transport: CodexAppServerTransport = {
       async request(method, params) {
         calls.push({ method, params });
-        return method === "turn/start" ? { turnId: "turn_123" } : {};
+        return method === "turn/start" ? { turn: { id: "turn_123" } } : {};
       }
     };
     const appServerClient = new CodexAppServerClient({ transport });
@@ -84,7 +84,7 @@ describe("CodexExecutorProvider", () => {
 
     expect(calls).toEqual([
       { method: "thread/resume", params: { threadId: "thread_123", cwd: tempDir } },
-      { method: "turn/start", params: { threadId: "thread_123", input: { type: "text", text: expect.stringContaining("Goal:") }, cwd: tempDir } }
+      { method: "turn/start", params: { threadId: "thread_123", input: [{ type: "text", text: expect.stringContaining("Goal:") }], cwd: tempDir } }
     ]);
     expect(result.deliveryMode).toBe("existingSession");
     expect(result.metadata.codexTurnId).toBe("turn_123");
@@ -95,6 +95,45 @@ describe("CodexExecutorProvider", () => {
       ])
     );
   });
+
+  it("creates a new Codex App Server thread before sending the first task", async () => {
+    const calls: Array<{ method: string; params?: unknown }> = [];
+    const transport: CodexAppServerTransport = {
+      async request(method, params) {
+        calls.push({ method, params });
+        if (method === "thread/start") {
+          return { thread: { id: "thread_new", sessionId: "thread_new", cwd: tempDir } };
+        }
+        if (method === "turn/start") {
+          return { turn: { id: "turn_new" } };
+        }
+        return {};
+      }
+    };
+    const appServerClient = new CodexAppServerClient({ transport });
+    const store = new JsonFileStore(tempDir);
+    const provider = createProvider(store, { appServerClient });
+
+    const result = await provider.sendTask({
+      missionId: "mission_new",
+      taskSpec: sampleTaskSpec(),
+      repoContext: { repoPath: tempDir },
+      dryRun: false,
+      metadata: {}
+    });
+
+    expect(calls).toEqual([
+      { method: "thread/start", params: { serviceName: "agentbridge", cwd: tempDir } },
+      { method: "thread/name/set", params: { threadId: "thread_new", name: sampleTaskSpec().title } },
+      { method: "thread/goal/set", params: { threadId: "thread_new", objective: sampleTaskSpec().title, status: "active" } },
+      { method: "thread/resume", params: { threadId: "thread_new", cwd: tempDir } },
+      { method: "turn/start", params: { threadId: "thread_new", input: [{ type: "text", text: expect.stringContaining("Goal:") }], cwd: tempDir } }
+    ]);
+    expect(result.deliveryMode).toBe("existingSession");
+    expect(result.metadata.codexThreadId).toBe("thread_new");
+    expect(result.metadata.codexTurnId).toBe("turn_new");
+  });
+
 
   it("monitors an app-server Codex thread and stores provider events", async () => {
     const transport: CodexAppServerTransport = {
@@ -148,7 +187,7 @@ describe("CodexExecutorProvider", () => {
 
     expect(turn.metadata.source).toBe("autopilotSteering");
     expect(calls).toEqual([
-      { method: "turn/steer", params: { threadId: "thread_123", input: { type: "text", text: "Use the smaller fix." }, turnId: "turn_123" } }
+      { method: "turn/steer", params: { threadId: "thread_123", input: [{ type: "text", text: "Use the smaller fix." }], expectedTurnId: "turn_123" } }
     ]);
     await expect(store.listAgentEvents({ type: "turn.steer" })).resolves.toHaveLength(1);
   });
@@ -225,7 +264,7 @@ function createProvider(
     artifactBroker?: ArtifactBrokerService;
   } = {}
 ): CodexExecutorProvider {
-  const appServerClient = options.appServerClient ?? new CodexAppServerClient();
+  const appServerClient = options.appServerClient;
   const sessionService = new CodexSessionService(store, appServerClient);
   const targetService = new CodexTargetService(store, options.openExternal, appServerClient);
   return new CodexExecutorProvider(store, sessionService, targetService, appServerClient, fixedNow, {}, options.artifactBroker);

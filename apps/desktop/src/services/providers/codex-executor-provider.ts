@@ -108,6 +108,45 @@ export class CodexExecutorProvider implements ExecutorProvider {
 
   async createSession(input: { title?: string; repoPath?: string; metadata?: Record<string, unknown> } = {}): Promise<AgentSessionRef> {
     const now = this.now();
+    if (this.appServerClient && input.repoPath) {
+      const thread = await this.appServerClient.startThread({
+        cwd: input.repoPath,
+        ...(input.title ? { title: input.title } : {}),
+        ...(input.title ? { goal: input.title } : {})
+      });
+      const session: AgentSessionRef = {
+        id: `codex_session_${thread.threadId}`,
+        providerId: CODEX_EXECUTOR_PROVIDER_ID,
+        providerKind: "executor",
+        externalSessionId: thread.threadId,
+        status: "active",
+        createdAt: now,
+        lastSeenAt: now,
+        title: thread.name ?? input.title ?? "Codex task",
+        repoPath: thread.cwd ?? input.repoPath,
+        metadata: {
+          openMode: "existingThread",
+          integrationMode: "appServer",
+          deliveryMode: "appServerTurnStart",
+          codexThreadId: thread.threadId,
+          ...(thread.sessionId ? { codexSessionId: thread.sessionId } : {}),
+          ...input.metadata
+        }
+      };
+      await this.store.saveAgentSession(session);
+      await this.store.saveCodexThreadRef({
+        id: `codex_thread_${thread.threadId}`,
+        threadId: thread.threadId,
+        ...(session.title ? { name: session.title } : {}),
+        repoPath: session.repoPath,
+        status: "active",
+        source: "appServer",
+        lastSeenAt: now,
+        metadata: thread.metadata
+      });
+      return session;
+    }
+
     const session: AgentSessionRef = {
       id: `codex_session_${randomUUID()}`,
       providerId: CODEX_EXECUTOR_PROVIDER_ID,

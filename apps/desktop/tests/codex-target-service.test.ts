@@ -142,7 +142,7 @@ describe("CodexTargetService", () => {
     const transport: CodexAppServerTransport = {
       async request(method, params) {
         calls.push({ method, params });
-        return method === "turn/start" ? { turnId: "turn_123" } : {};
+        return method === "turn/start" ? { turn: { id: "turn_123" } } : {};
       }
     };
     const store = new JsonFileStore(tempDir);
@@ -163,7 +163,7 @@ describe("CodexTargetService", () => {
 
     expect(calls).toEqual([
       { method: "thread/resume", params: { threadId: "thread_123", cwd: tempDir } },
-      { method: "turn/start", params: { threadId: "thread_123", input: { type: "text", text: "Continue this task" }, cwd: tempDir } }
+      { method: "turn/start", params: { threadId: "thread_123", input: [{ type: "text", text: "Continue this task" }], cwd: tempDir } }
     ]);
     expect(result).toMatchObject({
       deliveryMode: "appServerTurnStart",

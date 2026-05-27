@@ -34,7 +34,7 @@ describe("CodexAppServerClient", () => {
     const transport: CodexAppServerTransport = {
       async request(method, params) {
         calls.push({ method, params });
-        return method === "turn/start" ? { turnId: "turn_1" } : {};
+        return method === "turn/start" ? { turn: { id: "turn_1" } } : {};
       }
     };
     const client = new CodexAppServerClient({ transport });
@@ -47,7 +47,30 @@ describe("CodexAppServerClient", () => {
 
     expect(calls).toEqual([
       { method: "thread/resume", params: { threadId: "thread_1", cwd: "C:/repo" } },
-      { method: "turn/start", params: { threadId: "thread_1", input: { type: "text", text: "Fix the tests" }, cwd: "C:/repo" } }
+      { method: "turn/start", params: { threadId: "thread_1", input: [{ type: "text", text: "Fix the tests" }], cwd: "C:/repo" } }
+    ]);
+  });
+
+  it("starts a new thread and can name it", async () => {
+    const calls: Array<{ method: string; params?: unknown }> = [];
+    const client = new CodexAppServerClient({
+      transport: {
+        async request(method, params) {
+          calls.push({ method, params });
+          return method === "thread/start" ? { thread: { id: "thread_new", sessionId: "thread_new", cwd: "C:/repo" } } : {};
+        }
+      }
+    });
+
+    await expect(client.startThread({ cwd: "C:/repo", title: "Evidence regression" })).resolves.toMatchObject({
+      threadId: "thread_new",
+      name: "Evidence regression",
+      cwd: "C:/repo"
+    });
+    expect(calls).toEqual([
+      { method: "thread/start", params: { serviceName: "agentbridge", cwd: "C:/repo" } },
+      { method: "thread/name/set", params: { threadId: "thread_new", name: "Evidence regression" } },
+      { method: "thread/goal/set", params: { threadId: "thread_new", objective: "Evidence regression", status: "active" } }
     ]);
   });
 
@@ -74,7 +97,7 @@ describe("CodexAppServerClient", () => {
     ]);
 
     expect(calls).toEqual([
-      { method: "turn/steer", params: { threadId: "thread_1", input: { type: "text", text: "Keep going" }, turnId: "turn_1" } },
+      { method: "turn/steer", params: { threadId: "thread_1", input: [{ type: "text", text: "Keep going" }], expectedTurnId: "turn_1" } },
       { method: "thread/read", params: { threadId: "thread_1", includeTurns: true } }
     ]);
   });
@@ -97,6 +120,9 @@ describe("CodexAppServerClient", () => {
         const msg = JSON.parse(line);
         if (msg.method === "initialize") {
           process.stdout.write(JSON.stringify({ id: msg.id, result: { ok: true } }) + "\\n");
+          return;
+        }
+        if (msg.method === "initialized") {
           return;
         }
         process.stdout.write(JSON.stringify({ id: msg.id, result: { data: [{ id: "thread_stdio", title: "Stdio thread", cwd: "C:/repo" }] } }) + "\\n");
