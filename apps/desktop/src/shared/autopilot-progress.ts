@@ -23,12 +23,12 @@ export interface AutopilotProgressView {
 }
 
 const STEP_TITLES: Record<AutopilotStep["kind"], string> = {
-  plan: "Ask Planner",
+  plan: "Plan with ChatGPT",
   createTaskSpec: "Create TaskSpec",
   sendToExecutor: "Send to Codex",
   monitorExecutor: "Monitor Codex",
   verify: "Run verification",
-  review: "Planner review",
+  review: "Review evidence",
   createFollowUp: "Create follow-up",
   steer: "Steer mission",
   requestApproval: "Request approval",
@@ -51,7 +51,7 @@ export function buildAutopilotProgressView(status: AutopilotProgressInput | unde
 
   const currentStep = orderedSteps.find((step) => step.id === run?.currentStepId) ?? orderedSteps.at(-1);
   const problemStep = [...orderedSteps].reverse().find((step) => step.status === "blocked" || step.status === "failed");
-  const detail = firstNonEmpty(run?.stopReason, problemStep ? stepDetail(problemStep) : undefined);
+  const detail = normalizeProgressText(firstNonEmpty(run?.stopReason, problemStep ? stepDetail(problemStep) : undefined));
   const severity = severityFor(run?.status);
   return {
     title: progressTitle(run?.status, currentStep),
@@ -170,19 +170,48 @@ function isPlannerUnavailable(step: AutopilotStep | undefined, detail: string | 
 }
 
 function stepTitle(step: AutopilotStep): string {
-  return typeof step.metadata.title === "string" && step.metadata.title.trim() ? step.metadata.title : STEP_TITLES[step.kind];
+  const title = typeof step.metadata.title === "string" && step.metadata.title.trim() ? step.metadata.title.trim() : STEP_TITLES[step.kind];
+  if (title === "Ask Planner") {
+    return "Plan with ChatGPT";
+  }
+  if (title === "Planner review") {
+    return "Review evidence";
+  }
+  return title;
 }
 
 function stepDetail(step: AutopilotStep): string | undefined {
   if (typeof step.metadata.error === "string" && step.metadata.error.trim()) {
-    return step.metadata.error;
+    return normalizeProgressText(step.metadata.error);
   }
   if (typeof step.metadata.reason === "string" && step.metadata.reason.trim()) {
-    return step.metadata.reason;
+    return normalizeProgressText(step.metadata.reason);
   }
   return undefined;
 }
 
 function firstNonEmpty(...values: Array<string | undefined>): string | undefined {
   return values.find((value) => value?.trim())?.trim();
+}
+
+function normalizeProgressText(value: string | undefined): string | undefined {
+  const trimmed = value?.trim();
+  if (!trimmed) {
+    return undefined;
+  }
+  if (isLegacyRemotePlannerText(trimmed)) {
+    return "This run was created before the ChatGPT handoff cleanup. Plan with ChatGPT, then stop this run and start again.";
+  }
+  return trimmed;
+}
+
+function isLegacyRemotePlannerText(value: string): boolean {
+  const text = value.toLowerCase();
+  return (
+    text.includes("hosted planner") ||
+    text.includes("openai quota") ||
+    text.includes("api billing") ||
+    text.includes("agentbridge cloud returned http 429") ||
+    text.includes("platform.openai.com/docs/guides/error-codes")
+  );
 }
