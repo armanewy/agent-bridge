@@ -1,3 +1,6 @@
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { existsSync } from "node:fs";
+import { join } from "node:path";
 import type { CodexThreadRef } from "@agentbridge/core";
 
 export type CodexAppServerErrorCode = "appServerUnavailable" | "threadNotFound" | "resumeFailed" | "turnStartFailed";
@@ -205,6 +208,105 @@ export class JsonRpcHttpTransport implements CodexAppServerTransport {
   }
 }
 
+export class JsonRpcStdioTransport implements CodexAppServerTransport {
+  private nextId = 1;
+  private child: ChildProcessWithoutNullStreams | undefined;
+  private buffer = "";
+  private initialized = false;
+  private readonly pending = new Map<number, { resolve(value: unknown): void; reject(error: Error): void }>();
+
+  constructor(
+    private readonly command: string,
+    private readonly args: string[] = ["app-server", "--listen", "stdio://"]
+  ) {}
+
+  async request(method: string, params?: unknown): Promise<unknown> {
+    await this.ensureProcess();
+    if (!this.initialized && method !== "initialize") {
+      await this.send("initialize", { clientInfo: { name: "AgentBridge", version: "0.1.0" } });
+      this.initialized = true;
+    }
+    return this.send(method, params ?? {});
+  }
+
+  private async ensureProcess(): Promise<void> {
+    if (this.child && !this.child.killed) {
+      return;
+    }
+    this.child = spawn(this.command, this.args, { stdio: ["pipe", "pipe", "pipe"], windowsHide: true });
+    this.child.stdout.setEncoding("utf8");
+    this.child.stdout.on("data", (chunk) => this.handleStdout(String(chunk)));
+    this.child.stderr.on("data", () => {
+      // Codex writes structured warnings to stderr during startup; they should not fail requests.
+    });
+    this.child.on("exit", (code) => {
+      const error = new Error(`Codex App Server exited with code ${code ?? "unknown"}.`);
+      for (const pending of this.pending.values()) {
+        pending.reject(error);
+      }
+      this.pending.clear();
+      this.child = undefined;
+      this.initialized = false;
+    });
+  }
+
+  private send(method: string, params: unknown): Promise<unknown> {
+    if (!this.child) {
+      return Promise.reject(new Error("Codex App Server process is not running."));
+    }
+    const id = this.nextId++;
+    const payload = JSON.stringify({ jsonrpc: "2.0", id, method, params });
+    return new Promise((resolve, reject) => {
+      this.pending.set(id, { resolve, reject });
+      this.child?.stdin.write(`${payload}\n`, (error) => {
+        if (error) {
+          this.pending.delete(id);
+          reject(error);
+        }
+      });
+    });
+  }
+
+  private handleStdout(chunk: string): void {
+    this.buffer += chunk;
+    while (this.buffer.includes("\n")) {
+      const index = this.buffer.indexOf("\n");
+      const line = this.buffer.slice(0, index).trim();
+      this.buffer = this.buffer.slice(index + 1);
+      if (!line) {
+        continue;
+      }
+      let message: { id?: unknown; result?: unknown; error?: { message?: string } };
+      try {
+        message = JSON.parse(line) as typeof message;
+      } catch {
+        continue;
+      }
+      if (typeof message.id !== "number") {
+        continue;
+      }
+      const pending = this.pending.get(message.id);
+      if (!pending) {
+        continue;
+      }
+      this.pending.delete(message.id);
+      if (message.error) {
+        pending.reject(new Error(message.error.message ?? "Codex App Server JSON-RPC error."));
+      } else {
+        pending.resolve(message.result);
+      }
+    }
+  }
+}
+
+export function findCodexExecutable(): string | undefined {
+  const candidates = [
+    process.env.CODEX_APP_SERVER_COMMAND,
+    process.env.LOCALAPPDATA ? join(process.env.LOCALAPPDATA, "OpenAI", "Codex", "bin", "codex.exe") : undefined
+  ].filter((candidate): candidate is string => Boolean(candidate));
+  return candidates.find((candidate) => existsSync(candidate));
+}
+
 function normalizeThreads(value: unknown): CodexAppServerThread[] {
   const items = Array.isArray(value)
     ? value
@@ -212,7 +314,9 @@ function normalizeThreads(value: unknown): CodexAppServerThread[] {
       ? value["threads"]
       : isRecord(value) && Array.isArray(value["sessions"])
         ? value["sessions"]
-        : [];
+        : isRecord(value) && Array.isArray(value["data"])
+          ? value["data"]
+          : [];
 
   return items.flatMap((item) => {
     if (!isRecord(item)) {

@@ -25,7 +25,7 @@ import { PlatformCommandRunner, VerificationService } from "../services/verifica
 import { SetupService } from "../services/setup-service.js";
 import { HandoffCardDeliveryService } from "../services/handoff-card-delivery-service.js";
 import { ComponentDiscoveryService } from "../services/component-discovery-service.js";
-import { CodexAppServerClient } from "../services/codex-app-server-client.js";
+import { CodexAppServerClient, findCodexExecutable, JsonRpcStdioTransport } from "../services/codex-app-server-client.js";
 import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import { ActivePlannerProvider, ProviderRegistryService } from "../services/provider-registry-service.js";
@@ -136,7 +136,12 @@ app.whenReady().then(async () => {
   const windowsTargetService = new WindowsTargetService();
   const codexAppServerEndpoint = process.env.CODEX_APP_SERVER_URL;
   const codexAppServerClient = new CodexAppServerClient(
-    codexAppServerEndpoint ? { endpoint: codexAppServerEndpoint } : {}
+    codexAppServerEndpoint
+      ? { endpoint: codexAppServerEndpoint }
+      : (() => {
+          const codexExecutable = findCodexExecutable();
+          return codexExecutable ? { transport: new JsonRpcStdioTransport(codexExecutable) } : {};
+        })()
   );
   const codexSessionService = new CodexSessionService(store, codexAppServerClient);
   const codexTargetService = new CodexTargetService(store, (url) => platformService.openExternal(url), codexAppServerClient, {

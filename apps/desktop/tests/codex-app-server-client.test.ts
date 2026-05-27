@@ -1,5 +1,13 @@
 import { describe, expect, it } from "vitest";
-import { CodexAppServerClient, CodexAppServerError, type CodexAppServerTransport } from "../src/services/codex-app-server-client.js";
+import { mkdtemp, writeFile, rm } from "node:fs/promises";
+import { join } from "node:path";
+import { tmpdir } from "node:os";
+import {
+  CodexAppServerClient,
+  CodexAppServerError,
+  JsonRpcStdioTransport,
+  type CodexAppServerTransport
+} from "../src/services/codex-app-server-client.js";
 
 describe("CodexAppServerClient", () => {
   it("lists threads from app-server responses", async () => {
@@ -77,5 +85,33 @@ describe("CodexAppServerClient", () => {
     await expect(client.listThreads()).rejects.toMatchObject({
       code: "appServerUnavailable"
     } satisfies Partial<CodexAppServerError>);
+  });
+
+  it("talks to a stdio JSON-RPC Codex app-server and initializes first", async () => {
+    const dir = await mkdtemp(join(tmpdir(), "agentbridge-codex-stdio-"));
+    const script = join(dir, "mock-codex-server.cjs");
+    await writeFile(script, `
+      const readline = require("node:readline");
+      const rl = readline.createInterface({ input: process.stdin });
+      rl.on("line", (line) => {
+        const msg = JSON.parse(line);
+        if (msg.method === "initialize") {
+          process.stdout.write(JSON.stringify({ id: msg.id, result: { ok: true } }) + "\\n");
+          return;
+        }
+        process.stdout.write(JSON.stringify({ id: msg.id, result: { data: [{ id: "thread_stdio", title: "Stdio thread", cwd: "C:/repo" }] } }) + "\\n");
+      });
+    `);
+    try {
+      const client = new CodexAppServerClient({
+        transport: new JsonRpcStdioTransport(process.execPath, [script])
+      });
+
+      await expect(client.listLoadedThreads()).resolves.toEqual([
+        expect.objectContaining({ threadId: "thread_stdio", name: "Stdio thread", cwd: "C:/repo" })
+      ]);
+    } finally {
+      await rm(dir, { recursive: true, force: true });
+    }
   });
 });
