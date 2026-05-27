@@ -73,7 +73,7 @@ async function createWindow(): Promise<void> {
     center: true,
     title: "AgentBridge",
     webPreferences: {
-      preload: join(__dirname, "preload.js"),
+      preload: join(__dirname, "preload.cjs"),
       contextIsolation: true,
       nodeIntegration: false
     }

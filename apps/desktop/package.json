@@ -7,7 +7,7 @@
   "type": "module",
   "main": "dist-electron/main/main.js",
   "scripts": {
-    "build": "tsc -p tsconfig.json --noEmit && vite build && tsc -p tsconfig.electron.json",
+    "build": "tsc -p tsconfig.json --noEmit && vite build && tsc -p tsconfig.electron.json && node scripts/copy-preload-cjs.mjs",
     "package": "electron-builder --dir --config electron-builder.yml",
     "dist": "electron-builder --win nsis --config electron-builder.yml",
     "test": "vitest run",
