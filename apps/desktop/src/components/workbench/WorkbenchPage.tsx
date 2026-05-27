@@ -24,23 +24,39 @@ interface WorkbenchPageProps {
   codexAppServerStatus?: CodexAppServerStatus | undefined;
   autopilotStatus?: AutopilotStatus | undefined;
   error?: string | undefined;
-  onChooseRepo(): void;
-  onUseWorkspaceCandidate(candidate: WorkspaceCandidate): void;
-  onCreateMission(): void;
-  onAskPlanner(text: string): void;
-  onGenerateTaskSpec(): void;
-  onSendToCodex(sessionRefId?: string): void;
-  onRunVerification(): void;
-  onAskPlannerToReview(): void;
-  onCreateFollowUp(): void;
-  onSendFollowUp(sessionRefId?: string): void;
-  onStartMission(intent: string, mode: "manual" | "supervised" | "autonomous"): void;
-  onStopAutopilot(runId: string): void;
-  onContinueAutopilot(runId: string): void;
-  onSteerAutopilot(runId: string, text: string): void;
-  onResolvePendingDecision(decisionId: string, selectedOption: string): void;
+  onChooseRepo(): void | Promise<void>;
+  onUseWorkspaceCandidate(candidate: WorkspaceCandidate): void | Promise<void>;
+  onCreateMission(): void | Promise<void>;
+  onAskPlanner(text: string): void | Promise<void>;
+  onGenerateTaskSpec(): void | Promise<void>;
+  onSendToCodex(sessionRefId?: string): void | Promise<void>;
+  onRunVerification(): void | Promise<void>;
+  onAskPlannerToReview(): void | Promise<void>;
+  onCreateFollowUp(): void | Promise<void>;
+  onSendFollowUp(sessionRefId?: string): void | Promise<void>;
+  onStartMission(intent: string, mode: "manual" | "supervised" | "autonomous"): void | Promise<void>;
+  onStopAutopilot(runId: string): void | Promise<void>;
+  onContinueAutopilot(runId: string): void | Promise<void>;
+  onSteerAutopilot(runId: string, text: string): void | Promise<void>;
+  onResolvePendingDecision(decisionId: string, selectedOption: string): void | Promise<void>;
   onRevealArtifactFile(fileId: string): void;
 }
+
+type WorkbenchOperation =
+  | "startMission"
+  | "stop"
+  | "continue"
+  | "steer"
+  | "askPlanner"
+  | "newTask"
+  | "taskSpec"
+  | "sendCodex"
+  | "verify"
+  | "review"
+  | "followUp"
+  | "sendFollowUp"
+  | "workspace"
+  | "decision";
 
 export function WorkbenchPage({
   missionDetail,
@@ -75,6 +91,7 @@ export function WorkbenchPage({
   const [steeringText, setSteeringText] = useState("");
   const [autopilotMode, setAutopilotMode] = useState<"manual" | "supervised" | "autonomous">("supervised");
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
+  const [pendingOperation, setPendingOperation] = useState<WorkbenchOperation | undefined>();
   const planner = providerProfiles.find((profile) => profile.id === "agentbridge-hosted-planner") ?? providerProfiles.find((profile) => profile.kind === "planner");
   const codex = providerProfiles.find((profile) => profile.id === "codex");
   const taskCard = missionDetail?.handoffCards.find((card) => card.recipe !== "debuggingRequest");
@@ -84,7 +101,9 @@ export function WorkbenchPage({
   const missionWorkspaceRef = missionDetail?.missionWorkspaces?.[0];
   const ownedFiles = missionDetail?.fileOwnership ?? [];
   const plannerResponses = missionDetail?.artifacts.filter((artifact) => artifact.kind === "modelResponse") ?? [];
+  const latestDelivery = parseLatestExecutorDelivery(missionDetail?.artifacts ?? []);
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
+  const codexReady = codex?.status === "available" || codexAppServerStatus?.available === true;
   const codexSessionRows = useMemo(() => {
     const fromThreads: AgentSessionRef[] = codexThreads.map((thread) => ({
       id: `codex_session_${thread.threadId}`,
@@ -108,11 +127,11 @@ export function WorkbenchPage({
   }, [agentSessions, codexThreads]);
   const canAskPlanner = Boolean(selectedMissionId && plannerText.trim() && planner?.status === "available");
   const canGenerateTaskSpec = Boolean(selectedMissionId && plannerResponses.length > 0);
-  const canSend = Boolean(selectedMissionId && taskCard);
+  const canSend = Boolean(selectedMissionId && taskCard && codexReady);
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
-  const canSendFollowUp = Boolean(selectedMissionId && followUpCard);
-  const canStartMission = Boolean(intentText.trim() && planner?.status === "available" && codex?.status === "available");
+  const canSendFollowUp = Boolean(selectedMissionId && followUpCard && codexReady);
+  const canStartMission = Boolean(intentText.trim() && planner?.status === "available" && codexReady);
   const activeRun = autopilotStatus?.run;
   const missionWorkspace = missionDetail?.mission.repoContext;
   const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
@@ -120,12 +139,29 @@ export function WorkbenchPage({
   const shouldShowWorkspaceSurface = needsWorkspaceForNewCodexThread;
   const blockers = [
     planner?.status !== "available" ? "Sign in to start." : undefined,
-    codex?.status !== "available" ? "Codex is not ready." : undefined
+    !codexReady ? "Codex is not ready." : undefined
   ].filter((item): item is string => Boolean(item));
   const latestPayloadSummary = parsePlannerPayloadSummary(
     missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
   );
   const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
+  const isBusy = Boolean(pendingOperation);
+  const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
+  const newThreadCopy = codexAppServerStatus?.available
+    ? "Starts a Codex thread and sends the task."
+    : "Opens a new Codex draft.";
+
+  async function runOperation(operation: WorkbenchOperation, action: () => void | Promise<void>): Promise<void> {
+    if (pendingOperation) {
+      return;
+    }
+    setPendingOperation(operation);
+    try {
+      await action();
+    } finally {
+      setPendingOperation(undefined);
+    }
+  }
 
   useEffect(() => {
     if (latestPayloadSummary?.redactionFindings.length) {
@@ -143,6 +179,12 @@ export function WorkbenchPage({
           {activeRun || missionDetail ? <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} /> : null}
         </div>
         {blockers.length ? <div className="inline-blocker">{blockers.join(" ")}</div> : null}
+        {pendingLabel ? (
+          <div className="progress-banner" role="status" aria-live="polite">
+            <span className="spinner" aria-hidden="true" />
+            {pendingLabel}
+          </div>
+        ) : null}
         <textarea
           className="planner-input intent-input"
           value={intentText}
@@ -158,12 +200,17 @@ export function WorkbenchPage({
               <option value="autonomous">Autonomous</option>
             </select>
           </label>
-          <button type="button" className="primary-button" disabled={!canStartMission} onClick={() => onStartMission(intentText, autopilotMode)}>
-            <Play size={16} />
-            Start Mission
+          <button
+            type="button"
+            className="primary-button"
+            disabled={!canStartMission || isBusy}
+            onClick={() => void runOperation("startMission", () => onStartMission(intentText, autopilotMode))}
+          >
+            {pendingOperation === "startMission" ? <span className="spinner light" aria-hidden="true" /> : <Play size={16} />}
+            {pendingOperation === "startMission" ? "Starting..." : "Start Mission"}
           </button>
           {activeRun && activeRun.status !== "cancelled" && activeRun.status !== "passed" && activeRun.status !== "failed" ? (
-            <button type="button" className="secondary-button" onClick={() => onStopAutopilot(activeRun.id)}>
+            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("stop", () => onStopAutopilot(activeRun.id))}>
               <Square size={16} />
               Stop
             </button>
@@ -179,7 +226,8 @@ export function WorkbenchPage({
                   key={option}
                   type="button"
                   className={option === "Approve" ? "primary-button" : "secondary-button"}
-                  onClick={() => onResolvePendingDecision(autopilotStatus.pendingDecision?.id ?? "", option)}
+                  disabled={isBusy}
+                  onClick={() => void runOperation("decision", () => onResolvePendingDecision(autopilotStatus.pendingDecision?.id ?? "", option))}
                 >
                   {option}
                 </button>
@@ -197,17 +245,17 @@ export function WorkbenchPage({
             <button
               type="button"
               className="secondary-button"
-              disabled={!steeringText.trim()}
+              disabled={!steeringText.trim() || isBusy}
               onClick={() => {
-                onSteerAutopilot(activeRun.id, steeringText);
+                void runOperation("steer", () => onSteerAutopilot(activeRun.id, steeringText));
                 setSteeringText("");
               }}
             >
               Steer
             </button>
             {activeRun.status === "blocked" ? (
-              <button type="button" className="secondary-button" onClick={() => onContinueAutopilot(activeRun.id)}>
-                Continue
+              <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("continue", () => onContinueAutopilot(activeRun.id))}>
+                {pendingOperation === "continue" ? "Continuing..." : "Continue"}
               </button>
             ) : null}
           </div>
@@ -226,11 +274,16 @@ export function WorkbenchPage({
           </div>
           <div className="button-row">
             {!missionWorkspace && bestWorkspaceCandidate?.repoPath ? (
-              <button type="button" className="primary-button compact" onClick={() => onUseWorkspaceCandidate(bestWorkspaceCandidate)}>
+              <button
+                type="button"
+                className="primary-button compact"
+                disabled={isBusy}
+                onClick={() => void runOperation("workspace", () => onUseWorkspaceCandidate(bestWorkspaceCandidate))}
+              >
                 Use inferred workspace
               </button>
             ) : null}
-            <button type="button" className="secondary-button" onClick={onChooseRepo}>
+            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("workspace", onChooseRepo)}>
               Choose workspace
             </button>
           </div>
@@ -241,6 +294,42 @@ export function WorkbenchPage({
 
       <details className="workbench-details">
         <summary>Details</summary>
+      <section className="panel workbench-task-panel">
+        <div className="panel-heading compact-heading">
+          <div>
+            <span className="eyebrow">Task</span>
+            <h2>{missionDetail?.mission.title ?? "No task yet"}</h2>
+            <p>{taskStateCopy(missionDetail?.mission, taskCard)}</p>
+          </div>
+          <StatusPill status={missionDetail?.mission.status} />
+        </div>
+        <div className="task-action-grid">
+          <button type="button" className="secondary-button" onClick={() => void runOperation("taskSpec", onGenerateTaskSpec)} disabled={!canGenerateTaskSpec || isBusy}>
+            {pendingOperation === "taskSpec" ? <span className="spinner" aria-hidden="true" /> : <FileText size={16} />}
+            {pendingOperation === "taskSpec" ? "Generating..." : "Generate TaskSpec"}
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void runOperation("verify", onRunVerification)} disabled={!canVerify || isBusy}>
+            {pendingOperation === "verify" ? <span className="spinner" aria-hidden="true" /> : <Play size={16} />}
+            {pendingOperation === "verify" ? "Verifying..." : "Run Verification"}
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void runOperation("review", onAskPlannerToReview)} disabled={!canReview || isBusy}>
+            {pendingOperation === "review" ? <span className="spinner" aria-hidden="true" /> : <CheckCircle2 size={16} />}
+            {pendingOperation === "review" ? "Reviewing..." : "Ask Planner to Review"}
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void runOperation("followUp", onCreateFollowUp)} disabled={!selectedMissionId || !plannerResponses.length || isBusy}>
+            {pendingOperation === "followUp" ? <span className="spinner" aria-hidden="true" /> : <Wrench size={16} />}
+            {pendingOperation === "followUp" ? "Drafting..." : "Draft Follow-up"}
+          </button>
+          <button type="button" className="secondary-button" onClick={() => void runOperation("sendFollowUp", () => onSendFollowUp(selectedSession?.id))} disabled={!canSendFollowUp || isBusy}>
+            {pendingOperation === "sendFollowUp" ? <span className="spinner" aria-hidden="true" /> : <Send size={16} />}
+            {pendingOperation === "sendFollowUp" ? "Sending..." : "Send Follow-up"}
+          </button>
+        </div>
+        <DoneMeansPanel contract={completionContract} evidenceCount={missionDetail?.completionEvidence?.length ?? 0} />
+        {missionWorkspaceRef ? <WorkspaceIsolationPanel workspace={missionWorkspaceRef} fileCount={ownedFiles.length} /> : null}
+        {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
+        {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
+      </section>
       <div className="workbench-grid">
         <section className="panel workbench-pane">
           <div className="panel-heading compact-heading">
@@ -258,11 +347,11 @@ export function WorkbenchPage({
             placeholder="Ask the planner what Codex should do..."
           />
           <div className="button-row">
-            <button type="button" className="primary-button" onClick={() => onAskPlanner(plannerText)} disabled={!canAskPlanner}>
-              <Bot size={16} />
-              Ask Planner
+            <button type="button" className="primary-button" onClick={() => void runOperation("askPlanner", () => onAskPlanner(plannerText))} disabled={!canAskPlanner || isBusy}>
+              {pendingOperation === "askPlanner" ? <span className="spinner light" aria-hidden="true" /> : <Bot size={16} />}
+              {pendingOperation === "askPlanner" ? "Asking..." : "Ask Planner"}
             </button>
-            <button type="button" className="secondary-button" onClick={onCreateMission}>
+            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("newTask", onCreateMission)}>
               New task
             </button>
           </div>
@@ -276,16 +365,17 @@ export function WorkbenchPage({
               <h2>Executor</h2>
               <p>{codexCopy(codex, codexAppServerStatus)}</p>
             </div>
-            <StatusPill status={codex?.status} />
+            <StatusPill status={codexReady ? "available" : codex?.status} />
           </div>
           <div className="session-list">
             <button
               type="button"
               className={!selectedSessionId ? "session-row selected" : "session-row"}
               onClick={() => setSelectedSessionId(undefined)}
+              disabled={isBusy}
             >
               <strong>New Codex thread</strong>
-              <span>Delivery mode: codex:// new thread</span>
+              <span>{newThreadCopy}</span>
             </button>
             {codexSessionRows.map((session) => (
               <button
@@ -293,58 +383,28 @@ export function WorkbenchPage({
                 type="button"
                 className={selectedSessionId === session.id ? "session-row selected" : "session-row"}
                 onClick={() => setSelectedSessionId(session.id)}
+                disabled={isBusy}
               >
                 <strong>{session.title ?? shortId(session.externalSessionId)}</strong>
                 <span>{sessionModeCopy(session)}</span>
               </button>
             ))}
           </div>
-          <button type="button" className="primary-button" onClick={() => onSendToCodex(selectedSession?.id)} disabled={!canSend}>
-            <Send size={16} />
-            Send TaskSpec to Codex
+          <button type="button" className="primary-button" onClick={() => void runOperation("sendCodex", () => onSendToCodex(selectedSession?.id))} disabled={!canSend || isBusy}>
+            {pendingOperation === "sendCodex" ? <span className="spinner light" aria-hidden="true" /> : <Send size={16} />}
+            {pendingOperation === "sendCodex" ? "Sending..." : "Send TaskSpec"}
           </button>
+          {latestDelivery ? (
+            <div className={latestDelivery.success ? "delivery-status" : "delivery-status warning"}>
+              <strong>{latestDelivery.label}</strong>
+              {latestDelivery.detail ? <span>{latestDelivery.detail}</span> : null}
+            </div>
+          ) : null}
           {needsWorkspaceForNewCodexThread ? (
             <p className="empty-copy">Choose a workspace to create a new Codex thread, or select an existing Codex session.</p>
           ) : null}
         </section>
       </div>
-
-      <section className="panel workbench-task-panel">
-        <div className="panel-heading compact-heading">
-          <div>
-            <span className="eyebrow">Task</span>
-            <h2>{missionDetail?.mission.title ?? "No task yet"}</h2>
-            <p>{taskStateCopy(missionDetail?.mission, taskCard)}</p>
-          </div>
-          <StatusPill status={missionDetail?.mission.status} />
-        </div>
-        <div className="task-action-grid">
-          <button type="button" className="secondary-button" onClick={onGenerateTaskSpec} disabled={!canGenerateTaskSpec}>
-            <FileText size={16} />
-            Generate TaskSpec
-          </button>
-          <button type="button" className="secondary-button" onClick={onRunVerification} disabled={!canVerify}>
-            <Play size={16} />
-            Run Verification
-          </button>
-          <button type="button" className="secondary-button" onClick={onAskPlannerToReview} disabled={!canReview}>
-            <CheckCircle2 size={16} />
-            Ask Planner to Review
-          </button>
-          <button type="button" className="secondary-button" onClick={onCreateFollowUp} disabled={!selectedMissionId || !plannerResponses.length}>
-            <Wrench size={16} />
-            Draft Follow-up
-          </button>
-          <button type="button" className="secondary-button" onClick={() => onSendFollowUp(selectedSession?.id)} disabled={!canSendFollowUp}>
-            <Send size={16} />
-            Send Follow-up
-          </button>
-        </div>
-        <DoneMeansPanel contract={completionContract} evidenceCount={missionDetail?.completionEvidence?.length ?? 0} />
-        {missionWorkspaceRef ? <WorkspaceIsolationPanel workspace={missionWorkspaceRef} fileCount={ownedFiles.length} /> : null}
-        {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
-        {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
-      </section>
       <PlannerPayloadPanel summary={latestPayloadSummary} open={payloadPanelOpen} onToggle={() => setPayloadPanelOpen((current) => !current)} />
       <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} onRevealFile={onRevealArtifactFile} />
       </details>
@@ -400,13 +460,14 @@ function DoneMeansPanel({
       </div>
       {!canPassAutonomously ? <p>This task cannot autonomously pass yet.</p> : null}
       <ul>
-        {contract.acceptanceCriteria.slice(0, 4).map((criterion) => (
+        {contract.acceptanceCriteria.slice(0, 3).map((criterion) => (
           <li key={criterion.id}>
             {criterion.statement}
             <em>{criterion.verifierKind}</em>
           </li>
         ))}
       </ul>
+      {contract.acceptanceCriteria.length > 3 ? <p>{contract.acceptanceCriteria.length - 3} more criteria.</p> : null}
       <p>{evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"} recorded.</p>
     </div>
   );
@@ -572,7 +633,7 @@ function TaskSpecSummary({ card }: { card: HandoffCard }): JSX.Element {
       <strong>{card.taskSpec.title}</strong>
       <p>{card.taskSpec.goal}</p>
       <ul>
-        {card.taskSpec.acceptanceCriteria.slice(0, 4).map((item) => (
+        {card.taskSpec.acceptanceCriteria.slice(0, 3).map((item) => (
           <li key={item}>{item}</li>
         ))}
       </ul>
@@ -614,8 +675,76 @@ function codexCopy(profile?: AgentProviderProfile, appServer?: CodexAppServerSta
 }
 
 function sessionModeCopy(session: AgentSessionRef): string {
-  const mode = session.metadata.integrationMode === "appServer" ? "Existing thread via App Server" : "Existing thread open-only fallback";
+  const mode = session.metadata.integrationMode === "appServer" ? "Sends to this Codex thread" : "Opens this thread only";
   return `${mode} · ${shortId(session.externalSessionId)}`;
+}
+
+function parseLatestExecutorDelivery(artifacts: Artifact[]): { success: boolean; label: string; detail?: string } | undefined {
+  const artifact = [...artifacts].reverse().find((item) => item.kind === "deliveryResult" && item.title === "Executor delivery result");
+  if (!artifact?.content) {
+    return undefined;
+  }
+  try {
+    const result = JSON.parse(artifact.content) as Record<string, unknown>;
+    const success = result.success === true;
+    const mode = typeof result.deliveryMode === "string" ? result.deliveryMode : "";
+    const turnId = typeof result.turnId === "string" ? result.turnId : undefined;
+    const warnings = Array.isArray(result.warnings) ? result.warnings.filter((item): item is string => typeof item === "string") : [];
+    if (success && mode !== "openOnlyFallback") {
+      return {
+        success: true,
+        label: "Sent to Codex.",
+        ...(turnId ? { detail: `Turn ${shortId(turnId)}` } : {})
+      };
+    }
+    if (mode === "openOnlyFallback") {
+      return {
+        success: false,
+        label: "Opened in Codex only.",
+        detail: "The task was not sent as a turn."
+      };
+    }
+    return {
+      success: false,
+      label: "Codex did not accept the task.",
+      ...(warnings.length ? { detail: warnings.join(" ") } : {})
+    };
+  } catch {
+    return undefined;
+  }
+}
+
+function operationLabel(operation: WorkbenchOperation): string {
+  switch (operation) {
+    case "startMission":
+      return "Starting mission...";
+    case "stop":
+      return "Stopping...";
+    case "continue":
+      return "Continuing...";
+    case "steer":
+      return "Sending steering...";
+    case "askPlanner":
+      return "Asking planner...";
+    case "newTask":
+      return "Creating task...";
+    case "taskSpec":
+      return "Generating TaskSpec...";
+    case "sendCodex":
+      return "Sending to Codex...";
+    case "verify":
+      return "Running verification...";
+    case "review":
+      return "Asking planner to review...";
+    case "followUp":
+      return "Drafting follow-up...";
+    case "sendFollowUp":
+      return "Sending follow-up...";
+    case "workspace":
+      return "Updating workspace...";
+    case "decision":
+      return "Applying decision...";
+  }
 }
 
 function taskStateCopy(mission: Mission | undefined, card: HandoffCard | undefined): string {

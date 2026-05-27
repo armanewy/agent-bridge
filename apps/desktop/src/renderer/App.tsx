@@ -884,21 +884,21 @@ export function App(): JSX.Element {
             codexAppServerStatus={codexAppServerStatus}
             autopilotStatus={autopilotStatus}
             error={workbenchError}
-            onChooseRepo={() => void chooseRepoFolder()}
-            onUseWorkspaceCandidate={(candidate) => void useWorkspaceCandidate(candidate)}
-            onCreateMission={() => void createWorkbenchMission()}
-            onAskPlanner={(text) => void askWorkbenchPlanner(text)}
-            onGenerateTaskSpec={() => void generateWorkbenchTaskSpec()}
-            onSendToCodex={(sessionRefId) => void sendWorkbenchTaskSpec(sessionRefId)}
-            onRunVerification={() => void runWorkbenchVerification()}
-            onAskPlannerToReview={() => void askPlannerToReviewVerification()}
-            onCreateFollowUp={() => void createWorkbenchFollowUp()}
-            onSendFollowUp={(sessionRefId) => void sendWorkbenchFollowUp(sessionRefId)}
-            onStartMission={(intent, mode) => void startAutopilotMission(intent, mode)}
-            onStopAutopilot={(runId) => void stopAutopilot(runId)}
-            onContinueAutopilot={(runId) => void continueAutopilot(runId)}
-            onSteerAutopilot={(runId, text) => void steerAutopilot(runId, text)}
-            onResolvePendingDecision={(decisionId, selectedOption) => void resolvePendingDecision(decisionId, selectedOption)}
+            onChooseRepo={() => chooseRepoFolder()}
+            onUseWorkspaceCandidate={(candidate) => useWorkspaceCandidate(candidate)}
+            onCreateMission={() => createWorkbenchMission()}
+            onAskPlanner={(text) => askWorkbenchPlanner(text)}
+            onGenerateTaskSpec={() => generateWorkbenchTaskSpec()}
+            onSendToCodex={(sessionRefId) => sendWorkbenchTaskSpec(sessionRefId)}
+            onRunVerification={() => runWorkbenchVerification()}
+            onAskPlannerToReview={() => askPlannerToReviewVerification()}
+            onCreateFollowUp={() => createWorkbenchFollowUp()}
+            onSendFollowUp={(sessionRefId) => sendWorkbenchFollowUp(sessionRefId)}
+            onStartMission={(intent, mode) => startAutopilotMission(intent, mode)}
+            onStopAutopilot={(runId) => stopAutopilot(runId)}
+            onContinueAutopilot={(runId) => continueAutopilot(runId)}
+            onSteerAutopilot={(runId, text) => steerAutopilot(runId, text)}
+            onResolvePendingDecision={(decisionId, selectedOption) => resolvePendingDecision(decisionId, selectedOption)}
             onRevealArtifactFile={(fileId) => void api.revealArtifactFile(fileId)}
           />
         ) : null}

@@ -206,6 +206,39 @@ nav {
   font-weight: 700;
 }
 
+.progress-banner {
+  border: 1px solid #b9dccf;
+  border-radius: 8px;
+  background: #edf8f3;
+  color: #0f563f;
+  padding: 10px 12px;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.spinner {
+  width: 16px;
+  height: 16px;
+  border: 2px solid currentColor;
+  border-right-color: transparent;
+  border-radius: 999px;
+  display: inline-block;
+  animation: spin 0.75s linear infinite;
+  flex: 0 0 auto;
+}
+
+.spinner.light {
+  color: #ffffff;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .intent-actions,
 .steering-row {
   display: flex;
@@ -329,6 +362,9 @@ nav {
 .artifact-tray-list {
   display: grid;
   gap: 8px;
+  max-height: 320px;
+  overflow: auto;
+  padding-right: 4px;
 }
 
 .artifact-tray-row {
@@ -374,6 +410,10 @@ nav {
 .workbench-details {
   display: grid;
   gap: 12px;
+}
+
+.workbench-details[open] {
+  align-content: start;
 }
 
 .workbench-details > summary {
@@ -429,6 +469,12 @@ nav {
   gap: 8px;
 }
 
+.workbench-pane .session-list {
+  max-height: 300px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
 .session-row,
 .compact-row {
   width: 100%;
@@ -454,10 +500,46 @@ nav {
   font-style: normal;
 }
 
+.delivery-status {
+  border: 1px solid #b9dccf;
+  border-radius: 8px;
+  background: #edf8f3;
+  color: #0f563f;
+  padding: 10px 12px;
+  display: grid;
+  gap: 3px;
+}
+
+.delivery-status.warning {
+  border-color: #efcd86;
+  background: #fff8e6;
+  color: #5f4a11;
+}
+
+.delivery-status span {
+  color: inherit;
+  font-size: 13px;
+}
+
 .task-action-grid {
   display: flex;
   gap: 8px;
   flex-wrap: wrap;
+}
+
+.workbench-task-panel {
+  gap: 10px;
+}
+
+.workbench-task-panel .taskspec-summary,
+.workbench-task-panel .done-means-panel,
+.workbench-task-panel .workspace-isolation-panel {
+  padding: 10px;
+}
+
+.workbench-task-panel .taskspec-summary ul,
+.workbench-task-panel .done-means-panel ul {
+  margin: 6px 0;
 }
 
 .taskspec-summary {
