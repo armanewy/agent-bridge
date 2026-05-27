@@ -81,6 +81,11 @@ describe("WorkbenchService", () => {
   it("attaches a high-confidence Codex workspace candidate", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveCodexThreadRef(codexThreadRef(tempDir));
+    await store.saveSetting(`repoContext:${tempDir}`, {
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
+      typecheckCommand: "pnpm build"
+    });
     const planner = new OpenAIPlannerProvider(store, {
       transport: queuedTransport(["Planner response."], []),
       now: fixedNow
@@ -96,7 +101,12 @@ describe("WorkbenchService", () => {
 
     const mission = await workbench.createWorkbenchMission({ goal: "Use the inferred workspace." });
 
-    expect(mission.repoContext).toMatchObject({ repoPath: tempDir });
+    expect(mission.repoContext).toMatchObject({
+      repoPath: tempDir,
+      testCommand: "pnpm test",
+      lintCommand: "pnpm lint",
+      typecheckCommand: "pnpm build"
+    });
   });
 
   it("asks for a workspace only when verification needs one", async () => {

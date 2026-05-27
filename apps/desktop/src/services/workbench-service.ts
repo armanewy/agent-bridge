@@ -25,6 +25,7 @@ import type { VerificationRunRequest, VerificationRunResponse } from "./bridge-c
 import type { CompletionContractService } from "./completion-contract-service.js";
 import type { VerificationService } from "./verification-service.js";
 import type { WorkspaceResolverService } from "./workspace-resolver-service.js";
+import { RepoContextService } from "./repo-context-service.js";
 
 export interface CreateWorkbenchMissionInput {
   title?: string;
@@ -41,6 +42,8 @@ export interface AttachWorkspaceInput {
 }
 
 export class WorkbenchService {
+  private readonly repoContextService: RepoContextService;
+
   constructor(
     private readonly store: LocalStore,
     private readonly planner: PlannerProvider,
@@ -49,7 +52,9 @@ export class WorkbenchService {
     private readonly now: () => string = () => new Date().toISOString(),
     private readonly workspaceResolver?: WorkspaceResolverService,
     private readonly completionContractService?: CompletionContractService
-  ) {}
+  ) {
+    this.repoContextService = new RepoContextService(store);
+  }
 
   async createWorkbenchMission(input: CreateWorkbenchMissionInput = {}): Promise<Mission> {
     const now = this.now();
@@ -220,10 +225,11 @@ export class WorkbenchService {
     if (!input.repoPath.trim()) {
       throw new Error("Workspace repo path is required.");
     }
+    const repoContext = await this.repoContextService.build(input.repoPath);
     const updated: Mission = {
       ...mission,
       repoContext: {
-        repoPath: input.repoPath,
+        ...repoContext,
         ...(input.repoName ? { repoName: input.repoName } : {}),
         ...(input.branch ? { currentBranch: input.branch } : {})
       },
@@ -409,10 +415,11 @@ export class WorkbenchService {
     if (!best?.repoPath || best.confidence < 90) {
       return mission;
     }
+    const repoContext = await this.repoContextService.build(best.repoPath);
     const updated: Mission = {
       ...mission,
       repoContext: {
-        repoPath: best.repoPath,
+        ...repoContext,
         ...(best.repoName ? { repoName: best.repoName } : {}),
         ...(best.branch ? { currentBranch: best.branch } : {})
       },
