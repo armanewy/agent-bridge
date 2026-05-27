@@ -122,7 +122,7 @@ pnpm test:win-uia-helper
 
 For OpenAI-backed local planner runs, set `OPENAI_API_KEY` in your shell or copy `.env.example` to `.env.local` and fill it in. Do not commit `.env.local`.
 
-To use ChatGPT as the planner without API billing, ask ChatGPT to return a strict TaskSpec JSON object with `title`, `goal`, `background`, `instructions`, `requirements`, `constraints`, `nonGoals`, `acceptanceCriteria`, `suggestedFiles`, `verificationSteps`, and `expectedSummaryFormat`. Paste that JSON into the Workbench task box and start the mission. AgentBridge imports the JSON as the planner artifact, validates it locally, skips the hosted planner call, and continues with TaskSpec -> Codex -> verification.
+To use ChatGPT as the planner without API billing, write the mission in Workbench, use the ChatGPT planner action, and bring the selected ChatGPT plan back into AgentBridge. AgentBridge parses the readable plan, displays it as a task with criteria and checks, skips the hosted planner call, and continues with TaskSpec -> Codex -> verification.
 
 The packaged Windows app is written to:
 

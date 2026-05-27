@@ -191,7 +191,7 @@ try {
     $env:AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER = "1"
   }
   if (!$env:OPENAI_API_KEY -and !(Test-MockPlannerEnabled)) {
-    Write-Warning "OPENAI_API_KEY is not set; the hosted planner will be unavailable. Paste ChatGPT TaskSpec JSON or rerun with -MockPlanner for integration tests only."
+    Write-Warning "OPENAI_API_KEY is not set; the hosted planner will be unavailable. Plan with ChatGPT in the app or rerun with -MockPlanner for integration tests only."
   }
 
   if ($CloudPort -le 0) {
@@ -218,7 +218,7 @@ try {
           throw "OpenAI planner startup probe failed: $($probe.message)"
         }
         Write-Warning "OpenAI planner startup probe failed: $($probe.message)"
-        Write-Warning "Continuing without planner fallback. Paste ChatGPT TaskSpec JSON, fix API billing, or rerun with -MockPlanner for integration tests only."
+        Write-Warning "Continuing without planner fallback. Plan with ChatGPT in the app, fix API billing, or rerun with -MockPlanner for integration tests only."
       }
     }
     if (!$NoDevSignIn) {

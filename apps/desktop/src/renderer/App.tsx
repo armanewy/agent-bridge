@@ -561,10 +561,14 @@ export function App(): JSX.Element {
     }
   }
 
-  async function startAutopilotMission(intent: string, mode: "manual" | "supervised" | "autonomous"): Promise<void> {
+  async function startAutopilotMission(
+    intent: string,
+    mode: "manual" | "supervised" | "autonomous",
+    plannerResponse?: string
+  ): Promise<void> {
     setWorkbenchError(undefined);
     try {
-      const importedPlannerResponse = extractTaskSpecJson(intent);
+      const importedPlannerResponse = plannerResponse?.trim() || extractTaskSpecJson(intent);
       const repoContext = codexTarget
         ? {
             repoPath: codexTarget.repoPath,
@@ -584,6 +588,25 @@ export function App(): JSX.Element {
       const nextStatus = await api.startAutopilot(mission.id, `policy_${mode}_default`);
       setAutopilotStatus(nextStatus);
       await refreshMission(mission.id);
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function openChatGptPlanner(): Promise<void> {
+    setWorkbenchError(undefined);
+    try {
+      await api.openEmbeddedChatGpt();
+    } catch (error) {
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  async function useSelectedChatGptPlan(intent: string, mode: "manual" | "supervised" | "autonomous"): Promise<void> {
+    setWorkbenchError(undefined);
+    try {
+      const capture = await api.captureEmbeddedChatGptSelection();
+      await startAutopilotMission(intent, mode, capture.text);
     } catch (error) {
       setWorkbenchError(error instanceof Error ? error.message : String(error));
     }
@@ -898,6 +921,8 @@ export function App(): JSX.Element {
             onCreateFollowUp={() => createWorkbenchFollowUp()}
             onSendFollowUp={(sessionRefId) => sendWorkbenchFollowUp(sessionRefId)}
             onStartMission={(intent, mode) => startAutopilotMission(intent, mode)}
+            onOpenChatGptPlanner={() => openChatGptPlanner()}
+            onUseSelectedChatGptPlan={(intent, mode) => useSelectedChatGptPlan(intent, mode)}
             onStopAutopilot={(runId) => stopAutopilot(runId)}
             onContinueAutopilot={(runId) => continueAutopilot(runId)}
             onSteerAutopilot={(runId, text) => steerAutopilot(runId, text)}

@@ -277,6 +277,120 @@ nav {
   gap: 8px;
 }
 
+.chatgpt-planner-panel,
+.autopilot-progress-panel {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 10px 12px;
+  display: grid;
+  gap: 10px;
+  min-width: 0;
+}
+
+.chatgpt-planner-panel {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+
+.chatgpt-planner-panel p,
+.autopilot-progress-panel p {
+  margin: 2px 0 0;
+  color: #526270;
+}
+
+.autopilot-progress-panel.active {
+  border-color: #b9dccf;
+  background: #f2fbf7;
+}
+
+.autopilot-progress-panel.blocked {
+  border-color: #efcd86;
+  background: #fffaf0;
+}
+
+.autopilot-progress-panel.failed {
+  border-color: #f0b4ad;
+  background: #fff6f4;
+}
+
+.autopilot-progress-panel.cancelled {
+  background: #f6f8fa;
+}
+
+.autopilot-progress-panel.complete {
+  border-color: #8ac3a9;
+  background: #eef8f3;
+}
+
+.autopilot-progress-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.autopilot-progress-heading strong {
+  display: block;
+  font-size: 16px;
+  overflow-wrap: anywhere;
+}
+
+.autopilot-progress-detail {
+  border-left: 3px solid #c8d2db;
+  padding-left: 10px;
+  overflow-wrap: anywhere;
+}
+
+.autopilot-next-action {
+  font-weight: 800;
+}
+
+.autopilot-step-list {
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-height: 180px;
+  overflow: auto;
+}
+
+.autopilot-step {
+  display: grid;
+  grid-template-columns: 88px minmax(0, 1fr);
+  gap: 10px;
+  align-items: start;
+  border-top: 1px solid #dce3e9;
+  padding-top: 8px;
+}
+
+.autopilot-step > span {
+  border-radius: 999px;
+  background: #edf2f6;
+  color: #526270;
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 800;
+  text-align: center;
+}
+
+.autopilot-step.completed > span {
+  background: #d8eee6;
+  color: #205f4b;
+}
+
+.autopilot-step.failed > span,
+.autopilot-step.blocked > span {
+  background: #ffe1dd;
+  color: #8a2e23;
+}
+
+.autopilot-step strong,
+.autopilot-step p {
+  overflow-wrap: anywhere;
+}
+
 .workbench-step-tabs {
   display: grid;
   grid-template-columns: repeat(5, minmax(0, 1fr));
@@ -876,6 +990,10 @@ nav {
   }
 
   .provider-settings-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .chatgpt-planner-panel {
     grid-template-columns: minmax(0, 1fr);
   }
 }

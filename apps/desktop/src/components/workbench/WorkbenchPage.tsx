@@ -1,4 +1,4 @@
-import { CheckCircle2, FileText, Play, Send, Square, Wrench } from "lucide-react";
+import { CheckCircle2, FileText, MessageSquare, Play, Send, Square, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   AgentProviderProfile,
@@ -12,6 +12,8 @@ import type {
   WorkspaceCandidate
 } from "@agentbridge/core";
 import type { AutopilotStatus, CodexAppServerStatus, MissionDetail } from "../../services/bridge-contract.js";
+import { buildAutopilotProgressView, buildChatGptPlannerPrompt } from "../../shared/autopilot-progress.js";
+import type { AutopilotProgressView } from "../../shared/autopilot-progress.js";
 import { extractTaskSpecJson } from "../../shared/task-spec-import.js";
 
 interface WorkbenchPageProps {
@@ -36,6 +38,8 @@ interface WorkbenchPageProps {
   onCreateFollowUp(): void | Promise<void>;
   onSendFollowUp(sessionRefId?: string): void | Promise<void>;
   onStartMission(intent: string, mode: "manual" | "supervised" | "autonomous"): void | Promise<void>;
+  onOpenChatGptPlanner(intent: string): void | Promise<void>;
+  onUseSelectedChatGptPlan(intent: string, mode: "manual" | "supervised" | "autonomous"): void | Promise<void>;
   onStopAutopilot(runId: string): void | Promise<void>;
   onContinueAutopilot(runId: string): void | Promise<void>;
   onSteerAutopilot(runId: string, text: string): void | Promise<void>;
@@ -55,7 +59,9 @@ type WorkbenchOperation =
   | "followUp"
   | "sendFollowUp"
   | "workspace"
-  | "decision";
+  | "decision"
+  | "chatGptPlanner"
+  | "chatGptCapture";
 
 type WorkbenchTab = "task" | "codex" | "verify" | "review" | "artifacts";
 
@@ -78,6 +84,8 @@ export function WorkbenchPage({
   onCreateFollowUp,
   onSendFollowUp,
   onStartMission,
+  onOpenChatGptPlanner,
+  onUseSelectedChatGptPlan,
   onStopAutopilot,
   onContinueAutopilot,
   onSteerAutopilot,
@@ -91,6 +99,7 @@ export function WorkbenchPage({
   const [pendingOperation, setPendingOperation] = useState<WorkbenchOperation | undefined>();
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("task");
   const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
+  const [chatGptPlannerNotice, setChatGptPlannerNotice] = useState<string | undefined>();
 
   const planner = providerProfiles.find((profile) => profile.id === "agentbridge-hosted-planner") ?? providerProfiles.find((profile) => profile.kind === "planner");
   const intentContainsTaskSpec = Boolean(extractTaskSpecJson(intentText));
@@ -105,6 +114,7 @@ export function WorkbenchPage({
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
   const codexReady = codex?.status === "available" || codexAppServerStatus?.available === true;
   const activeRun = autopilotStatus?.run;
+  const progressView = buildAutopilotProgressView(autopilotStatus);
   const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
   const latestPayloadSummary = parsePlannerPayloadSummary(
     missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
@@ -138,13 +148,25 @@ export function WorkbenchPage({
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard && codexReady);
   const canStartMission = Boolean(intentText.trim() && codexReady && (planner?.status === "available" || intentContainsTaskSpec));
+  const canUseChatGptPlanner = Boolean(intentText.trim() && codexReady);
+  const showChatGptPlanner = Boolean(intentText.trim() && planner?.status !== "available" && !intentContainsTaskSpec);
   const isBusy = Boolean(pendingOperation);
   const canStopRun = Boolean(activeRun && !["cancelled", "passed", "failed"].includes(activeRun.status));
   const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
   const blockers = [
-    planner?.status !== "available" && !intentContainsTaskSpec ? "Sign in or paste a ChatGPT TaskSpec JSON to start." : undefined,
+    planner?.status !== "available" && !intentContainsTaskSpec ? "Sign in or use ChatGPT Planner to start." : undefined,
     !codexReady ? "Codex is not ready." : undefined
   ].filter((item): item is string => Boolean(item));
+
+  async function openChatGptPlannerRequest(): Promise<void> {
+    try {
+      await navigator.clipboard?.writeText(buildChatGptPlannerPrompt(intentText));
+      setChatGptPlannerNotice("Planner request copied. Paste it into ChatGPT, then select ChatGPT's plan and use it here.");
+    } catch {
+      setChatGptPlannerNotice("ChatGPT is open. Copy the mission into ChatGPT, then select ChatGPT's plan and use it here.");
+    }
+    await onOpenChatGptPlanner(intentText);
+  }
 
   async function runOperation(operation: WorkbenchOperation, action: () => void | Promise<void>): Promise<void> {
     if (pendingOperation) {
@@ -182,6 +204,7 @@ export function WorkbenchPage({
             {pendingLabel}
           </div>
         ) : null}
+        {chatGptPlannerNotice ? <div className="progress-banner">{chatGptPlannerNotice}</div> : null}
 
         <div className="workbench-intent-grid">
           <textarea
@@ -223,6 +246,15 @@ export function WorkbenchPage({
           </div>
         </div>
 
+        {showChatGptPlanner ? (
+          <ChatGptPlannerPanel
+            disabled={!canUseChatGptPlanner || isBusy}
+            pendingOperation={pendingOperation}
+            onOpen={() => void runOperation("chatGptPlanner", openChatGptPlannerRequest)}
+            onUseSelected={() => void runOperation("chatGptCapture", () => onUseSelectedChatGptPlan(intentText, autopilotMode))}
+          />
+        ) : null}
+
         {autopilotStatus?.pendingDecision ? (
           <div className="pending-decision compact-decision">
             <strong>{autopilotStatus.pendingDecision.prompt}</strong>
@@ -241,6 +273,8 @@ export function WorkbenchPage({
             </div>
           </div>
         ) : null}
+
+        {progressView ? <AutopilotProgressPanel view={progressView} /> : null}
 
         <ProgressTabs
           activeTab={activeTab}
@@ -366,6 +400,66 @@ function ProgressTabs({
         </button>
       ))}
     </div>
+  );
+}
+
+function ChatGptPlannerPanel({
+  disabled,
+  pendingOperation,
+  onOpen,
+  onUseSelected
+}: {
+  disabled: boolean;
+  pendingOperation?: WorkbenchOperation | undefined;
+  onOpen(): void;
+  onUseSelected(): void;
+}): JSX.Element {
+  return (
+    <div className="chatgpt-planner-panel">
+      <div>
+        <strong>Plan with ChatGPT</strong>
+        <p>Use ChatGPT for the planning step, then bring the selected plan back here.</p>
+      </div>
+      <div className="button-row">
+        <button type="button" className="secondary-button" disabled={disabled} onClick={onOpen}>
+          {pendingOperation === "chatGptPlanner" ? <span className="spinner" aria-hidden="true" /> : <MessageSquare size={16} />}
+          {pendingOperation === "chatGptPlanner" ? "Opening..." : "Open ChatGPT"}
+        </button>
+        <button type="button" className="primary-button" disabled={disabled} onClick={onUseSelected}>
+          {pendingOperation === "chatGptCapture" ? <span className="spinner light" aria-hidden="true" /> : <CheckCircle2 size={16} />}
+          {pendingOperation === "chatGptCapture" ? "Using plan..." : "Use selected plan"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function AutopilotProgressPanel({ view }: { view: AutopilotProgressView }): JSX.Element {
+  return (
+    <section className={`autopilot-progress-panel ${view.severity}`} aria-live="polite">
+      <div className="autopilot-progress-heading">
+        <div>
+          <span className="eyebrow">Mission progress</span>
+          <strong>{view.title}</strong>
+        </div>
+        <StatusPill status={view.severity} />
+      </div>
+      {view.detail ? <p className="autopilot-progress-detail">{view.detail}</p> : null}
+      <p className="autopilot-next-action">{view.nextAction}</p>
+      {view.steps.length ? (
+        <ol className="autopilot-step-list">
+          {view.steps.map((step) => (
+            <li key={step.id} className={`autopilot-step ${step.status}`}>
+              <span>{step.status}</span>
+              <div>
+                <strong>{step.title}</strong>
+                <p>{step.detail ?? step.kind}</p>
+              </div>
+            </li>
+          ))}
+        </ol>
+      ) : null}
+    </section>
   );
 }
 
@@ -840,6 +934,10 @@ function operationLabel(operation: WorkbenchOperation): string {
       return "Updating workspace...";
     case "decision":
       return "Applying decision...";
+    case "chatGptPlanner":
+      return "Opening ChatGPT...";
+    case "chatGptCapture":
+      return "Using ChatGPT plan...";
   }
 }
 
