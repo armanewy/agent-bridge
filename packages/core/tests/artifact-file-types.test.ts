@@ -21,7 +21,7 @@ describe("artifact file schemas", () => {
     const bundle: ArtifactBundle = {
       id: "bundle_1",
       missionId: "mission_1",
-      name: "Planner review input",
+      name: "Review input",
       artifactIds: ["artifact_1"],
       fileIds: [file.id],
       purpose: "reviewInput",

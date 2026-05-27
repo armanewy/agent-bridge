@@ -283,12 +283,12 @@ export class AutopilotService {
         return { kind: "stop", status: "passed", reason: decision.reason };
       }
       if (decision.kind === "retryWithFollowUp") {
-        return { kind: "stop", status: "blocked", reason: "Planner review is manual in the ChatGPT-first flow." };
+        return { kind: "stop", status: "blocked", reason: "Review is manual in the ChatGPT-first flow." };
       }
       return { kind: "stop", status: "passed", reason: "Verification passed." };
     }
     if (!artifacts.some((artifact) => artifact.kind === "modelResponse" && artifact.metadata.source === "verificationReview")) {
-      return { kind: "stop", status: "blocked", reason: "Planner review is manual in the ChatGPT-first flow." };
+      return { kind: "stop", status: "blocked", reason: "Review is manual in the ChatGPT-first flow." };
     }
     return {
       kind: "createFollowUp",

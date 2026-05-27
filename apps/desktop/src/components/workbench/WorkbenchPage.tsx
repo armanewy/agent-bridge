@@ -640,7 +640,7 @@ function ReviewTab({
       <section className="tab-card primary-tab-card">
         <span className="eyebrow">Review</span>
         <h3>Next decision</h3>
-        <p className="empty-copy">Planner review is manual in the ChatGPT-first flow.</p>
+        <p className="empty-copy">Review is manual in the ChatGPT-first flow.</p>
         <div className="button-row">
           <button type="button" className="secondary-button" onClick={onDraftFollowUp} disabled={!hasPlannerOutput || isBusy}>
             {pendingOperation === "followUp" ? <span className="spinner" aria-hidden="true" /> : <Wrench size={16} />}
