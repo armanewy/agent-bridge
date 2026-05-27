@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createCodexDeepLinkTarget, type Mission } from "@agentbridge/core";
+import type { Mission } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { WorkspaceResolverService } from "../src/services/workspace-resolver-service.js";
 
@@ -34,15 +34,6 @@ describe("WorkspaceResolverService", () => {
     expect(candidates[0]).toMatchObject({ source: "codexAppServerThread", confidence: 95, requiresConfirmation: false });
   });
 
-  it("infers high-confidence workspace from Codex deep-link target", async () => {
-    const store = new JsonFileStore(tempDir);
-    const service = new WorkspaceResolverService(store, fixedNow);
-
-    const candidates = service.inferFromCodexDeepLinkTarget(createCodexDeepLinkTarget({ id: "target_1", repoPath: "C:/repo/app" }));
-
-    expect(candidates[0]).toMatchObject({ source: "codexDeepLinkTarget", repoName: "app", confidence: 95 });
-  });
-
   it("detects GitHub URLs without local repo reads", async () => {
     const store = new JsonFileStore(tempDir);
     const service = new WorkspaceResolverService(store, fixedNow);
@@ -68,9 +59,17 @@ describe("WorkspaceResolverService", () => {
     expect(service.getBestCandidate(candidates)?.confidence).toBeLessThan(70);
   });
 
-  it("infers for a mission from stored Codex target and prior mission", async () => {
+  it("infers for a mission from stored Codex App Server thread and prior mission", async () => {
     const store = new JsonFileStore(tempDir);
-    await store.saveTarget(createCodexDeepLinkTarget({ id: "target_1", repoPath: "C:/repo/app" }));
+    await store.saveCodexThreadRef({
+      id: "codex_thread_1",
+      threadId: "thread_1",
+      repoPath: "C:/repo/app",
+      status: "idle",
+      source: "appServer",
+      lastSeenAt: fixedNow(),
+      metadata: {}
+    });
     await store.saveMission(mission("mission_1"));
     await store.saveMission({ ...mission("mission_2"), repoContext: { repoPath: "C:/repo/history", currentBranch: "main", changedFiles: [] } });
     const service = new WorkspaceResolverService(store, fixedNow);
@@ -88,8 +87,6 @@ function mission(id: string): Mission {
     title: "Mission",
     goal: "Do the work.",
     status: "draft",
-    sourceIds: [],
-    captureIds: [],
     handoffCardIds: [],
     artifactIds: [],
     runIds: [],

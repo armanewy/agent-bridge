@@ -61,8 +61,6 @@ export class WorkbenchService {
       title: input.title ?? "Workbench task",
       goal: input.goal ?? "Plan, execute, verify, and review an AI-agent task.",
       status: "draft",
-      sourceIds: [`provider:${CHATGPT_MANUAL_PROVIDER_ID}`],
-      captureIds: [],
       handoffCardIds: [],
       artifactIds: [],
       runIds: [],
@@ -96,7 +94,6 @@ export class WorkbenchService {
       savedMission = {
         ...savedMission,
         status: "planned",
-        sourceIds: unique([...savedMission.sourceIds, "provider:chatgpt-manual"]),
         artifactIds: unique([...savedMission.artifactIds, plannerArtifact.id]),
         updatedAt: now
       };
@@ -128,7 +125,7 @@ export class WorkbenchService {
       metadata: { generatedFromArtifactId },
       createdAt
     };
-    const generatedPrompt = renderTaskSpecForTarget(taskSpec, undefined, mission.repoContext);
+    const generatedPrompt = renderTaskSpecForTarget(taskSpec, mission.repoContext);
     const promptArtifact: Artifact = {
       id: `artifact_${randomUUID()}`,
       missionId,
@@ -141,8 +138,7 @@ export class WorkbenchService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId,
-      sourceId: `provider:${CHATGPT_MANUAL_PROVIDER_ID}`,
-      captureId: plannerArtifact.id,
+      inputArtifactId: plannerArtifact.id,
       targetId: "provider:codex",
       recipe: "implementationBrief",
       taskSpec,
@@ -167,7 +163,7 @@ export class WorkbenchService {
       artifactIds: unique([...mission.artifactIds, taskArtifact.id, promptArtifact.id]),
       updatedAt: createdAt
     });
-    await this.appendRunStep(missionId, "transform", "Generate TaskSpec", "passed", [
+    await this.appendRunStep(missionId, "taskSpec", "Generate TaskSpec", "passed", [
       taskArtifact.id,
       promptArtifact.id
     ]);
@@ -194,7 +190,7 @@ export class WorkbenchService {
       metadata: { handoffId: `provider_handoff_${card.id}` }
     });
     const artifact = await this.saveResultArtifact(missionId, "Executor delivery result", result);
-    const status = result.success && result.deliveryMode !== "openOnlyFallback" ? "delivered" : "needs_review";
+    const status = result.success ? "delivered" : "needs_review";
     await this.store.saveMission({
       ...mission,
       status,
@@ -246,7 +242,7 @@ export class WorkbenchService {
     const baseCard = await this.latestHandoffCard(missionId);
     const taskSpec = taskSpecFromPlannerText(reviewArtifact.content, mission, baseCard.taskSpec);
     const createdAt = this.now();
-    const prompt = renderTaskSpecForTarget(taskSpec, undefined, mission.repoContext);
+    const prompt = renderTaskSpecForTarget(taskSpec, mission.repoContext);
     const artifact: Artifact = {
       id: `artifact_${randomUUID()}`,
       missionId,
@@ -259,8 +255,7 @@ export class WorkbenchService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId,
-      sourceId: `provider:${CHATGPT_MANUAL_PROVIDER_ID}`,
-      captureId: reviewArtifact.id,
+      inputArtifactId: reviewArtifact.id,
       targetId: "provider:codex",
       recipe: "debuggingRequest",
       taskSpec,
@@ -496,28 +491,28 @@ export class WorkbenchService {
   }
 }
 
-function taskSpecFromPlannerText(content: string, mission: Mission, fallback?: TaskSpec): TaskSpec {
+function taskSpecFromPlannerText(content: string, mission: Mission, defaults?: TaskSpec): TaskSpec {
   const parsed = parseTaskSpecText(content);
   if (parsed) {
     return parsed;
   }
   return {
-    title: fallback?.title ?? firstLine(content) ?? mission.title,
-    goal: fallback?.goal ?? mission.goal,
+    title: defaults?.title ?? firstLine(content) ?? mission.title,
+    goal: defaults?.goal ?? mission.goal,
     background: content,
-    instructions: fallback?.instructions ?? ["Use the planner guidance to make the requested change."],
-    requirements: fallback?.requirements ?? ["Keep the change scoped and verifiable."],
-    constraints: fallback?.constraints ?? ["Do not expand beyond the requested task."],
-    nonGoals: fallback?.nonGoals ?? ["Do not add unrelated providers or automation."],
-    acceptanceCriteria: fallback?.acceptanceCriteria ?? ["The implementation addresses the planner request."],
-    suggestedFiles: fallback?.suggestedFiles ?? [],
-    verificationSteps: fallback?.verificationSteps ?? mission.verificationPlan?.commands.map((command) => command.command) ?? [],
-    expectedSummaryFormat: fallback?.expectedSummaryFormat ?? "Summary, verification, and remaining risk."
+    instructions: defaults?.instructions ?? ["Use the planner guidance to make the requested change."],
+    requirements: defaults?.requirements ?? ["Keep the change scoped and verifiable."],
+    constraints: defaults?.constraints ?? ["Do not expand beyond the requested task."],
+    nonGoals: defaults?.nonGoals ?? ["Do not add unrelated providers or automation."],
+    acceptanceCriteria: defaults?.acceptanceCriteria ?? ["The implementation addresses the planner request."],
+    suggestedFiles: defaults?.suggestedFiles ?? [],
+    verificationSteps: defaults?.verificationSteps ?? mission.verificationPlan?.commands.map((command) => command.command) ?? [],
+    expectedSummaryFormat: defaults?.expectedSummaryFormat ?? "Summary, verification, and remaining risk."
   };
 }
 
 function statusForExecutorDelivery(result: ExecutorTaskResult): RunStep["status"] {
-  return result.deliveryMode === "openOnlyFallback" ? "needs_review" : "passed";
+  return result.success ? "passed" : "failed";
 }
 
 function firstLine(content: string): string | undefined {

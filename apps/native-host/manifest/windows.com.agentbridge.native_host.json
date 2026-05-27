@@ -1,7 +1,0 @@
-{
-  "name": "com.agentbridge.native_host",
-  "description": "AgentBridge local native messaging host",
-  "path": "C:\\\\ABSOLUTE\\\\PATH\\\\TO\\\\agentbridge-native-host.cmd",
-  "type": "stdio",
-  "allowed_origins": ["chrome-extension://REPLACE_WITH_EXTENSION_ID/"]
-}

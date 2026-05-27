@@ -2,9 +2,7 @@ import { describe, expect, it } from "vitest";
 import {
   AgentProviderProfileSchema,
   ExecutorTaskRequestSchema,
-  PlannerRequestSchema,
   ProviderArtifactCapabilitiesSchema,
-  ReviewRequestSchema,
   type ProviderArtifactCapabilities,
   type TaskSpec
 } from "../src/types.js";
@@ -41,20 +39,19 @@ describe("provider artifact capabilities", () => {
     expect(ProviderArtifactCapabilitiesSchema.parse(capabilities).canAcceptFileInputs).toBe(true);
     expect(
       AgentProviderProfileSchema.parse({
-        id: "chatgpt-manual",
-        kind: "planner",
-        displayName: "ChatGPT handoff",
-        capabilities: ["canPlan"],
-        authMode: "none",
-        status: "available",
+        id: "codex",
+        kind: "executor",
+        displayName: "Codex",
+        capabilities: ["canExecuteCode"],
+        authMode: "appServer",
+        status: "unavailable",
         artifactCapabilities: capabilities,
         metadata: {}
       }).artifactCapabilities?.acceptedMimeTypes
     ).toEqual(["text/plain"]);
   });
 
-  it("adds artifact refs to provider-neutral request schemas", () => {
-    expect(PlannerRequestSchema.parse({ prompt: "Plan", artifactBundleIds: ["bundle_1"], fileIds: ["file_1"] }).fileIds).toEqual(["file_1"]);
+  it("adds artifact refs to executor request schemas", () => {
     expect(
       ExecutorTaskRequestSchema.parse({
         missionId: "mission_1",
@@ -64,13 +61,5 @@ describe("provider artifact capabilities", () => {
         stagedFilePaths: ["staging/file.txt"]
       }).stagedFilePaths
     ).toEqual(["staging/file.txt"]);
-    expect(
-      ReviewRequestSchema.parse({
-        missionId: "mission_1",
-        taskSpec,
-        verificationResultIds: ["verification_1"],
-        includeFileSummaries: true
-      }).verificationResultIds
-    ).toEqual(["verification_1"]);
   });
 });

@@ -327,8 +327,7 @@ export class VerificationService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId: mission.id,
-      sourceId: baseCard.sourceId,
-      captureId: baseCard.captureId,
+      inputArtifactId: baseCard.inputArtifactId,
       targetId: baseCard.targetId,
       recipe: "debuggingRequest",
       taskSpec,
@@ -488,7 +487,7 @@ function evidenceForCriterion(
           summary: "Visual artifact exists but still requires visual review.",
           createdAt
         }
-      : missingEvidence(contract.id, criterionId, kind, "No screenshot or visual artifact was captured.", createdAt);
+      : missingEvidence(contract.id, criterionId, kind, "No screenshot or visual artifact was provided.", createdAt);
   }
 
   if (kind === "humanReview") {

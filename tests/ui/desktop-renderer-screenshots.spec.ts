@@ -8,7 +8,7 @@ const screenshotScenarios = [
 
 test.describe("desktop renderer screenshot checkpoints", () => {
   for (const scenario of screenshotScenarios) {
-    test(`captures ${scenario}`, async ({ page }, testInfo) => {
+    test(`screenshots ${scenario}`, async ({ page }, testInfo) => {
       await page.goto(`/?scenario=${scenario}`);
       await expect(page.getByTestId("app-shell")).toBeVisible();
 

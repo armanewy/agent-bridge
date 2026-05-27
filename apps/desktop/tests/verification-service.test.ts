@@ -173,8 +173,6 @@ function createMission(commands: {
     title: "Mission",
     goal: "Verify work",
     status: "delivered",
-    sourceIds: [],
-    captureIds: [],
     handoffCardIds: [],
     artifactIds: [],
     runIds: [],
@@ -208,8 +206,7 @@ function createHandoffCard(): HandoffCard {
   return {
     id: "card_1",
     missionId: "mission_1",
-    sourceId: "source_1",
-    captureId: "capture_1",
+    inputArtifactId: "artifact_1",
     targetId: "target_1",
     recipe: "implementationBrief",
     taskSpec: createTaskSpec(),
@@ -242,7 +239,7 @@ function createCompletionContract(kind: "command" | "visual"): CompletionContrac
       {
         id: "method_1",
         kind,
-        description: kind === "command" ? "Run configured verification commands." : "Capture a screenshot."
+        description: kind === "command" ? "Run configured verification commands." : "Provide a screenshot."
       }
     ],
     stopConditions: [],

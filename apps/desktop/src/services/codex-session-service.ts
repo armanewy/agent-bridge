@@ -1,5 +1,4 @@
-import { randomUUID } from "node:crypto";
-import type { CodexDeepLinkTarget, CodexThreadRef } from "@agentbridge/core";
+import type { CodexThreadRef } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { CodexAppServerClient, CodexAppServerThread } from "./codex-app-server-client.js";
 
@@ -15,41 +14,12 @@ export class CodexSessionService {
     return mergeThreadRefs([...refreshed, ...saved], repoPath);
   }
 
-  async saveManualThreadRef(threadId: string, name?: string, repoPath?: string): Promise<CodexThreadRef> {
-    const trimmedThreadId = threadId.trim();
-    if (!trimmedThreadId) {
-      throw new Error("Codex thread ID is required.");
-    }
-
-    const ref: CodexThreadRef = {
-      id: `codex_thread_${randomUUID()}`,
-      threadId: trimmedThreadId,
-      ...(name?.trim() ? { name: name.trim() } : {}),
-      ...(repoPath?.trim() ? { repoPath: repoPath.trim() } : {}),
-      status: "unknown",
-      source: "manual",
-      lastSeenAt: new Date().toISOString(),
-      metadata: {}
-    };
-    await this.store.saveCodexThreadRef(ref);
-    return ref;
-  }
-
   async getCodexThreadRef(threadId: string): Promise<CodexThreadRef | undefined> {
     return this.store.getCodexThreadRef(threadId);
   }
 
   async listSavedCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]> {
-    const [saved, targets] = await Promise.all([
-      this.store.listCodexThreadRefs(repoPath),
-      this.store.listTargets()
-    ]);
-    const targetRefs = targets
-      .filter((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink" && Boolean(target.existingThreadId))
-      .filter((target) => !repoPath || normalizePath(target.repoPath) === normalizePath(repoPath))
-      .map((target) => targetToThreadRef(target));
-
-    return mergeThreadRefs([...saved, ...targetRefs], repoPath);
+    return mergeThreadRefs(await this.store.listCodexThreadRefs(repoPath), repoPath);
   }
 
   async refreshCodexThreads(repoPath?: string): Promise<CodexThreadRef[]> {
@@ -94,19 +64,6 @@ function appServerThreadToRef(thread: CodexAppServerThread, lastSeenAt: string):
     source: "appServer",
     lastSeenAt,
     metadata: thread.metadata
-  };
-}
-
-function targetToThreadRef(target: CodexDeepLinkTarget): CodexThreadRef {
-  return {
-    id: `codex_thread_${target.existingThreadId}`,
-    threadId: target.existingThreadId ?? "",
-    ...(target.existingThreadName ? { name: target.existingThreadName } : {}),
-    repoPath: target.repoPath,
-    status: "unknown",
-    source: target.integrationMode === "appServer" ? "appServer" : target.integrationMode === "sdk" ? "sdk" : "deepLink",
-    lastSeenAt: target.boundAt,
-    metadata: { targetId: target.id }
   };
 }
 

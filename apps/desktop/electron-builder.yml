@@ -10,9 +10,6 @@ files:
   - dist-renderer/**
   - dist-electron/**
   - "!**/*.map"
-extraResources:
-  - from: ../native-host/dist-bundle/native-host.mjs
-    to: native-host/native-host.mjs
 win:
   icon: build/icon.ico
   target:

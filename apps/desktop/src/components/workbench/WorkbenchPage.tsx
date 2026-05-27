@@ -5,7 +5,6 @@ import type {
   AgentSessionRef,
   Artifact,
   ArtifactFile,
-  CodexDeepLinkTarget,
   CodexThreadRef,
   HandoffCard,
   Mission,
@@ -19,7 +18,6 @@ import { extractTaskSpecJson } from "../../shared/task-spec-import.js";
 interface WorkbenchPageProps {
   missionDetail?: MissionDetail | undefined;
   selectedMissionId?: string | undefined;
-  codexTarget?: CodexDeepLinkTarget | undefined;
   codexThreads: CodexThreadRef[];
   agentSessions: AgentSessionRef[];
   workspaceCandidates: WorkspaceCandidate[];
@@ -58,7 +56,7 @@ type WorkbenchOperation =
   | "workspace"
   | "decision"
   | "chatGptPlanner"
-  | "chatGptCapture";
+  | "chatGptImport";
 
 type WorkbenchTab = "task" | "codex" | "verify" | "review" | "artifacts";
 
@@ -122,8 +120,7 @@ export function WorkbenchPage({
       status: thread.status === "systemError" ? "unavailable" : thread.status ?? "unknown",
       lastSeenAt: thread.lastSeenAt,
       metadata: {
-        openMode: "existingThread",
-        integrationMode: thread.source === "appServer" ? "appServer" : "deepLink"
+        integrationMode: "appServer"
       }
     }));
     const byId = new Map<string, AgentSessionRef>();
@@ -235,7 +232,7 @@ export function WorkbenchPage({
             disabled={!canUseChatGptPlanner || isBusy}
             pendingOperation={pendingOperation}
             onOpen={() => void runOperation("chatGptPlanner", openChatGptPlannerRequest)}
-            onUseSelected={() => void runOperation("chatGptCapture", () => onUseSelectedChatGptPlan(intentText, autopilotMode))}
+            onUseSelected={() => void runOperation("chatGptImport", () => onUseSelectedChatGptPlan(intentText, autopilotMode))}
           />
         ) : null}
 
@@ -405,8 +402,8 @@ function ChatGptPlannerPanel({
           {pendingOperation === "chatGptPlanner" ? "Opening..." : "Open ChatGPT"}
         </button>
         <button type="button" className="primary-button" disabled={disabled} onClick={onUseSelected}>
-          {pendingOperation === "chatGptCapture" ? <span className="spinner light" aria-hidden="true" /> : <CheckCircle2 size={16} />}
-          {pendingOperation === "chatGptCapture" ? "Using plan..." : "Use selected plan"}
+          {pendingOperation === "chatGptImport" ? <span className="spinner light" aria-hidden="true" /> : <CheckCircle2 size={16} />}
+          {pendingOperation === "chatGptImport" ? "Using plan..." : "Use selected plan"}
         </button>
       </div>
     </div>
@@ -538,9 +535,9 @@ function CodexTab({
           <div>
             <span className="eyebrow">Codex</span>
             <h3>{selectedSession?.title ?? "New Codex thread"}</h3>
-            <p>{selectedSession ? sessionModeCopy(selectedSession) : appServerAvailable ? "Starts a Codex thread and sends the task." : "Opens a new Codex draft."}</p>
+            <p>{selectedSession ? sessionModeCopy(selectedSession) : appServerAvailable ? "Starts a Codex thread and sends the task." : "Codex App Server is required."}</p>
           </div>
-          <StatusPill status={appServerAvailable ? "available" : "fallback"} />
+          <StatusPill status={appServerAvailable ? "available" : "unavailable"} />
         </div>
         <label className="field-label">
           Session
@@ -777,8 +774,7 @@ function StatusPill({ status }: { status?: string | undefined }): JSX.Element {
 }
 
 function sessionModeCopy(session: AgentSessionRef): string {
-  const mode = session.metadata.integrationMode === "appServer" ? "Sends to this thread" : "Opens this thread only";
-  return `${mode} · ${shortId(session.externalSessionId)}`;
+  return `Sends to this thread · ${shortId(session.externalSessionId)}`;
 }
 
 function parseLatestExecutorDelivery(artifacts: Artifact[]): { success: boolean; label: string; detail?: string } | undefined {
@@ -792,18 +788,11 @@ function parseLatestExecutorDelivery(artifacts: Artifact[]): { success: boolean;
     const mode = typeof result.deliveryMode === "string" ? result.deliveryMode : "";
     const turnId = typeof result.turnId === "string" ? result.turnId : undefined;
     const warnings = Array.isArray(result.warnings) ? result.warnings.filter((item): item is string => typeof item === "string") : [];
-    if (success && mode !== "openOnlyFallback") {
+    if (success) {
       return {
         success: true,
         label: "Sent to Codex.",
         ...(turnId ? { detail: `Turn ${shortId(turnId)}` } : {})
-      };
-    }
-    if (mode === "openOnlyFallback") {
-      return {
-        success: false,
-        label: "Opened in Codex only.",
-        detail: "The task was not sent as a turn."
       };
     }
     return {
@@ -842,7 +831,7 @@ function operationLabel(operation: WorkbenchOperation): string {
       return "Applying decision...";
     case "chatGptPlanner":
       return "Opening ChatGPT...";
-    case "chatGptCapture":
+    case "chatGptImport":
       return "Using ChatGPT plan...";
   }
 }

@@ -15,26 +15,20 @@ import {
   AutopilotPolicySchema,
   AutopilotRunSchema,
   AutopilotStepSchema,
-  CaptureSchema,
   CompletionContractSchema,
   CompletionEvidenceSchema,
   CodexThreadRefSchema,
   FileOwnershipSchema,
-  HandoffSchema,
   HandoffCardSchema,
-  LinkSchema,
   LinkableComponentSchema,
   MissionSchema,
   MissionQueueItemSchema,
   MissionWorkspaceSchema,
   RunSchema,
   RunStepSchema,
-  SourceEndpointSchema,
   TargetEndpointSchema,
   VerificationResultSchema,
-  WorkflowLinkSchema,
   WorkflowTemplateSchema,
-  type Approval,
   type AgentEvent,
   type AgentProviderProfile,
   type AgentSessionRef,
@@ -47,30 +41,23 @@ import {
   type AutopilotRunStatus,
   type AutopilotStep,
   type AuditEvent,
-  type Capture,
   type CompletionContract,
   type CompletionEvidence,
   type CodexThreadRef,
   type FileOwnership,
-  type Handoff,
   type HandoffCard,
-  type Link,
   type LinkableComponent,
   type DeliveryAttempt,
   DeliveryAttemptSchema,
-  ExtensionHeartbeatSchema,
   type Mission,
   type MissionStatus,
   type Run,
   type RunStep,
-  type ExtensionHeartbeat,
   type MissionQueueItem,
   type MissionWorkspace,
   type Setting,
-  type SourceEndpoint,
   type TargetEndpoint,
   type VerificationResult,
-  type WorkflowLink,
   type WorkflowTemplate,
   type UserDecision,
   UserDecisionSchema
@@ -79,17 +66,9 @@ import {
 export const CURRENT_STORE_VERSION = 9;
 
 export interface LocalStore {
-  saveLink(link: Link): Promise<void>;
-  getLink(id: string): Promise<Link | undefined>;
-  listLinks(): Promise<Link[]>;
-  deleteLink(id: string): Promise<boolean>;
   saveLinkableComponent(component: LinkableComponent): Promise<void>;
   getLinkableComponent(id: string): Promise<LinkableComponent | undefined>;
   listLinkableComponents(): Promise<LinkableComponent[]>;
-  saveWorkflowLink(link: WorkflowLink): Promise<void>;
-  getWorkflowLink(id: string): Promise<WorkflowLink | undefined>;
-  listWorkflowLinks(): Promise<WorkflowLink[]>;
-  deleteWorkflowLink(id: string): Promise<boolean>;
   saveWorkflowTemplate(template: WorkflowTemplate): Promise<void>;
   getWorkflowTemplate(id: string): Promise<WorkflowTemplate | undefined>;
   listWorkflowTemplates(): Promise<WorkflowTemplate[]>;
@@ -111,8 +90,6 @@ export interface LocalStore {
   saveCodexThreadRef(ref: CodexThreadRef): Promise<void>;
   getCodexThreadRef(threadId: string): Promise<CodexThreadRef | undefined>;
   listCodexThreadRefs(repoPath?: string): Promise<CodexThreadRef[]>;
-  saveExtensionHeartbeat(heartbeat: ExtensionHeartbeat): Promise<void>;
-  getExtensionHeartbeat(): Promise<ExtensionHeartbeat | undefined>;
   saveProviderProfile(profile: AgentProviderProfile): Promise<void>;
   getProviderProfile(id: string): Promise<AgentProviderProfile | undefined>;
   listProviderProfiles(): Promise<AgentProviderProfile[]>;
@@ -137,19 +114,9 @@ export interface LocalStore {
   getUserDecision(id: string): Promise<UserDecision | undefined>;
   listPendingUserDecisions(missionId?: string): Promise<UserDecision[]>;
   resolveUserDecision(id: string, selectedOption: string): Promise<UserDecision | undefined>;
-  saveSource(source: SourceEndpoint): Promise<void>;
-  getSource(id: string): Promise<SourceEndpoint | undefined>;
-  listSources(): Promise<SourceEndpoint[]>;
   saveTarget(target: TargetEndpoint): Promise<void>;
   getTarget(id: string): Promise<TargetEndpoint | undefined>;
   listTargets(): Promise<TargetEndpoint[]>;
-  saveCapture(capture: Capture): Promise<void>;
-  getCapture(id: string): Promise<Capture | undefined>;
-  listRecentCaptures(limit?: number): Promise<Capture[]>;
-  saveHandoff(handoff: Handoff): Promise<void>;
-  getHandoff(id: string): Promise<Handoff | undefined>;
-  listRecentHandoffs(limit?: number): Promise<Handoff[]>;
-  deleteHandoff(id: string): Promise<boolean>;
   saveDeliveryAttempt(attempt: DeliveryAttempt): Promise<void>;
   listDeliveryAttempts(handoffId?: string): Promise<DeliveryAttempt[]>;
   saveMission(mission: Mission): Promise<void>;
@@ -177,8 +144,6 @@ export interface LocalStore {
   listRunSteps(runId: string): Promise<RunStep[]>;
   saveVerificationResult(result: VerificationResult): Promise<void>;
   listVerificationResultsForMission(missionId: string): Promise<VerificationResult[]>;
-  saveApproval(approval: Approval): Promise<void>;
-  getApproval(id: string): Promise<Approval | undefined>;
   appendAuditEvent(event: AuditEvent): Promise<void>;
   listAuditEvents(limit?: number): Promise<AuditEvent[]>;
   clearAuditEvents(): Promise<void>;
@@ -195,9 +160,7 @@ export interface AgentEventFilter {
 
 interface StoreData {
   version: number;
-  links: Record<string, Link>;
   linkableComponents: Record<string, LinkableComponent>;
-  workflowLinks: Record<string, WorkflowLink>;
   workflowTemplates: Record<string, WorkflowTemplate>;
   completionContracts: Record<string, CompletionContract>;
   completionEvidence: Record<string, CompletionEvidence>;
@@ -213,10 +176,7 @@ interface StoreData {
   autopilotRuns: Record<string, AutopilotRun>;
   autopilotSteps: Record<string, AutopilotStep>;
   userDecisions: Record<string, UserDecision>;
-  sources: Record<string, SourceEndpoint>;
   targets: Record<string, TargetEndpoint>;
-  captures: Record<string, Capture>;
-  handoffs: Record<string, Handoff>;
   deliveryAttempts: Record<string, DeliveryAttempt>;
   missions: Record<string, Mission>;
   handoffCards: Record<string, HandoffCard>;
@@ -226,8 +186,6 @@ interface StoreData {
   runs: Record<string, Run>;
   runSteps: Record<string, RunStep>;
   verificationResults: Record<string, VerificationResult>;
-  extensionHeartbeat?: ExtensionHeartbeat;
-  approvals: Record<string, Approval>;
   auditEvents: AuditEvent[];
   settings: Record<string, Setting>;
 }
@@ -238,30 +196,6 @@ export class JsonFileStore implements LocalStore {
 
   constructor(private readonly rootDir: string, fileName = "agentbridge-store.json") {
     this.filePath = join(rootDir, fileName);
-  }
-
-  async saveLink(link: Link): Promise<void> {
-    LinkSchema.parse(link);
-    await this.update((data) => {
-      data.links[link.id] = link;
-    });
-  }
-
-  async getLink(id: string): Promise<Link | undefined> {
-    return (await this.read()).links[id];
-  }
-
-  async listLinks(): Promise<Link[]> {
-    return Object.values((await this.read()).links).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }
-
-  async deleteLink(id: string): Promise<boolean> {
-    let deleted = false;
-    await this.update((data) => {
-      deleted = Object.hasOwn(data.links, id);
-      delete data.links[id];
-    });
-    return deleted;
   }
 
   async saveLinkableComponent(component: LinkableComponent): Promise<void> {
@@ -277,30 +211,6 @@ export class JsonFileStore implements LocalStore {
 
   async listLinkableComponents(): Promise<LinkableComponent[]> {
     return Object.values((await this.read()).linkableComponents).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }
-
-  async saveWorkflowLink(link: WorkflowLink): Promise<void> {
-    WorkflowLinkSchema.parse(link);
-    await this.update((data) => {
-      data.workflowLinks[link.id] = link;
-    });
-  }
-
-  async getWorkflowLink(id: string): Promise<WorkflowLink | undefined> {
-    return (await this.read()).workflowLinks[id];
-  }
-
-  async listWorkflowLinks(): Promise<WorkflowLink[]> {
-    return Object.values((await this.read()).workflowLinks).sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
-  }
-
-  async deleteWorkflowLink(id: string): Promise<boolean> {
-    let deleted = false;
-    await this.update((data) => {
-      deleted = Object.hasOwn(data.workflowLinks, id);
-      delete data.workflowLinks[id];
-    });
-    return deleted;
   }
 
   async saveWorkflowTemplate(template: WorkflowTemplate): Promise<void> {
@@ -427,17 +337,6 @@ export class JsonFileStore implements LocalStore {
     return Object.values((await this.read()).codexThreadRefs)
       .filter((ref) => !repoPath || normalizePath(ref.repoPath) === normalizePath(repoPath))
       .sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
-  }
-
-  async saveExtensionHeartbeat(heartbeat: ExtensionHeartbeat): Promise<void> {
-    ExtensionHeartbeatSchema.parse(heartbeat);
-    await this.update((data) => {
-      data.extensionHeartbeat = heartbeat;
-    });
-  }
-
-  async getExtensionHeartbeat(): Promise<ExtensionHeartbeat | undefined> {
-    return (await this.read()).extensionHeartbeat;
   }
 
   async saveProviderProfile(profile: AgentProviderProfile): Promise<void> {
@@ -610,21 +509,6 @@ export class JsonFileStore implements LocalStore {
     return updated;
   }
 
-  async saveSource(source: SourceEndpoint): Promise<void> {
-    SourceEndpointSchema.parse(source);
-    await this.update((data) => {
-      data.sources[source.id] = source;
-    });
-  }
-
-  async getSource(id: string): Promise<SourceEndpoint | undefined> {
-    return (await this.read()).sources[id];
-  }
-
-  async listSources(): Promise<SourceEndpoint[]> {
-    return Object.values((await this.read()).sources).sort((a, b) => b.boundAt.localeCompare(a.boundAt));
-  }
-
   async saveTarget(target: TargetEndpoint): Promise<void> {
     TargetEndpointSchema.parse(target);
     await this.update((data) => {
@@ -638,49 +522,6 @@ export class JsonFileStore implements LocalStore {
 
   async listTargets(): Promise<TargetEndpoint[]> {
     return Object.values((await this.read()).targets);
-  }
-
-  async saveCapture(capture: Capture): Promise<void> {
-    CaptureSchema.parse(capture);
-    await this.update((data) => {
-      data.captures[capture.id] = capture;
-    });
-  }
-
-  async getCapture(id: string): Promise<Capture | undefined> {
-    return (await this.read()).captures[id];
-  }
-
-  async listRecentCaptures(limit = 20): Promise<Capture[]> {
-    return Object.values((await this.read()).captures)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit);
-  }
-
-  async saveHandoff(handoff: Handoff): Promise<void> {
-    HandoffSchema.parse(handoff);
-    await this.update((data) => {
-      data.handoffs[handoff.id] = handoff;
-    });
-  }
-
-  async getHandoff(id: string): Promise<Handoff | undefined> {
-    return (await this.read()).handoffs[id];
-  }
-
-  async listRecentHandoffs(limit = 20): Promise<Handoff[]> {
-    return Object.values((await this.read()).handoffs)
-      .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
-      .slice(0, limit);
-  }
-
-  async deleteHandoff(id: string): Promise<boolean> {
-    let deleted = false;
-    await this.update((data) => {
-      deleted = Object.hasOwn(data.handoffs, id);
-      delete data.handoffs[id];
-    });
-    return deleted;
   }
 
   async saveDeliveryAttempt(attempt: DeliveryAttempt): Promise<void> {
@@ -854,16 +695,6 @@ export class JsonFileStore implements LocalStore {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  async saveApproval(approval: Approval): Promise<void> {
-    await this.update((data) => {
-      data.approvals[approval.id] = approval;
-    });
-  }
-
-  async getApproval(id: string): Promise<Approval | undefined> {
-    return (await this.read()).approvals[id];
-  }
-
   async appendAuditEvent(event: AuditEvent): Promise<void> {
     AuditEventSchema.parse(event);
     await this.update((data) => {
@@ -948,9 +779,7 @@ function sleep(ms: number): Promise<void> {
 export function createEmptyStore(): StoreData {
   return {
     version: CURRENT_STORE_VERSION,
-    links: {},
     linkableComponents: {},
-    workflowLinks: {},
     workflowTemplates: {},
     completionContracts: {},
     completionEvidence: {},
@@ -966,10 +795,7 @@ export function createEmptyStore(): StoreData {
     autopilotRuns: {},
     autopilotSteps: {},
     userDecisions: {},
-    sources: {},
     targets: {},
-    captures: {},
-    handoffs: {},
     deliveryAttempts: {},
     missions: {},
     handoffCards: {},
@@ -979,7 +805,6 @@ export function createEmptyStore(): StoreData {
     runs: {},
     runSteps: {},
     verificationResults: {},
-    approvals: {},
     auditEvents: [],
     settings: {}
   };

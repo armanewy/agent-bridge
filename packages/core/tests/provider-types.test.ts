@@ -6,12 +6,7 @@ import {
   AgentTurnSchema,
   ExecutorTaskRequestSchema,
   ExecutorTaskResultSchema,
-  PlannerRequestSchema,
-  PlannerResponseSchema,
-  ReviewRequestSchema,
-  ReviewResultSchema,
-  type TaskSpec,
-  type VerificationResult
+  type TaskSpec
 } from "../src/index.js";
 
 const now = "2026-01-01T00:00:00.000Z";
@@ -23,46 +18,27 @@ const taskSpec: TaskSpec = {
   instructions: ["Keep scope narrow", "Reuse Mission and HandoffCard"],
   requirements: ["Planner produces a TaskSpec", "Codex receives the generated prompt"],
   constraints: ["Do not add new providers yet"],
-  nonGoals: ["Do not expand browser extension setup"],
+  nonGoals: ["Do not add alternate planner routes"],
   acceptanceCriteria: ["TaskSpec is stored", "Delivery mode is explicit"],
   suggestedFiles: ["apps/desktop/src/components/workbench/Workbench.tsx"],
   verificationSteps: ["pnpm test"],
   expectedSummaryFormat: "Summary, tests, risks."
 };
 
-const verificationResult: VerificationResult = {
-  id: "verification_1",
-  missionId: "mission_1",
-  status: "failed",
-  commandResults: [
-    {
-      kind: "test",
-      command: "pnpm test",
-      exitCode: 1,
-      status: "failed",
-      outputArtifactId: "artifact_test",
-      durationMs: 1200
-    }
-  ],
-  summary: "Tests failed.",
-  artifactIds: ["artifact_test"],
-  createdAt: now
-};
-
 describe("provider schemas", () => {
   it("parses provider profiles", () => {
     const profile = AgentProviderProfileSchema.parse({
-      id: "chatgpt-manual",
-      kind: "planner",
-      displayName: "ChatGPT handoff",
-      capabilities: ["canPlan", "canReview", "canCreateSession", "canSendMessage"],
-      authMode: "none",
-      status: "available",
+      id: "codex",
+      kind: "executor",
+      displayName: "Codex",
+      capabilities: ["canExecuteCode", "canUseRepo", "canCreateSession", "canSendMessage"],
+      authMode: "appServer",
+      status: "unavailable",
       metadata: {}
     });
 
-    expect(profile.id).toBe("chatgpt-manual");
-    expect(profile.capabilities).toContain("canPlan");
+    expect(profile.id).toBe("codex");
+    expect(profile.capabilities).toContain("canExecuteCode");
   });
 
   it("parses provider sessions, turns, and events", () => {
@@ -106,23 +82,7 @@ describe("provider schemas", () => {
     expect(event.type).toBe("turn.completed");
   });
 
-  it("parses planner and executor request/response objects", () => {
-    const plannerRequest = PlannerRequestSchema.parse({
-      missionId: "mission_1",
-      prompt: "Plan this implementation.",
-      contextArtifactIds: ["artifact_capture"],
-      metadata: {}
-    });
-    const plannerResponse = PlannerResponseSchema.parse({
-      providerId: "chatgpt-manual",
-      sessionRefId: "session_1",
-      turnId: "turn_1",
-      content: "Build the provider workbench in stages.",
-      taskSpec,
-      artifactIds: ["artifact_plan"],
-      createdAt: now,
-      metadata: {}
-    });
+  it("parses executor request/response objects", () => {
     const executorRequest = ExecutorTaskRequestSchema.parse({
       missionId: "mission_1",
       sessionRefId: "session_codex",
@@ -141,37 +101,7 @@ describe("provider schemas", () => {
       metadata: { codexThreadId: "thread_123" }
     });
 
-    expect(plannerRequest.prompt).toContain("Plan");
-    expect(plannerResponse.taskSpec?.title).toBe("Simplify Workbench");
     expect(executorRequest.taskSpec.goal).toContain("provider");
     expect(executorResult.deliveryMode).toBe("existingSession");
-  });
-
-  it("parses review request and result objects", () => {
-    const request = ReviewRequestSchema.parse({
-      missionId: "mission_1",
-      taskSpec,
-      verificationResult,
-      artifactIds: ["artifact_test"],
-      metadata: {}
-    });
-    const result = ReviewResultSchema.parse({
-      providerId: "chatgpt-manual",
-      sessionRefId: "session_1",
-      turnId: "turn_review",
-      content: "Follow up on the failing test only.",
-      statusSuggestion: "follow_up_needed",
-      followUpTaskSpec: {
-        ...taskSpec,
-        title: "Fix failing Workbench test",
-        goal: "Fix only the failing test."
-      },
-      artifactIds: ["artifact_review"],
-      createdAt: now,
-      metadata: {}
-    });
-
-    expect(request.verificationResult?.status).toBe("failed");
-    expect(result.followUpTaskSpec?.goal).toBe("Fix only the failing test.");
   });
 });

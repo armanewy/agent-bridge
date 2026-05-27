@@ -20,9 +20,7 @@ import type {
   CodexThreadRef,
   DeliveryAttempt,
   FileOwnership,
-  Handoff,
   HandoffCard,
-  Link,
   LinkableComponent,
   Mission,
   MissionQueueItem,
@@ -30,7 +28,6 @@ import type {
   TaskSpec,
   UserDecision,
   VerificationResult,
-  WorkflowLink,
   WorkflowTemplate
 } from "@agentbridge/core";
 
@@ -59,41 +56,18 @@ describe("JsonFileStore", () => {
     }
   });
 
-  it("saves and lists links", async () => {
-    const store = new JsonFileStore(tempDir);
-    const now = new Date().toISOString();
-    const link: Link = {
-      id: "link_1",
-      name: "ChatGPT to Codex",
-      sourceId: "src_1",
-      targetId: "target_1",
-      transformId: "implementationBrief",
-      deliveryMode: "codexDeepLink",
-      createdAt: now,
-      updatedAt: now,
-      enabled: true
-    };
-
-    await store.saveLink(link);
-
-    expect(await store.getLink("link_1")).toEqual(link);
-    expect(await store.listLinks()).toHaveLength(1);
-  });
-
-  it("roundtrips linkable components and workflow links", async () => {
+  it("roundtrips linkable components", async () => {
     const store = new JsonFileStore(tempDir);
     const now = new Date().toISOString();
     const component: LinkableComponent = {
-      id: "component_source_1",
-      kind: "browserTab",
-      label: "ChatGPT - AgentBridge",
+      id: "component_planner_1",
+      kind: "desktopWindow",
+      label: "ChatGPT planner",
       subtitle: "chatgpt.com",
       provider: "chatgpt",
       roleCapabilities: {
-        canBeSource: true,
         canBeTarget: false,
         canBeWorkspace: false,
-        canCapture: true,
         canDeliver: false,
         canVerify: false,
         canObserve: false
@@ -101,31 +75,16 @@ describe("JsonFileStore", () => {
       riskLevel: "low",
       status: "available",
       fitScore: 90,
-      backingRef: { sourceId: "src_1", tabId: 10 },
+      backingRef: {},
       metadata: { url: "https://chatgpt.com/" },
       discoveredAt: now,
       updatedAt: now
     };
-    const workflowLink: WorkflowLink = {
-      id: "workflow_1",
-      name: "ChatGPT to Codex",
-      sourceComponentId: component.id,
-      workspaceComponentId: "component_repo_1",
-      targetComponentId: "component_target_1",
-      recipe: "implementationBrief",
-      verificationCommandDefaults: [{ kind: "test", command: "pnpm test" }],
-      enabled: true,
-      createdAt: now,
-      updatedAt: now
-    };
 
     await store.saveLinkableComponent(component);
-    await store.saveWorkflowLink(workflowLink);
 
     expect(await store.getLinkableComponent(component.id)).toEqual(component);
     expect(await store.listLinkableComponents()).toEqual([component]);
-    expect(await store.getWorkflowLink(workflowLink.id)).toEqual(workflowLink);
-    expect(await store.listWorkflowLinks()).toEqual([workflowLink]);
   });
 
   it("roundtrips workflow templates, completion contracts, workspaces, ownership, and queue items", async () => {
@@ -263,7 +222,7 @@ describe("JsonFileStore", () => {
       name: "Existing task",
       repoPath: tempDir,
       status: "idle",
-      source: "manual",
+      source: "appServer",
       lastSeenAt: new Date().toISOString(),
       metadata: {}
     };
@@ -275,72 +234,24 @@ describe("JsonFileStore", () => {
     expect(await store.listCodexThreadRefs("C:/other")).toEqual([]);
   });
 
-  it("roundtrips ChatGPT desktop sources", async () => {
-    const store = new JsonFileStore(tempDir);
-    const now = new Date().toISOString();
-    await store.saveSource({
-      id: "src_chatgpt_desktop_1",
-      kind: "chatgptDesktop",
-      provider: "chatgpt",
-      appKind: "desktopApp",
-      processId: 123,
-      hwnd: "0x123",
-      executablePath: "C:/Users/example/AppData/Local/Programs/ChatGPT/ChatGPT.exe",
-      windowTitle: "ChatGPT",
-      sessionTitle: "AgentBridge planning",
-      fingerprint: "chatgpt_desktop_fingerprint",
-      capabilities: {
-        canReadSelectedText: true,
-        canReadLatestMessage: true,
-        canListSessions: false,
-        canSendTurn: false
-      },
-      confidence: "medium",
-      discoveredAt: now,
-      updatedAt: now,
-      boundAt: now
-    });
-
-    expect(await store.getSource("src_chatgpt_desktop_1")).toMatchObject({
-      kind: "chatgptDesktop",
-      sessionTitle: "AgentBridge planning"
-    });
-  });
-
-  it("roundtrips extension heartbeat", async () => {
-    const store = new JsonFileStore(tempDir);
-    const heartbeat = {
-      extensionId: "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa",
-      extensionVersion: "0.1.0",
-      receivedAt: new Date().toISOString(),
-      messageType: "healthCheck" as const,
-      permissionMode: "activeTab" as const,
-      messageSource: "agentbridge-extension" as const
-    };
-
-    await store.saveExtensionHeartbeat(heartbeat);
-
-    expect(await store.getExtensionHeartbeat()).toEqual(heartbeat);
-  });
-
   it("roundtrips provider profiles, sessions, turns, and events", async () => {
     const store = new JsonFileStore(tempDir);
     const now = new Date().toISOString();
     const profile: AgentProviderProfile = {
-      id: "chatgpt-manual",
-      kind: "planner",
-      displayName: "ChatGPT handoff",
-      capabilities: ["canPlan", "canReview", "canCreateSession", "canSendMessage"],
-      authMode: "none",
+      id: "codex",
+      kind: "executor",
+      displayName: "Codex",
+      capabilities: ["canExecuteCode", "canCreateSession", "canSendMessage"],
+      authMode: "appServer",
       status: "available",
       metadata: {}
     };
     const session: AgentSessionRef = {
       id: "session_1",
       providerId: profile.id,
-      providerKind: "planner",
-      externalSessionId: "response_conversation_1",
-      title: "Workbench planning",
+      providerKind: "executor",
+      externalSessionId: "thread_1",
+      title: "Workbench execution",
       status: "active",
       createdAt: now,
       lastSeenAt: now,
@@ -350,8 +261,8 @@ describe("JsonFileStore", () => {
       id: "turn_1",
       providerId: profile.id,
       sessionRefId: session.id,
-      role: "user",
-      content: "Plan the workbench.",
+      role: "assistant",
+      content: "Implemented the workbench task.",
       status: "completed",
       artifactIds: ["artifact_1"],
       createdAt: now,
@@ -454,40 +365,19 @@ describe("JsonFileStore", () => {
     expect(await store.listPendingUserDecisions()).toEqual([]);
   });
 
-  it("saves handoffs and audit events", async () => {
+  it("saves audit events", async () => {
     const store = new JsonFileStore(tempDir);
     const now = new Date().toISOString();
-    const handoff: Handoff = {
-      id: "handoff_1",
-      captureId: "cap_1",
-      sourceId: "src_1",
-      targetId: "target_1",
-      transformId: "rawRelay",
-      prompt: "Send this",
-      structured: {
-        goal: "Send",
-        context: "Send this",
-        constraints: [],
-        acceptanceCriteria: [],
-        suggestedFiles: [],
-        verificationSteps: [],
-        originalCaptureRef: "cap_1"
-      },
-      redactionFindings: [],
-      createdAt: now
-    };
     const event: AuditEvent = {
       id: "audit_1",
-      type: "captureCreated",
-      entityId: "cap_1",
-      details: { captureType: "selectedText" },
+      type: "targetBound",
+      entityId: "task_spec_1",
+      details: { source: "chatgpt-plan" },
       createdAt: now
     };
 
-    await store.saveHandoff(handoff);
     await store.appendAuditEvent(event);
 
-    expect(await store.getHandoff("handoff_1")).toEqual(handoff);
     expect(await store.listAuditEvents()).toEqual([event]);
   });
 
@@ -505,7 +395,7 @@ describe("JsonFileStore", () => {
       id: "delivery_1",
       handoffId: "handoff_1",
       targetId: "target_1",
-      strategy: "codexDeepLink",
+      strategy: "codexAppServerTurnStart",
       success: true,
       warnings: [],
       targetMetadata: { repoPath: tempDir },
@@ -525,8 +415,6 @@ describe("JsonFileStore", () => {
       title: "Mission",
       goal: "Compile a task spec",
       status: "draft",
-      sourceIds: ["src_1"],
-      captureIds: ["cap_1"],
       handoffCardIds: ["card_1"],
       artifactIds: ["artifact_1"],
       runIds: [],
@@ -536,8 +424,7 @@ describe("JsonFileStore", () => {
     const card: HandoffCard = {
       id: "card_1",
       missionId: mission.id,
-      sourceId: "src_1",
-      captureId: "cap_1",
+      inputArtifactId: "artifact_1",
       targetId: "target_1",
       recipe: "implementationBrief",
       taskSpec,
@@ -623,7 +510,7 @@ describe("JsonFileStore", () => {
 const taskSpec: TaskSpec = {
   title: "Compile task",
   goal: "Create a durable task card.",
-  background: "Captured guidance",
+  background: "Imported guidance",
   instructions: ["Create the task"],
   requirements: ["Persist it"],
   constraints: ["Keep existing APIs"],

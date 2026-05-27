@@ -2,22 +2,16 @@ import type {
   AgentEvent,
   AgentProviderProfile,
   AgentSessionRef,
-  AgentTurn,
-  ExecutorProvider,
-  PlannerProvider,
-  PlannerRequest,
-  ReviewerProvider
+  ExecutorProvider
 } from "@agentbridge/core";
-import type { AgentEventFilter, LocalStore } from "@agentbridge/local-store";
-
-type ProviderAdapter = PlannerProvider | ExecutorProvider | ReviewerProvider;
+import type { LocalStore } from "@agentbridge/local-store";
 
 export class ProviderRegistryService {
-  private readonly providers = new Map<string, ProviderAdapter>();
+  private readonly providers = new Map<string, ExecutorProvider>();
 
   constructor(private readonly store: LocalStore) {}
 
-  registerProvider(provider: ProviderAdapter): void {
+  registerProvider(provider: ExecutorProvider): void {
     this.providers.set(provider.profile().id, provider);
   }
 
@@ -79,33 +73,6 @@ export class ProviderRegistryService {
     return resumed;
   }
 
-  async sendMessage(
-    providerId: string,
-    sessionId: string,
-    message: string,
-    context?: PlannerRequest
-  ): Promise<AgentTurn> {
-    const provider = this.providers.get(providerId);
-    const session = await this.store.getAgentSession(sessionId);
-    if (!session) {
-      throw new Error(`Agent session ${sessionId} was not found.`);
-    }
-    if (!provider || !hasSendMessage(provider)) {
-      throw new Error(`Provider ${providerId} cannot send messages yet.`);
-    }
-    const turn = await provider.sendMessage(session, message, context);
-    await this.store.saveAgentTurn(turn);
-    return turn;
-  }
-
-  async listTurns(sessionRefId: string): Promise<AgentTurn[]> {
-    return this.store.listAgentTurns(sessionRefId);
-  }
-
-  async listEvents(filter: AgentEventFilter = {}): Promise<AgentEvent[]> {
-    return this.store.listAgentEvents(filter);
-  }
-
   private async resolveProfile(providerId: string): Promise<AgentProviderProfile | undefined> {
     const provider = this.providers.get(providerId);
     if (provider) {
@@ -159,18 +126,14 @@ function mergeSessions(sessions: AgentSessionRef[]): AgentSessionRef[] {
   return [...byId.values()].sort((a, b) => b.lastSeenAt.localeCompare(a.lastSeenAt));
 }
 
-function hasListSessions(provider: ProviderAdapter): provider is ExecutorProvider {
-  return typeof (provider as ExecutorProvider).listSessions === "function";
+function hasListSessions(provider: ExecutorProvider): provider is ExecutorProvider {
+  return typeof provider.listSessions === "function";
 }
 
-function hasCreateSession(provider: ProviderAdapter): provider is PlannerProvider | ExecutorProvider {
-  return typeof (provider as PlannerProvider | ExecutorProvider).createSession === "function";
+function hasCreateSession(provider: ExecutorProvider): provider is ExecutorProvider {
+  return typeof provider.createSession === "function";
 }
 
-function hasResumeSession(provider: ProviderAdapter): provider is PlannerProvider | ExecutorProvider {
-  return typeof (provider as PlannerProvider | ExecutorProvider).resumeSession === "function";
-}
-
-function hasSendMessage(provider: ProviderAdapter): provider is PlannerProvider {
-  return typeof (provider as PlannerProvider).sendMessage === "function";
+function hasResumeSession(provider: ExecutorProvider): provider is ExecutorProvider {
+  return typeof provider.resumeSession === "function";
 }

@@ -26,7 +26,7 @@ The provider layer must not replace the mission/task-card model. It adapts provi
 `AgentProviderProfile` describes a provider in a way the UI can render without knowing implementation details:
 
 - `id`: stable provider ID, for example `codex`.
-- `kind`: `planner`, `executor`, `reviewer`, `verifier`, `browser`, `repository`, or `unknown`.
+- `kind`: `executor`, `verifier`, `repository`, or `unknown`.
 - `displayName`: user-facing name.
 - `capabilities`: list of supported actions.
 - `authMode`: `agentBridgeCloud`, `apiKey`, `localApp`, `appServer`, `cli`, `none`, or `unknown`.
@@ -40,7 +40,7 @@ Profiles are safe to persist. They must not contain raw API keys or session secr
 
 Planning is a ChatGPT handoff, not a registered remote provider. The user writes mission intent in AgentBridge, asks ChatGPT for a structured plan, selects the answer, and AgentBridge parses that selected text locally into a TaskSpec.
 
-This keeps the product loop usable without a separate model API account and avoids mixing test planners into production code.
+This keeps the product loop usable without a separate model API account and avoids registering planner providers in production code.
 
 ## ExecutorProvider
 
@@ -53,7 +53,7 @@ Required responsibilities:
 - Accept `ExecutorTaskRequest`.
 - Return `ExecutorTaskResult` with explicit delivery mode and warnings.
 
-The first implementation is `codex`, wrapping Codex App Server and deep-link fallback.
+The first implementation is `codex`, wrapping Codex App Server.
 
 ## Artifact Capabilities
 
@@ -63,13 +63,10 @@ The active executor accepts text prompts and returns text delivery artifacts. Fi
 
 ## Request/Response Contracts
 
-`PlannerRequest`, `PlannerResponse`, `ReviewRequest`, and `ReviewResult` remain provider-neutral schema primitives for future adapters and tests. They are not wired to a production remote planner.
-
 `ExecutorTaskRequest` carries a `TaskSpec`, optional generated prompt, repo context, target session, and dry-run flag. `ExecutorTaskResult` returns success/failure metadata, session/turn information, delivery mode, warnings, and artifact refs.
 
 ## Status And Safety Rules
 
-- App Server unavailable is `unavailable`, with deep-link fallback surfaced by the Codex provider.
-- Existing Codex thread deep-link fallback is `openOnlyFallback`; it must not claim the prompt was injected.
+- App Server unavailable is `unavailable`; AgentBridge does not use an open-only Codex route in production.
 - Providers must not store raw secrets in JSON local store.
 - Provider-generated commands are never executed automatically. Verification commands remain user-configured and user-triggered.

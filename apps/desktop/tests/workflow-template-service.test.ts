@@ -33,15 +33,6 @@ describe("WorkflowTemplateService", () => {
 
     const issues = service.validateTemplateProviders(template, [
       {
-        id: "chatgpt-manual",
-        kind: "planner",
-        displayName: "ChatGPT handoff",
-        capabilities: [],
-        authMode: "none",
-        status: "available",
-        metadata: {}
-      },
-      {
         id: "codex",
         kind: "executor",
         displayName: "Codex",

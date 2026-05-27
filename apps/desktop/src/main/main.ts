@@ -11,23 +11,16 @@ import {
   type MessageBoxOptions,
   type OpenDialogOptions
 } from "electron";
-import { access, rm } from "node:fs/promises";
+import { rm } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { createDesktopStore } from "../services/store.js";
-import { SourceService } from "../services/source-service.js";
-import { LinkService } from "../services/link-service.js";
-import { TransformService } from "../services/transform-service.js";
-import { CodexTargetService } from "../services/codex-target-service.js";
 import { WindowsTargetService } from "../services/windows-target-service.js";
 import { MissionService } from "../services/mission-service.js";
 import { PlatformCommandRunner, VerificationService } from "../services/verification-service.js";
-import { SetupService } from "../services/setup-service.js";
-import { HandoffCardDeliveryService } from "../services/handoff-card-delivery-service.js";
 import { ComponentDiscoveryService } from "../services/component-discovery-service.js";
 import { CodexAppServerClient, findCodexExecutable, JsonRpcStdioTransport } from "../services/codex-app-server-client.js";
 import { CodexSessionService } from "../services/codex-session-service.js";
-import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
 import { ProviderRegistryService } from "../services/provider-registry-service.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
@@ -40,14 +33,9 @@ import { CompletionContractService } from "../services/completion-contract-servi
 import { WorkflowTemplateService } from "../services/workflow-template-service.js";
 import { WorktreeManagerService } from "../services/worktree-manager-service.js";
 import type {
-  CodexDeliveryRequest,
-  ConfigureNativeHostRequest,
-  HandoffCardDeliveryRequest,
-  PreviewRequest,
   VerificationRunRequest
 } from "../services/bridge-contract.js";
-import type { RepoCommandConfig } from "../services/repo-context-service.js";
-import type { Link, PlannerRequest, WindowsDesktopWindowTarget } from "@agentbridge/core";
+import type { WindowsDesktopWindowTarget } from "@agentbridge/core";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const TRAY_ICON_SVG = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32" viewBox="0 0 32 32">
@@ -167,22 +155,9 @@ app.whenReady().then(async () => {
   const workflowTemplateService = new WorkflowTemplateService(store);
   await workflowTemplateService.ensureDefaultTemplate();
   const worktreeManagerService = new WorktreeManagerService(store, join(dataDir, "worktrees"));
-  const nativeHostLogPath = join(dataDir, "native-host-dev-log.jsonl");
-  const sourceService = new SourceService(store);
-  const linkService = new LinkService(store);
-  const transformService = new TransformService(store);
   const missionService = new MissionService(store);
   const completionContractService = new CompletionContractService(store);
   const verificationService = new VerificationService(store, new PlatformCommandRunner(platformService).run);
-  const setupService = new SetupService(store, undefined, undefined, process.cwd(), {
-    isPackaged: app.isPackaged,
-    resourcesPath: process.resourcesPath,
-    appPath: app.getAppPath(),
-    ...(process.env.AGENTBRIDGE_CHROME_EXTENSION_ID ? { extensionId: process.env.AGENTBRIDGE_CHROME_EXTENSION_ID } : {}),
-    ...(process.env.AGENTBRIDGE_CHROME_WEB_STORE_URL ? { webStoreUrl: process.env.AGENTBRIDGE_CHROME_WEB_STORE_URL } : {}),
-    ...(process.env.AGENTBRIDGE_CHROME_EXTENSION_PUBLIC_KEY ? { extensionPublicKey: process.env.AGENTBRIDGE_CHROME_EXTENSION_PUBLIC_KEY } : {}),
-    ...(process.env.VITE_DEV_SERVER_URL ? { devServerUrl: process.env.VITE_DEV_SERVER_URL } : {})
-  });
   const windowsTargetService = new WindowsTargetService();
   const codexAppServerEndpoint = process.env.CODEX_APP_SERVER_URL;
   const codexAppServerClient = new CodexAppServerClient(
@@ -194,18 +169,16 @@ app.whenReady().then(async () => {
         })()
   );
   const codexSessionService = new CodexSessionService(store, codexAppServerClient);
-  const codexTargetService = new CodexTargetService(store, (url) => platformService.openExternal(url), codexAppServerClient, {
-    canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks,
-    platform: platformCapabilities.platform
-  });
-  const handoffCardDeliveryService = new HandoffCardDeliveryService(store, codexTargetService);
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
-  const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
-  const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient, undefined, {
-    platform: platformCapabilities.platform,
-    canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks
-  }, artifactBrokerService);
+  const codexExecutorProvider = new CodexExecutorProvider(
+    store,
+    codexSessionService,
+    codexAppServerClient,
+    undefined,
+    { platform: platformCapabilities.platform },
+    artifactBrokerService
+  );
   providerRegistryService.registerProvider(codexExecutorProvider);
   const workbenchService = new WorkbenchService(
     store,
@@ -217,21 +190,13 @@ app.whenReady().then(async () => {
   );
   const autopilotService = new AutopilotService(store, workbenchService, artifactBrokerService, undefined, worktreeManagerService);
 
-  ipcMain.handle("agentbridge:listSources", () => sourceService.listSources());
-  ipcMain.handle("agentbridge:listCaptures", () => sourceService.listRecentCaptures());
-  ipcMain.handle("agentbridge:bindMockBrowserSource", () => sourceService.bindMockBrowserSource());
   ipcMain.handle("agentbridge:listTargets", async () => {
     const stored = await store.listTargets();
     return stored.length > 0 ? stored : [];
   });
-  ipcMain.handle("agentbridge:listLinks", () => linkService.listLinks());
   ipcMain.handle("agentbridge:listLinkableComponents", () => componentDiscoveryService.listComponents());
   ipcMain.handle("agentbridge:discoverLinkableComponents", () => componentDiscoveryService.discover());
-  ipcMain.handle("agentbridge:listWorkflowLinks", () => workflowLinkService.listWorkflowLinks());
   ipcMain.handle("agentbridge:listCodexThreads", (_event, repoPath?: string) => codexSessionService.listCodexThreads(repoPath));
-  ipcMain.handle("agentbridge:saveManualCodexThreadRef", (_event, input: { threadId: string; name?: string; repoPath?: string }) =>
-    codexSessionService.saveManualThreadRef(input.threadId, input.name, input.repoPath)
-  );
   ipcMain.handle("agentbridge:listProviders", () => providerRegistryService.listProviderProfiles());
   ipcMain.handle("agentbridge:getProviderStatus", (_event, providerId: string) => providerRegistryService.getProviderStatus(providerId));
   ipcMain.handle(
@@ -242,14 +207,7 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:resumeAgentSession", (_event, providerId: string, sessionRefId: string) =>
     providerRegistryService.resumeSession(providerId, sessionRefId)
   );
-  ipcMain.handle("agentbridge:sendProviderMessage", (_event, providerId: string, sessionRefId: string, message: string, context?: PlannerRequest) =>
-    providerRegistryService.sendMessage(providerId, sessionRefId, message, context)
-  );
   ipcMain.handle("agentbridge:listAgentSessions", (_event, providerId?: string) => providerRegistryService.listSessions(providerId));
-  ipcMain.handle("agentbridge:listAgentTurns", (_event, sessionRefId: string) => providerRegistryService.listTurns(sessionRefId));
-  ipcMain.handle("agentbridge:listAgentEvents", (_event, filter?: { providerId?: string; sessionRefId?: string; turnId?: string; type?: string }) =>
-    providerRegistryService.listEvents(filter)
-  );
   ipcMain.handle("agentbridge:getAgentBridgeAuthStatus", () => authService.getAuthStatus());
   ipcMain.handle("agentbridge:signInAgentBridgeDevMode", () => authService.signInDevMode());
   ipcMain.handle("agentbridge:signOutAgentBridge", () => authService.signOut());
@@ -290,32 +248,14 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:resolvePendingDecision", (_event, decisionId: string, selectedOption: string) =>
     autopilotService.resolvePendingDecision(decisionId, selectedOption)
   );
-  ipcMain.handle("agentbridge:createWorkflowLink", (_event, input: CreateWorkflowLinkInput) =>
-    workflowLinkService.createWorkflowLink(input)
-  );
-  ipcMain.handle("agentbridge:createTaskFromWorkflowLink", (_event, input: CreateTaskFromWorkflowLinkInput) =>
-    workflowLinkService.createTaskFromWorkflowLink(input)
-  );
   ipcMain.handle("agentbridge:listMissions", () => missionService.listMissions());
   ipcMain.handle("agentbridge:getMissionDetail", (_event, id: string) => missionService.getMissionDetail(id));
-  ipcMain.handle("agentbridge:createLink", (_event, input: Omit<Link, "id" | "createdAt" | "updatedAt" | "enabled">) =>
-    linkService.createLink(input)
-  );
-  ipcMain.handle("agentbridge:previewHandoff", (_event, input: PreviewRequest) => transformService.previewHandoff(input));
   ipcMain.handle("agentbridge:revalidateTarget", (_event, target: WindowsDesktopWindowTarget) =>
     windowsTargetService.revalidate(target)
-  );
-  ipcMain.handle("agentbridge:configureCodexTarget", (_event, repoPath: string, commands?: RepoCommandConfig) =>
-    codexTargetService.configureTarget(repoPath, commands)
-  );
-  ipcMain.handle("agentbridge:deliverToCodex", (_event, input: CodexDeliveryRequest) => codexTargetService.deliver(input));
-  ipcMain.handle("agentbridge:deliverHandoffCardToCodex", (_event, input: HandoffCardDeliveryRequest) =>
-    handoffCardDeliveryService.deliverToCodex(input)
   );
   ipcMain.handle("agentbridge:runVerification", (_event, input: VerificationRunRequest) =>
     verificationService.runVerification(input)
   );
-  ipcMain.handle("agentbridge:getSetupStatus", () => setupService.getStatus());
   ipcMain.handle("agentbridge:getPlatformStatus", () => ({
     capabilities: platformService.getCapabilities(),
     userDataDir: platformService.getUserDataDir(),
@@ -335,34 +275,10 @@ app.whenReady().then(async () => {
       checkedAt: new Date().toISOString()
     };
   });
-  ipcMain.handle("agentbridge:configureNativeHost", (_event, input: ConfigureNativeHostRequest) =>
-    setupService.configureNativeHost(input ?? {})
-  );
-  ipcMain.handle("agentbridge:connectChrome", async (_event, input?: ConfigureNativeHostRequest) => {
-    const status = await setupService.configureNativeHost(input ?? {});
-    if (status.webStoreUrl) {
-      await platformService.openExternal(status.webStoreUrl);
-    }
-    return status;
-  });
-  ipcMain.handle("agentbridge:openChromeExtensionInstall", async () => {
-    const status = await setupService.getStatus();
-    if (!status.webStoreUrl) {
-      throw new Error("Chrome Web Store URL is not configured.");
-    }
-    await platformService.openExternal(status.webStoreUrl);
-  });
-  ipcMain.handle("agentbridge:openChromeExtensionsPage", () => openChromeExtensionsPage());
-  ipcMain.handle("agentbridge:openChromeExtensionFolder", () => openChromeExtensionFolder());
   ipcMain.handle("agentbridge:openEmbeddedChatGpt", async (_event, input?: { url?: string }) => {
-    const window = await showEmbeddedChatGptWindow(input?.url);
-    const targetUrl = normalizeChatGptUrl(input?.url);
-    return sourceService.bindEmbeddedChatGptSource({
-      title: window.getTitle() || "ChatGPT in AgentBridge",
-      url: window.webContents.getURL() || targetUrl
-    });
+    await showEmbeddedChatGptWindow(input?.url);
   });
-  ipcMain.handle("agentbridge:captureEmbeddedChatGptSelection", async () => {
+  ipcMain.handle("agentbridge:importEmbeddedChatGptSelection", async () => {
     if (!chatGptWindow || chatGptWindow.isDestroyed()) {
       throw new Error("Open ChatGPT in AgentBridge first.");
     }
@@ -374,11 +290,11 @@ app.whenReady().then(async () => {
     if (!trimmed) {
       throw new Error("Select text in the AgentBridge ChatGPT window first.");
     }
-    return sourceService.saveEmbeddedChatGptCapture({
+    return {
       text: trimmed,
       title: chatGptWindow.getTitle() || "ChatGPT in AgentBridge",
       url: chatGptWindow.webContents.getURL() || "https://chatgpt.com/"
-    });
+    };
   });
   ipcMain.handle("agentbridge:selectRepoFolder", () => platformService.selectRepoFolder());
   ipcMain.handle("agentbridge:openDataFolder", () => platformService.openFolder(dataDir));
@@ -389,12 +305,11 @@ app.whenReady().then(async () => {
     }
     await platformService.openFolder(dirname(file.localPath));
   });
-  ipcMain.handle("agentbridge:openNativeHostLog", () => openNativeHostLog(platformService, dataDir, nativeHostLogPath));
   ipcMain.handle("agentbridge:clearLocalData", () => clearLocalData(dataDir));
   ipcMain.handle("agentbridge:listAuditEvents", () => store.listAuditEvents());
   ipcMain.handle("agentbridge:clearAuditEvents", () => store.clearAuditEvents());
 
-  registerAppMenu(platformService, dataDir, nativeHostLogPath);
+  registerAppMenu(platformService, dataDir);
   await createWindow();
   registerQuickActions();
 });
@@ -419,14 +334,13 @@ app.on("will-quit", () => {
 });
 
 function registerQuickActions(): void {
-  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openStart"));
+  globalShortcut.register("CommandOrControl+Shift+A", () => showMainWindow("openWorkbench"));
   const icon = nativeImage.createFromDataURL(`data:image/svg+xml;base64,${Buffer.from(TRAY_ICON_SVG).toString("base64")}`);
   tray = new Tray(icon);
   tray.setToolTip("AgentBridge");
   tray.setContextMenu(
     Menu.buildFromTemplate([
-      { label: "Open AgentBridge", click: () => showMainWindow("openStart") },
-      { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
+      { label: "Open AgentBridge", click: () => showMainWindow("openWorkbench") },
       { label: "Open latest task", click: () => showMainWindow("openTasks") },
       { type: "separator" },
       { label: "Quit", click: () => app.quit() }
@@ -434,7 +348,7 @@ function registerQuickActions(): void {
   );
 }
 
-function registerAppMenu(platformService: PlatformService, dataDir: string, nativeHostLogPath: string): void {
+function registerAppMenu(platformService: PlatformService, dataDir: string): void {
   Menu.setApplicationMenu(
     Menu.buildFromTemplate([
       {
@@ -448,10 +362,8 @@ function registerAppMenu(platformService: PlatformService, dataDir: string, nati
       {
         label: "File",
         submenu: [
-          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openStart") },
-          { label: "Create Task from latest capture", click: () => showMainWindow("createTaskFromLatestCapture") },
-          { label: "Open Data Folder", click: () => void platformService.openFolder(dataDir) },
-          { label: "Open Native Host Log", click: () => void openNativeHostLog(platformService, dataDir, nativeHostLogPath) }
+          { label: "Open AgentBridge", accelerator: "CommandOrControl+Shift+A", click: () => showMainWindow("openWorkbench") },
+          { label: "Open Data Folder", click: () => void platformService.openFolder(dataDir) }
         ]
       },
       {
@@ -483,7 +395,7 @@ function showAboutDialog(dataDir: string): void {
     message: "AgentBridge",
     detail: [
       `Version: ${app.getVersion()}`,
-      "Capture tasks, send to agents, verify results.",
+      "Plan missions, send TaskSpecs to agents, verify results.",
       "Local-first: task cards, artifacts, and settings stay on this machine by default.",
       `Data directory: ${dataDir}`
     ].join("\n")
@@ -495,7 +407,7 @@ function showAboutDialog(dataDir: string): void {
   void dialog.showMessageBox(options);
 }
 
-function showMainWindow(action?: "openStart" | "openConnect" | "openTasks" | "createTaskFromLatestCapture"): void {
+function showMainWindow(action?: "openWorkbench" | "openTasks"): void {
   const window = mainWindow ?? BrowserWindow.getAllWindows()[0];
   if (!window) {
     void createWindow().then(() => {
@@ -595,9 +507,9 @@ function isAllowedChatGptNavigation(rawUrl: string): boolean {
 }
 
 function normalizeChatGptUrl(rawUrl?: string): string {
-  const fallback = "https://chatgpt.com/";
+  const defaultUrl = "https://chatgpt.com/";
   if (!rawUrl?.trim()) {
-    return fallback;
+    return defaultUrl;
   }
 
   const parsed = new URL(rawUrl.trim());
@@ -610,45 +522,6 @@ function normalizeChatGptUrl(rawUrl?: string): string {
   return parsed.toString();
 }
 
-async function openChromeExtensionsPage(): Promise<void> {
-  await shell.openExternal("chrome://extensions");
-}
-
-async function openChromeExtensionFolder(): Promise<void> {
-  const extensionPath = await findChromeExtensionFolder();
-  const result = await shell.openPath(extensionPath);
-  if (result) {
-    throw new Error(result);
-  }
-}
-
-async function findChromeExtensionFolder(): Promise<string> {
-  const candidates = [
-    process.env.AGENTBRIDGE_EXTENSION_DIR,
-    join(process.cwd(), "apps", "extension"),
-    join(process.cwd(), "..", "..", "..", "extension"),
-    join(app.getAppPath(), "apps", "extension"),
-    join(app.getAppPath(), "..", "..", "..", "extension")
-  ].filter(Boolean) as string[];
-
-  for (const candidate of candidates) {
-    if (await fileExists(join(candidate, "manifest.json"))) {
-      return candidate;
-    }
-  }
-
-  return join(process.cwd(), "apps", "extension");
-}
-
-async function fileExists(path: string): Promise<boolean> {
-  try {
-    await access(path);
-    return true;
-  } catch {
-    return false;
-  }
-}
-
 async function selectRepoFolder(): Promise<string | undefined> {
   const owner = mainWindow ?? BrowserWindow.getAllWindows()[0];
   const options: OpenDialogOptions = {
@@ -659,20 +532,10 @@ async function selectRepoFolder(): Promise<string | undefined> {
   return result.canceled ? undefined : result.filePaths[0];
 }
 
-async function openNativeHostLog(platformService: PlatformService, dataDir: string, nativeHostLogPath: string): Promise<void> {
-  try {
-    await access(nativeHostLogPath);
-    await platformService.openPath(nativeHostLogPath);
-  } catch {
-    await platformService.openFolder(dataDir);
-  }
-}
-
 async function clearLocalData(dataDir: string): Promise<void> {
   await Promise.all([
     rm(join(dataDir, "agentbridge-store.json"), { force: true }),
     rm(join(dataDir, "agentbridge-auth.json"), { force: true }),
-    rm(join(dataDir, "native-host-dev-log.jsonl"), { force: true }),
     rm(join(dataDir, "artifacts"), { recursive: true, force: true }),
     rm(join(dataDir, "staging"), { recursive: true, force: true }),
     rm(join(dataDir, "logs"), { recursive: true, force: true })

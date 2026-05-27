@@ -1,30 +1,23 @@
 import { describe, expect, it } from "vitest";
 import {
   HandoffCardSchema,
-  HandoffSchema,
   LinkableComponentSchema,
   MissionSchema,
   TaskSpecSchema,
-  WorkflowLinkSchema,
   CodexThreadRefSchema,
-  DesktopAppSessionSchema,
-  SourceEndpointSchema,
-  type Handoff,
   type HandoffCard,
   type Mission,
   type TaskSpec,
-  type WorkflowLink,
-  type CodexThreadRef,
-  type DesktopAppSession
+  type CodexThreadRef
 } from "../src/types.js";
-import { browserTabComponent, chatGptDesktopSessionComponent, codexThreadComponent, componentStatusLabel, desktopWindowComponent } from "../src/components.js";
+import { codexThreadComponent, componentStatusLabel, desktopWindowComponent } from "../src/components.js";
 
 const now = "2026-01-01T00:00:00.000Z";
 
 const taskSpec: TaskSpec = {
   title: "Implement mission model",
   goal: "Promote handoffs into durable task cards.",
-  background: "Captured product direction asks for mission-first task memory.",
+  background: "Imported product direction asks for mission-first task memory.",
   instructions: ["Add schemas", "Keep the model focused"],
   requirements: ["Mission parses", "HandoffCard parses"],
   constraints: ["Keep the change scoped"],
@@ -42,8 +35,6 @@ describe("mission-first schemas", () => {
       title: "Mission model",
       goal: "Create durable task memory.",
       status: "draft",
-      sourceIds: ["src_1"],
-      captureIds: ["cap_1"],
       handoffCardIds: [],
       artifactIds: [],
       runIds: [],
@@ -62,8 +53,7 @@ describe("mission-first schemas", () => {
     const card: HandoffCard = {
       id: "card_1",
       missionId: "mission_1",
-      sourceId: "src_1",
-      captureId: "cap_1",
+      inputArtifactId: "artifact_1",
       targetId: "target_1",
       recipe: "implementationBrief",
       taskSpec,
@@ -78,63 +68,31 @@ describe("mission-first schemas", () => {
     expect(HandoffCardSchema.parse(card).taskSpec.goal).toContain("task cards");
   });
 
-  it("parses Handoff", () => {
-    const handoff: Handoff = {
-      id: "handoff_1",
-      captureId: "cap_1",
-      sourceId: "src_1",
-      targetId: "target_1",
-      transformId: "rawRelay",
-      prompt: "Do the thing",
-      structured: {
-        goal: "Relay",
-        context: "Do the thing",
-        constraints: [],
-        acceptanceCriteria: [],
-        suggestedFiles: [],
-        verificationSteps: [],
-        originalCaptureRef: "cap_1"
+  it("parses LinkableComponent for the ChatGPT planner", () => {
+    const component = {
+      id: "component_planner_chatgpt",
+      kind: "desktopWindow" as const,
+      label: "ChatGPT planner",
+      subtitle: "chatgpt.com",
+      provider: "chatgpt" as const,
+      roleCapabilities: {
+        canBeTarget: false,
+        canBeWorkspace: false,
+        canDeliver: false,
+        canVerify: false,
+        canObserve: false
       },
-      redactionFindings: [],
-      createdAt: now
-    };
-
-    expect(HandoffSchema.parse(handoff).id).toBe("handoff_1");
-  });
-
-  it("parses LinkableComponent and classifies browser tabs", () => {
-    const component = browserTabComponent({
-      id: "src_1",
-      kind: "browserTab",
-      browser: "chrome",
-      tabId: 12,
-      title: "ChatGPT - AgentBridge",
-      url: "https://chatgpt.com/c/123",
-      boundAt: now
-    });
-
-    expect(LinkableComponentSchema.parse(component).provider).toBe("chatgpt");
-    expect(componentStatusLabel(component)).toBe("Capture ready");
-  });
-
-  it("parses WorkflowLink", () => {
-    const link: WorkflowLink = {
-      id: "workflow_1",
-      name: "ChatGPT to Codex",
-      sourceComponentId: "component_source_1",
-      workspaceComponentId: "component_repo_1",
-      targetComponentId: "component_target_1",
-      recipe: "implementationBrief",
-      verificationCommandDefaults: [{ kind: "test", command: "pnpm test" }],
-      codexThreadId: "thread_123",
-      codexOpenMode: "existingThread",
-      codexIntegrationMode: "deepLink",
-      enabled: true,
-      createdAt: now,
+      riskLevel: "low" as const,
+      status: "available" as const,
+      fitScore: 90,
+      backingRef: {},
+      metadata: { url: "https://chatgpt.com/" },
+      discoveredAt: now,
       updatedAt: now
     };
 
-    expect(WorkflowLinkSchema.parse(link).verificationCommandDefaults).toHaveLength(1);
+    expect(LinkableComponentSchema.parse(component).provider).toBe("chatgpt");
+    expect(componentStatusLabel(component)).toBe("Detected");
   });
 
   it("parses CodexThreadRef", () => {
@@ -144,48 +102,12 @@ describe("mission-first schemas", () => {
       name: "Refactor flow",
       repoPath: "C:/repo",
       status: "idle",
-      source: "manual",
+      source: "appServer",
       lastSeenAt: now,
       metadata: {}
     };
 
     expect(CodexThreadRefSchema.parse(ref).threadId).toBe("thread_123");
-  });
-
-  it("parses ChatGPT desktop sessions and exposes them as source components", () => {
-    const session: DesktopAppSession = {
-      id: "desktop_session_1",
-      provider: "chatgpt",
-      appKind: "desktopApp",
-      processId: 123,
-      hwnd: "0x123",
-      executablePath: "C:/Users/example/AppData/Local/Programs/ChatGPT/ChatGPT.exe",
-      windowTitle: "ChatGPT",
-      sessionTitle: "AgentBridge planning",
-      fingerprint: "session_fingerprint",
-      capabilities: {
-        canReadSelectedText: true,
-        canReadLatestMessage: true,
-        canListSessions: false,
-        canSendTurn: false
-      },
-      confidence: "medium",
-      discoveredAt: now,
-      updatedAt: now
-    };
-    const source = {
-      ...session,
-      kind: "chatgptDesktop" as const,
-      provider: "chatgpt" as const,
-      boundAt: now
-    };
-
-    expect(DesktopAppSessionSchema.parse(session).fingerprint).toBe("session_fingerprint");
-    expect(SourceEndpointSchema.parse(source).kind).toBe("chatgptDesktop");
-    const component = chatGptDesktopSessionComponent(session);
-    expect(component.provider).toBe("chatgptDesktop");
-    expect(component.roleCapabilities.canBeSource).toBe(true);
-    expect(component.roleCapabilities.canReadSelectedText).toBe(true);
   });
 
   it("exposes Codex thread refs as session targets", () => {

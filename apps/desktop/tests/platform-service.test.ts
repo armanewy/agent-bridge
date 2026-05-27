@@ -28,7 +28,7 @@ describe("PlatformService", () => {
       platform: "macos",
       canUseWindowsUia: false,
       canUseDesktopAutomation: false,
-      canUseCodexDeepLinks: true
+      canUseCodexAppServer: true
     });
     expect(service.getDefaultShell()).toBe("/bin/zsh");
   });
@@ -46,9 +46,9 @@ describe("PlatformService", () => {
     const service = new PlatformService({ openExternal: async (url) => { opened.push(url); } });
 
     await service.openExternal("https://example.com");
-    await service.openExternal("codex://threads/new");
     await expect(service.openExternal("file:///C:/Windows/System32/calc.exe")).rejects.toThrow("not allowed");
+    await expect(service.openExternal("ftp://example.com")).rejects.toThrow("not allowed");
 
-    expect(opened).toEqual(["https://example.com", "codex://threads/new"]);
+    expect(opened).toEqual(["https://example.com"]);
   });
 });

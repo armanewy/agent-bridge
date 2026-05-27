@@ -6,7 +6,6 @@ test.describe("desktop renderer mock scenarios", () => {
 
     await expect(page.getByTestId("app-shell")).toBeVisible();
     await expect(page.getByTestId("workbench-view")).toBeVisible();
-    await expect(page.getByText("Sign in to start.")).toBeVisible();
     await expect(page.getByText("Codex is not ready.")).toBeVisible();
     await expect(page.getByRole("button", { name: "Start" })).toBeDisabled();
   });
@@ -15,7 +14,7 @@ test.describe("desktop renderer mock scenarios", () => {
     await page.goto("/?scenario=connected");
 
     await expect(page.getByTestId("workbench-view")).toBeVisible();
-    await page.getByPlaceholder("Describe the task...").fill("Add a fast browser UI smoke test.");
+    await page.getByPlaceholder("Describe the task...").fill(JSON.stringify(sampleTaskSpec(), null, 2));
 
     const startButton = page.getByRole("button", { name: "Start" });
     await expect(startButton).toBeEnabled();
@@ -48,7 +47,7 @@ test.describe("desktop renderer mock scenarios", () => {
     await page.goto("/?scenario=connected&view=settings");
 
     await expect(page.getByTestId("settings-view")).toBeVisible();
-    await expect(page.getByText("Planner: AgentBridge hosted")).toBeVisible();
+    await expect(page.getByText("Planner: ChatGPT handoff")).toBeVisible();
     await expect(page.getByText("AgentBridge can send prompts into selected existing Codex threads.")).toBeVisible();
     await expect(page.getByText("Can send", { exact: true })).toBeVisible();
   });
@@ -58,10 +57,8 @@ test.describe("desktop renderer mock scenarios", () => {
     await page.goto("/?scenario=connected&view=workbench");
 
     await expect(page.getByTestId("workbench-view")).toBeVisible();
-    await expect(page.getByText("Link Center")).toHaveCount(0);
-    await expect(page.getByText("Capture Inbox")).toHaveCount(0);
-    await expect(page.getByText("Chrome extension setup")).toHaveCount(0);
-    await expect(page.getByText("agentbridge-hosted-planner")).toHaveCount(0);
+    await expect(page.getByRole("button", { name: "Start" })).toBeVisible();
+    await expect(page.getByTestId("workbench-tab-task")).toBeVisible();
 
     const overflow = await page.evaluate(() => ({
       document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -73,11 +70,11 @@ test.describe("desktop renderer mock scenarios", () => {
 
   test("keeps advanced diagnostics available at 760x940", async ({ page }) => {
     await page.setViewportSize({ width: 760, height: 940 });
-    await page.goto("/?scenario=connected&view=advanced&advancedView=captures");
+    await page.goto("/?scenario=connected&view=advanced&advancedView=components");
 
     await expect(page.getByTestId("advanced-view")).toBeVisible();
-    await expect(page.getByText("Link Center")).toBeVisible();
-    await expect(page.getByText("Capture Inbox")).toBeVisible();
+    await expect(page.getByRole("heading", { name: "Components" })).toBeVisible();
+    await expect(page.getByRole("button", { name: "Audit" })).toBeVisible();
 
     const overflow = await page.evaluate(() => ({
       document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
@@ -87,3 +84,19 @@ test.describe("desktop renderer mock scenarios", () => {
     expect(overflow.body).toBeLessThanOrEqual(0);
   });
 });
+
+function sampleTaskSpec() {
+  return {
+    title: "Add browser UI smoke test",
+    goal: "Add a fast browser UI smoke test.",
+    background: "AgentBridge should verify the renderer loop.",
+    instructions: ["Add a small smoke test."],
+    requirements: ["Start button can run from an imported plan."],
+    constraints: ["Keep changes scoped."],
+    nonGoals: ["Do not add alternate planner routes."],
+    acceptanceCriteria: ["The mock mission starts."],
+    suggestedFiles: ["tests/ui/desktop-renderer.spec.ts"],
+    verificationSteps: ["pnpm ui:test"],
+    expectedSummaryFormat: "Summary and tests."
+  };
+}

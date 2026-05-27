@@ -436,15 +436,15 @@ function normalizeStatus(value?: string): CodexThreadRef["status"] | undefined {
   return value ? "unknown" : undefined;
 }
 
-function normalizeAppServerError(error: unknown, code: CodexAppServerErrorCode, fallback: string): CodexAppServerError {
+function normalizeAppServerError(error: unknown, code: CodexAppServerErrorCode, defaultMessage: string): CodexAppServerError {
   if (error instanceof CodexAppServerError) {
     return error;
   }
-  const message = error instanceof Error ? error.message : String(error || fallback);
+  const message = error instanceof Error ? error.message : String(error || defaultMessage);
   if (message.toLowerCase().includes("not found")) {
     return new CodexAppServerError("threadNotFound", message);
   }
-  return new CodexAppServerError(code, message || fallback);
+  return new CodexAppServerError(code, message || defaultMessage);
 }
 
 function stringValue(value: unknown): string | undefined {

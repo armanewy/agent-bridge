@@ -20,7 +20,7 @@ Default mitigations:
 - Run only configured verification commands by default.
 - Enforce max iterations and repeated-failure/no-change stop rules.
 - Require worktree/branch isolation for serious parallel loops.
-- Report delivery modes truthfully, especially Codex open-only fallback.
+- Report Codex App Server delivery, monitoring, and steering state truthfully.
 - Treat ChatGPT planning as a user-mediated text handoff, not an automatic remote provider call.
 
 High-severity blockers:

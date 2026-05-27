@@ -52,7 +52,7 @@ export function VerificationPanel({ detail, onRunVerification }: VerificationPan
               ))}
             </ul>
           ) : (
-            <p className="empty-copy">No commands configured. Verification will capture git diff and require review.</p>
+            <p className="empty-copy">No commands configured. Verification will save git diff and require review.</p>
           )}
           {latestResult ? <p className="verification-summary">{latestResult.summary}</p> : null}
           {showPreflight ? (

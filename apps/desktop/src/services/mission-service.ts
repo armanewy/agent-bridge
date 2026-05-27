@@ -1,4 +1,4 @@
-import type { Capture, Mission } from "@agentbridge/core";
+import type { Mission } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 import type { MissionDetail } from "./bridge-contract.js";
 
@@ -40,9 +40,6 @@ export class MissionService {
       await Promise.all(completionContracts.map((contract) => this.store.listCompletionEvidenceForContract(contract.id)))
     ).flat();
     const handoffCardIds = new Set(handoffCards.map((card) => card.id));
-    const captures = (await Promise.all(mission.captureIds.map((captureId) => this.store.getCapture(captureId)))).filter(
-      (capture): capture is Capture => Boolean(capture)
-    );
     const deliveryAttemptIds = new Set(handoffCards.flatMap((card) => card.deliveryAttemptIds));
     const deliveryAttempts = (await this.store.listDeliveryAttempts()).filter(
       (attempt) =>
@@ -55,7 +52,6 @@ export class MissionService {
     return {
       mission,
       handoffCards,
-      captures,
       artifacts,
       artifactFiles,
       artifactBundles,

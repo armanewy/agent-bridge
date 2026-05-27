@@ -24,8 +24,6 @@ describe("MissionService", () => {
       title: "Mission",
       goal: "Inspect detail",
       status: "draft",
-      sourceIds: [],
-      captureIds: [],
       handoffCardIds: [],
       artifactIds: [],
       runIds: [],

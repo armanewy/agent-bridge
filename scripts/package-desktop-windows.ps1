@@ -8,7 +8,6 @@ $ErrorActionPreference = "Stop"
 $repoRoot = Resolve-Path (Join-Path $PSScriptRoot "..")
 Push-Location $repoRoot
 try {
-  pnpm --filter @agentbridge/native-host bundle
   dotnet publish apps/win-uia-helper/AgentBridge.WinUiaHelper.csproj `
     -c Release `
     -r win-x64 `

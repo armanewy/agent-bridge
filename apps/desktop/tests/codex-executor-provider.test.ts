@@ -2,11 +2,10 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import { createCodexDeepLinkTarget, type AgentSessionRef, type TaskSpec } from "@agentbridge/core";
+import type { AgentSessionRef, TaskSpec } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { CodexAppServerClient, type CodexAppServerTransport } from "../src/services/codex-app-server-client.js";
 import { CodexSessionService } from "../src/services/codex-session-service.js";
-import { CodexTargetService } from "../src/services/codex-target-service.js";
 import { CODEX_EXECUTOR_PROVIDER_ID, CodexExecutorProvider } from "../src/services/providers/codex-executor-provider.js";
 import { ArtifactBrokerService } from "../src/services/artifact-broker-service.js";
 import { PlatformService } from "../src/services/platform-service.js";
@@ -22,21 +21,19 @@ afterEach(async () => {
 });
 
 describe("CodexExecutorProvider", () => {
-  it("does not report available when only deep-link fallback exists", async () => {
+  it("reports unavailable when Codex App Server is unavailable", async () => {
     const store = new JsonFileStore(tempDir);
-    await store.saveTarget(createCodexDeepLinkTarget({ id: "target_1", repoPath: tempDir }));
     const provider = createProvider(store);
 
     const status = await provider.status();
 
     expect(status.status).toBe("unavailable");
-    expect(status.metadata.deepLinkTargetCount).toBe(1);
-    expect(status.metadata.deepLinkFallbackAvailable).toBe(true);
+    expect(status.metadata.appServerAvailable).toBe(false);
   });
 
-  it("sends a new-thread dry run through Codex deep link routing", async () => {
+  it("records a dry run through Codex App Server session routing", async () => {
     const store = new JsonFileStore(tempDir);
-    const provider = createProvider(store);
+    const provider = createProvider(store, { appServerClient: appServerClientForNewThread() });
 
     const result = await provider.sendTask({
       missionId: "mission_1",
@@ -54,7 +51,7 @@ describe("CodexExecutorProvider", () => {
     await expect(store.listDeliveryAttempts()).resolves.toEqual([
       expect.objectContaining({
         success: true,
-        targetMetadata: expect.objectContaining({ deliveryMode: "newDeepLink" })
+        targetMetadata: expect.objectContaining({ deliveryMode: "dryRun" })
       })
     ]);
   });
@@ -192,53 +189,13 @@ describe("CodexExecutorProvider", () => {
     await expect(store.listAgentEvents({ type: "turn.steer" })).resolves.toHaveLength(1);
   });
 
-  it("opens an existing thread without claiming prompt injection when app-server is unavailable", async () => {
-    const opened: string[] = [];
-    const store = new JsonFileStore(tempDir);
-    const session = existingCodexSession("deepLink");
-    await store.saveAgentSession(session);
-    const provider = createProvider(store, { openExternal: async (url) => { opened.push(url); } });
-
-    const result = await provider.sendTask({
-      missionId: "mission_3",
-      sessionRefId: session.id,
-      taskSpec: sampleTaskSpec(),
-      repoContext: { repoPath: tempDir },
-      dryRun: false,
-      metadata: {}
-    });
-
-    expect(opened).toEqual(["codex://threads/thread_123"]);
-    expect(result.deliveryMode).toBe("openOnlyFallback");
-    expect(result.warnings).toEqual([expect.stringContaining("Prompt was staged")]);
-  });
-
-  it("opens a new-thread deep link as an unconfirmed fallback, not a confirmed Codex session", async () => {
-    const opened: string[] = [];
-    const store = new JsonFileStore(tempDir);
-    const provider = createProvider(store, { openExternal: async (url) => { opened.push(url); } });
-
-    const result = await provider.sendTask({
-      missionId: "mission_5",
-      taskSpec: sampleTaskSpec(),
-      repoContext: { repoPath: tempDir },
-      dryRun: false,
-      metadata: {}
-    });
-
-    expect(opened[0]).toContain("codex://threads/new?");
-    expect(result.deliveryMode).toBe("openOnlyFallback");
-    expect(result.success).toBe(true);
-    expect(result.warnings).toEqual([expect.stringContaining("cannot confirm a Codex chat or turn")]);
-  });
-
   it("stages artifact files and includes a manifest in the Codex prompt", async () => {
     const store = new JsonFileStore(tempDir);
     const broker = new ArtifactBrokerService(store, new PlatformService({ platform: "win32", userDataDir: tempDir }), fixedNow);
     const file = await broker.importGeneratedTextAsFile("mission_4", "notes.md", "Executor context", {
       classification: "document"
     });
-    const provider = createProvider(store, { artifactBroker: broker });
+    const provider = createProvider(store, { appServerClient: appServerClientForNewThread(), artifactBroker: broker });
 
     const result = await provider.sendTask({
       missionId: "mission_4",
@@ -260,17 +217,28 @@ function createProvider(
   store: JsonFileStore,
   options: {
     appServerClient?: CodexAppServerClient;
-    openExternal?: (url: string) => Promise<void>;
     artifactBroker?: ArtifactBrokerService;
   } = {}
 ): CodexExecutorProvider {
   const appServerClient = options.appServerClient;
   const sessionService = new CodexSessionService(store, appServerClient);
-  const targetService = new CodexTargetService(store, options.openExternal, appServerClient);
-  return new CodexExecutorProvider(store, sessionService, targetService, appServerClient, fixedNow, {}, options.artifactBroker);
+  return new CodexExecutorProvider(store, sessionService, appServerClient, fixedNow, {}, options.artifactBroker);
 }
 
-function existingCodexSession(integrationMode: "deepLink" | "appServer"): AgentSessionRef {
+function appServerClientForNewThread(threadId = "thread_new"): CodexAppServerClient {
+  return new CodexAppServerClient({
+    transport: {
+      async request(method) {
+        if (method === "thread/start") {
+          return { thread: { id: threadId, cwd: tempDir } };
+        }
+        return {};
+      }
+    }
+  });
+}
+
+function existingCodexSession(integrationMode: "appServer"): AgentSessionRef {
   return {
     id: `codex_session_${integrationMode}`,
     providerId: CODEX_EXECUTOR_PROVIDER_ID,

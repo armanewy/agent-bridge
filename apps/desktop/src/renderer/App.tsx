@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import {
   ClipboardList,
   Network,
@@ -9,98 +9,53 @@ import {
 import type {
   AgentProviderProfile,
   AgentSessionRef,
-  Capture,
-  CodexDeepLinkTarget,
-  CodexThreadRef,
-  Link,
-  LinkableComponent,
   AuditEvent,
+  CodexThreadRef,
+  LinkableComponent,
   Mission,
-  SourceEndpoint,
-  TargetEndpoint,
-  Transform,
-  WorkspaceCandidate,
-  WorkflowLink
+  WorkspaceCandidate
 } from "@agentbridge/core";
 import type {
   AgentBridgeAuthStatus,
   AutopilotStatus,
   CodexAppServerStatus,
-  CodexDeliveryResult,
-  DeliveryPreview,
-  PlatformStatus,
-  SetupStatus
+  PlatformStatus
 } from "../services/bridge-contract.js";
 import type { MissionDetail } from "../services/bridge-contract.js";
 import { getAgentBridgeApi } from "./client.js";
-import { CodexTargetPanel } from "../components/codex-target/CodexTargetPanel.js";
-import { ConnectCenter } from "../components/connect/ConnectCenter.js";
-import { CaptureInbox } from "../components/capture/CaptureInbox.js";
-import { HandoffPreview } from "../components/handoff-preview/HandoffPreview.js";
-import { LinkManager } from "../components/link-manager/LinkManager.js";
 import { MissionPanel } from "../components/mission/MissionPanel.js";
-import { SetupPanel } from "../components/setup/SetupPanel.js";
-import { StartPage } from "../components/start/StartPage.js";
 import { WorkbenchPage } from "../components/workbench/WorkbenchPage.js";
 import { extractTaskSpecJson } from "../shared/task-spec-import.js";
 
 type View = "workbench" | "tasks" | "settings" | "advanced";
-type AdvancedView = "imports" | "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
-type ChatGptSourceMode = "chrome" | "desktop";
+type AdvancedView = "components" | "audit";
 
 const api = getAgentBridgeApi();
 
 export function App(): JSX.Element {
   const [view, setView] = useState<View>(() => initialViewFromUrl());
   const [advancedView, setAdvancedView] = useState<AdvancedView>(() => initialAdvancedViewFromUrl());
-  const [sources, setSources] = useState<SourceEndpoint[]>([]);
-  const [targets, setTargets] = useState<TargetEndpoint[]>([]);
-  const [links, setLinks] = useState<Link[]>([]);
   const [components, setComponents] = useState<LinkableComponent[]>([]);
-  const [workflowLinks, setWorkflowLinks] = useState<WorkflowLink[]>([]);
   const [codexThreads, setCodexThreads] = useState<CodexThreadRef[]>([]);
   const [providerProfiles, setProviderProfiles] = useState<AgentProviderProfile[]>([]);
   const [authStatus, setAuthStatus] = useState<AgentBridgeAuthStatus | undefined>();
   const [agentSessions, setAgentSessions] = useState<AgentSessionRef[]>([]);
   const [workspaceCandidates, setWorkspaceCandidates] = useState<WorkspaceCandidate[]>([]);
-  const [captures, setCaptures] = useState<Capture[]>([]);
   const [auditEvents, setAuditEvents] = useState<AuditEvent[]>([]);
   const [missions, setMissions] = useState<Mission[]>([]);
   const [selectedMissionId, setSelectedMissionId] = useState<string | undefined>();
   const selectedMissionIdRef = useRef<string | undefined>();
   const [missionDetail, setMissionDetail] = useState<MissionDetail | undefined>();
-  const [recipe, setRecipe] = useState<Transform["recipe"]>("implementationBrief");
   const [repoPath, setRepoPath] = useState("");
   const [testCommand, setTestCommand] = useState("");
   const [lintCommand, setLintCommand] = useState("");
   const [typecheckCommand, setTypecheckCommand] = useState("");
-  const [targetError, setTargetError] = useState<string | undefined>();
   const [setupError, setSetupError] = useState<string | undefined>();
-  const [setupStatus, setSetupStatus] = useState<SetupStatus | undefined>();
   const [platformStatus, setPlatformStatus] = useState<PlatformStatus | undefined>();
   const [codexAppServerStatus, setCodexAppServerStatus] = useState<CodexAppServerStatus | undefined>();
   const [autopilotStatus, setAutopilotStatus] = useState<AutopilotStatus | undefined>();
-  const [extensionId, setExtensionId] = useState("");
-  const [selectedCaptureId, setSelectedCaptureId] = useState<string | undefined>();
-  const [selectedSourceId, setSelectedSourceId] = useState<string | undefined>();
-  const [selectedTargetId, setSelectedTargetId] = useState<string | undefined>();
-  const [selectedSourceComponentId, setSelectedSourceComponentId] = useState<string | undefined>();
-  const [selectedWorkspaceComponentId, setSelectedWorkspaceComponentId] = useState<string | undefined>();
-  const [selectedTargetComponentId, setSelectedTargetComponentId] = useState<string | undefined>();
-  const [selectedCodexThreadId, setSelectedCodexThreadId] = useState<string | undefined>();
-  const [manualCodexThreadId, setManualCodexThreadId] = useState("");
-  const [embeddedChatGptUrl, setEmbeddedChatGptUrl] = useState("");
-  const [chatGptSourceMode, setChatGptSourceMode] = useState<ChatGptSourceMode>("chrome");
-  const [linkError, setLinkError] = useState<string | undefined>();
   const [workbenchError, setWorkbenchError] = useState<string | undefined>();
   const [discoveryWarnings, setDiscoveryWarnings] = useState<string[]>([]);
-  const [preview, setPreview] = useState<DeliveryPreview | undefined>();
-  const [deliveryResult, setDeliveryResult] = useState<CodexDeliveryResult | undefined>();
-
-  const codexTarget = useMemo(
-    () => targets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink"),
-    [targets]
-  );
 
   useEffect(() => {
     void refresh();
@@ -114,118 +69,44 @@ export function App(): JSX.Element {
   }, []);
 
   useEffect(() => {
-    setSelectedSourceComponentId((current) => {
-      const currentComponent = components.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeSource && isSourceForMode(currentComponent, chatGptSourceMode) && !isDemoSourceComponent(currentComponent)) {
-        return current;
-      }
-      return components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, chatGptSourceMode) && !isDemoSourceComponent(component))?.id;
-    });
-  }, [chatGptSourceMode, components]);
-
-  useEffect(() => {
     const handleQuickAction = (event: Event): void => {
       const action = (event as CustomEvent<{ type?: string }>).detail;
-      if (action?.type === "openTasks") {
-        setView("tasks");
-        return;
-      }
-      if (action?.type === "createTaskFromLatestCapture") {
-        const capture = captures[0];
-        setView("workbench");
-        if (capture?.id) {
-          setSelectedCaptureId(capture.id);
-        }
-        const workflowLink = workflowLinks.find((item) => item.enabled);
-        if (workflowLink) {
-          void createTaskFromWorkflowLink(workflowLink.id);
-          return;
-        }
-        setLinkError("Create a Workflow Link before using the tray shortcut to create a task.");
-        return;
-      }
-      setView("workbench");
+      setView(action?.type === "openTasks" ? "tasks" : "workbench");
     };
     window.addEventListener("agentbridge:quickAction", handleQuickAction);
     return () => window.removeEventListener("agentbridge:quickAction", handleQuickAction);
-  }, [captures, workflowLinks, recipe]);
+  }, []);
 
   async function refresh(): Promise<void> {
     const [
-      nextSources,
-      nextTargets,
-      nextLinks,
       nextComponents,
-      nextWorkflowLinks,
-      nextCaptures,
       nextAuditEvents,
       nextMissions,
-      nextSetupStatus,
       nextPlatformStatus,
       nextCodexAppServerStatus,
       nextProviderProfiles,
       nextAuthStatus,
       nextAgentSessions
     ] = await Promise.all([
-      api.listSources(),
-      api.listTargets(),
-      api.listLinks(),
       api.listLinkableComponents(),
-      api.listWorkflowLinks(),
-      api.listCaptures(),
       api.listAuditEvents(),
       api.listMissions(),
-      api.getSetupStatus(),
       api.getPlatformStatus(),
       api.getCodexAppServerStatus(),
       api.listProviders(),
       api.getAgentBridgeAuthStatus(),
       api.listAgentSessions("codex")
     ]);
-    const nextCodexTarget = nextTargets.find((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
-    const nextCodexThreads = await api.listCodexThreads(nextCodexTarget?.repoPath);
-    setSources(nextSources);
-    setTargets(nextTargets);
-    setLinks(nextLinks);
+    const nextCodexThreads = await api.listCodexThreads();
     setComponents(nextComponents);
-    setWorkflowLinks(nextWorkflowLinks);
     setCodexThreads(nextCodexThreads);
-    setCaptures(nextCaptures);
     setAuditEvents(nextAuditEvents);
     setMissions(nextMissions);
-    setSetupStatus(nextSetupStatus);
     setPlatformStatus(nextPlatformStatus);
     setCodexAppServerStatus(nextCodexAppServerStatus);
     setProviderProfiles(nextProviderProfiles);
     setAuthStatus(nextAuthStatus);
     setAgentSessions(nextAgentSessions);
-    setExtensionId((current) => current || nextSetupStatus.extensionId || "");
-    setSelectedCaptureId((current) => current ?? nextCaptures[0]?.id);
-    setSelectedSourceId((current) => current ?? nextSources[0]?.id);
-    setSelectedTargetId((current) => current ?? nextTargets.find((target) => target.kind === "codexDeepLink")?.id ?? nextTargets[0]?.id);
-    setSelectedCodexThreadId((current) =>
-      current && nextCodexThreads.some((thread) => thread.threadId === current) ? current : undefined
-    );
-    setSelectedSourceComponentId((current) => {
-      const currentComponent = nextComponents.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeSource && isSourceForMode(currentComponent, chatGptSourceMode) && !isDemoSourceComponent(currentComponent)) {
-        return current;
-      }
-      return nextComponents.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, chatGptSourceMode) && !isDemoSourceComponent(component))?.id;
-    });
-    setSelectedWorkspaceComponentId((current) => {
-      const currentComponent = nextComponents.find((component) => component.id === current);
-      return currentComponent?.roleCapabilities.canBeWorkspace
-        ? current
-        : nextComponents.find((component) => component.roleCapabilities.canBeWorkspace)?.id;
-    });
-    setSelectedTargetComponentId((current) => {
-      const currentComponent = nextComponents.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeTarget) {
-        return current;
-      }
-      return nextComponents.find((component) => component.provider === "codex")?.id ?? nextComponents.find((component) => component.roleCapabilities.canBeTarget)?.id;
-    });
     const nextSelectedMissionId = selectedMissionIdRef.current ?? nextMissions[0]?.id;
     selectedMissionIdRef.current = nextSelectedMissionId;
     setSelectedMissionId(nextSelectedMissionId);
@@ -254,69 +135,19 @@ export function App(): JSX.Element {
     setWorkspaceCandidates(nextWorkspaceCandidates);
   }
 
-  async function bindMockSource(): Promise<void> {
-    await api.bindMockBrowserSource();
-    await discoverComponents();
-    await refresh();
-  }
-
   async function discoverComponents(): Promise<void> {
     const result = await api.discoverLinkableComponents();
     setComponents(result.components);
     setDiscoveryWarnings(result.warnings);
-    setSelectedSourceComponentId((current) => {
-      const currentComponent = result.components.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeSource && isSourceForMode(currentComponent, chatGptSourceMode) && !isDemoSourceComponent(currentComponent)) {
-        return current;
-      }
-      return result.components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, chatGptSourceMode) && !isDemoSourceComponent(component))?.id;
-    });
-    setSelectedWorkspaceComponentId((current) => {
-      const currentComponent = result.components.find((component) => component.id === current);
-      return currentComponent?.roleCapabilities.canBeWorkspace
-        ? current
-        : result.components.find((component) => component.roleCapabilities.canBeWorkspace)?.id;
-    });
-    setSelectedTargetComponentId((current) => {
-      const currentComponent = result.components.find((component) => component.id === current);
-      if (currentComponent?.roleCapabilities.canBeTarget) {
-        return current;
-      }
-      return result.components.find((component) => component.provider === "codex")?.id ?? result.components.find((component) => component.roleCapabilities.canBeTarget)?.id;
-    });
-  }
-
-  async function createCodexTarget(): Promise<void> {
-    setTargetError(undefined);
-    try {
-      await configureCodexTargetForPath(repoPath.trim());
-    } catch (error) {
-      setTargetError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function configureCodexTargetForPath(path: string): Promise<void> {
-    if (!path) {
-      throw new Error("Choose a repo folder first.");
-    }
-    await api.configureCodexTarget(path, {
-      ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
-      ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
-      ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
-    });
-    await discoverComponents();
-    await refresh();
   }
 
   async function chooseRepoFolder(): Promise<void> {
-    setTargetError(undefined);
     try {
       const selectedPath = await api.selectRepoFolder();
       if (!selectedPath) {
         return;
       }
       setRepoPath(selectedPath);
-      await configureCodexTargetForPath(selectedPath);
       if (selectedMissionIdRef.current) {
         await api.attachWorkspaceToMission(selectedMissionIdRef.current, {
           repoPath: selectedPath,
@@ -325,216 +156,23 @@ export function App(): JSX.Element {
         });
       }
     } catch (error) {
-      setTargetError(error instanceof Error ? error.message : String(error));
+      setWorkbenchError(error instanceof Error ? error.message : String(error));
     }
-  }
-
-  async function createLink(): Promise<void> {
-    const source = sources.find((item) => item.id === selectedSourceId);
-    const target = targets.find((item) => item.id === selectedTargetId);
-    if (!source || !target) {
-      return;
-    }
-
-    await api.createLink({
-      name: `${source.kind} to ${target.kind}`,
-      sourceId: source.id,
-      targetId: target.id,
-      transformId: recipe,
-      deliveryMode: target.kind === "codexDeepLink" ? "codexDeepLink" : "dryRun"
-    });
-    await refresh();
-  }
-
-  async function createWorkflowLink(): Promise<void> {
-    setLinkError(undefined);
-    const source = components.find((component) => component.id === selectedSourceComponentId);
-    const workspace =
-      components.find((component) => component.id === selectedWorkspaceComponentId) ??
-      components.find((component) => component.roleCapabilities.canBeWorkspace && component.backingRef.repoPath === codexTarget?.repoPath);
-    const target =
-      components.find((component) => component.id === selectedTargetComponentId) ??
-      components.find((component) => component.provider === "codex" && component.backingRef.targetId === codexTarget?.id);
-
-    if (!source || !target) {
-      setLinkError("Select a source and target first.");
-      return;
-    }
-    if (isCodexTargetComponent(target) && !workspace) {
-      setLinkError("Select a repo workspace for Codex links.");
-      return;
-    }
-
-    try {
-      const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
-      await api.createWorkflowLink({
-        name: `${source.label} → ${workspace ? `${workspace.label} → ` : ""}${target.label}`,
-        sourceComponentId: source.id,
-        ...(workspace ? { workspaceComponentId: workspace.id } : {}),
-        targetComponentId: target.id,
-        recipe,
-        verificationCommandDefaults: verificationCommandsFromComponent(workspace),
-        ...(selectedCodexThread
-          ? {
-              codexThreadId: selectedCodexThread.threadId,
-              ...(selectedCodexThread.name ? { codexThreadName: selectedCodexThread.name } : {}),
-              codexOpenMode: "existingThread" as const,
-              codexIntegrationMode: selectedCodexThread.source === "appServer" ? ("appServer" as const) : ("deepLink" as const)
-            }
-          : {
-              codexOpenMode: "newThread" as const,
-              codexIntegrationMode: "deepLink" as const
-            })
-      });
-      const [nextComponents, nextWorkflowLinks] = await Promise.all([
-        api.listLinkableComponents(),
-        api.listWorkflowLinks()
-      ]);
-      setComponents(nextComponents);
-      setWorkflowLinks(nextWorkflowLinks);
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function createTaskFromWorkflowLink(workflowLinkId: string): Promise<void> {
-    setLinkError(undefined);
-    setDeliveryResult(undefined);
-    try {
-      const nextPreview = await api.createTaskFromWorkflowLink({ workflowLinkId });
-      const [nextMissions, nextMissionDetail] = await Promise.all([
-        api.listMissions(),
-        api.getMissionDetail(nextPreview.mission.id)
-      ]);
-      setPreview(nextPreview);
-      setMissions(nextMissions);
-      selectedMissionIdRef.current = nextPreview.mission.id;
-      setSelectedMissionId(nextPreview.mission.id);
-      setMissionDetail(nextMissionDetail);
-      setView("workbench");
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function saveManualCodexThread(): Promise<void> {
-    setLinkError(undefined);
-    const threadId = manualCodexThreadId.trim();
-    if (!threadId) {
-      setLinkError("Paste a Codex thread ID first.");
-      return;
-    }
-
-    try {
-      const ref = await api.saveManualCodexThreadRef({
-        threadId,
-        ...(codexTarget?.repoPath ? { repoPath: codexTarget.repoPath } : {})
-      });
-      setSelectedCodexThreadId(ref.threadId);
-      setManualCodexThreadId("");
-      setCodexThreads(await api.listCodexThreads(codexTarget?.repoPath));
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function createPreview(captureId = selectedCaptureId, targetId = selectedTargetId): Promise<void> {
-    const capture = captures.find((item) => item.id === captureId);
-    const target = targets.find((item) => item.id === targetId);
-    if (!capture || !target) {
-      return;
-    }
-
-    setDeliveryResult(undefined);
-    const selectedCodexThread = codexThreads.find((thread) => thread.threadId === selectedCodexThreadId);
-    const nextPreview = await api.previewHandoff({
-      captureId: capture.id,
-      targetId: target.id,
-      recipe,
-      ...(selectedCodexThread
-        ? {
-            codexThreadId: selectedCodexThread.threadId,
-            ...(selectedCodexThread.name ? { codexThreadName: selectedCodexThread.name } : {}),
-            codexOpenMode: "existingThread" as const,
-            codexIntegrationMode: selectedCodexThread.source === "appServer" ? ("appServer" as const) : ("deepLink" as const)
-          }
-        : {})
-    });
-    const [nextMissions, nextMissionDetail] = await Promise.all([
-      api.listMissions(),
-      api.getMissionDetail(nextPreview.mission.id)
-    ]);
-    setPreview(nextPreview);
-    setMissions(nextMissions);
-    selectedMissionIdRef.current = nextPreview.mission.id;
-    setSelectedMissionId(nextPreview.mission.id);
-    setMissionDetail(nextMissionDetail);
-  }
-
-  async function dryRunCodex(): Promise<void> {
-    if (!preview || preview.target?.kind !== "codexDeepLink") {
-      return;
-    }
-
-    setDeliveryResult(
-      await api.deliverToCodex({
-        target: preview.target,
-        prompt: preview.handoffCard.generatedPrompt,
-        dryRun: true,
-        missionId: preview.mission.id,
-        handoffCardId: preview.handoffCard.id,
-        handoffId: preview.handoff.id,
-        ...(preview.handoffCard.codexThreadId ? { codexThreadId: preview.handoffCard.codexThreadId } : {}),
-        ...(preview.handoffCard.codexThreadName ? { codexThreadName: preview.handoffCard.codexThreadName } : {}),
-        ...(preview.handoffCard.codexDeliveryMode ? { codexOpenMode: preview.handoffCard.codexDeliveryMode } : {}),
-        ...(preview.handoffCard.codexIntegrationMode ? { codexIntegrationMode: preview.handoffCard.codexIntegrationMode } : {})
-      })
-    );
-    await refresh();
-  }
-
-  async function sendCodex(): Promise<void> {
-    if (!preview || preview.target?.kind !== "codexDeepLink") {
-      return;
-    }
-
-    setDeliveryResult(
-      await api.deliverToCodex({
-        target: preview.target,
-        prompt: preview.handoffCard.generatedPrompt,
-        dryRun: false,
-        missionId: preview.mission.id,
-        handoffCardId: preview.handoffCard.id,
-        handoffId: preview.handoff.id,
-        ...(preview.handoffCard.codexThreadId ? { codexThreadId: preview.handoffCard.codexThreadId } : {}),
-        ...(preview.handoffCard.codexThreadName ? { codexThreadName: preview.handoffCard.codexThreadName } : {}),
-        ...(preview.handoffCard.codexDeliveryMode ? { codexOpenMode: preview.handoffCard.codexDeliveryMode } : {}),
-        ...(preview.handoffCard.codexIntegrationMode ? { codexIntegrationMode: preview.handoffCard.codexIntegrationMode } : {})
-      })
-    );
-    await refresh();
   }
 
   async function runVerification(missionId: string): Promise<void> {
     await api.runVerification({ missionId });
-    const [nextMissions, nextMissionDetail] = await Promise.all([
-      api.listMissions(),
-      api.getMissionDetail(missionId)
-    ]);
-    setMissions(nextMissions);
-    selectedMissionIdRef.current = missionId;
-    setSelectedMissionId(missionId);
-    setMissionDetail(nextMissionDetail);
+    await refreshMission(missionId);
   }
 
   async function createWorkbenchMission(): Promise<void> {
     setWorkbenchError(undefined);
     try {
       const mission = await api.createWorkbenchMission({
-        ...(codexTarget
+        ...(repoPath.trim()
           ? {
               repoContext: {
-                repoPath: codexTarget.repoPath,
+                repoPath: repoPath.trim(),
                 ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
                 ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
                 ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
@@ -544,8 +182,7 @@ export function App(): JSX.Element {
       });
       selectedMissionIdRef.current = mission.id;
       setSelectedMissionId(mission.id);
-      await refresh();
-      setMissionDetail(await api.getMissionDetail(mission.id));
+      await refreshMission(mission.id);
     } catch (error) {
       setWorkbenchError(error instanceof Error ? error.message : String(error));
     }
@@ -562,9 +199,9 @@ export function App(): JSX.Element {
       if (!importedPlannerResponse) {
         throw new Error("Plan with ChatGPT first, then use the selected plan to start the mission.");
       }
-      const repoContext = codexTarget
+      const repoContext = repoPath.trim()
         ? {
-            repoPath: codexTarget.repoPath,
+            repoPath: repoPath.trim(),
             ...(testCommand.trim() ? { testCommand: testCommand.trim() } : {}),
             ...(lintCommand.trim() ? { lintCommand: lintCommand.trim() } : {}),
             ...(typecheckCommand.trim() ? { typecheckCommand: typecheckCommand.trim() } : {})
@@ -574,7 +211,7 @@ export function App(): JSX.Element {
         title: intent.trim().split(/\r?\n/)[0]?.slice(0, 80) || "Workbench mission",
         goal: intent.trim(),
         ...(repoContext ? { repoContext } : {}),
-        ...(importedPlannerResponse ? { importedPlannerResponse } : {})
+        importedPlannerResponse
       });
       selectedMissionIdRef.current = mission.id;
       setSelectedMissionId(mission.id);
@@ -598,8 +235,8 @@ export function App(): JSX.Element {
   async function useSelectedChatGptPlan(intent: string, mode: "manual" | "supervised" | "autonomous"): Promise<void> {
     setWorkbenchError(undefined);
     try {
-      const capture = await api.captureEmbeddedChatGptSelection();
-      await startAutopilotMission(intent, mode, capture.text);
+      const selection = await api.importEmbeddedChatGptSelection();
+      await startAutopilotMission(intent, mode, selection.text);
     } catch (error) {
       setWorkbenchError(error instanceof Error ? error.message : String(error));
     }
@@ -724,106 +361,17 @@ export function App(): JSX.Element {
     setWorkspaceCandidates(nextWorkspaceCandidates);
   }
 
-  async function deliverHandoffCard(missionId: string, handoffCardId: string, dryRun: boolean): Promise<void> {
-    setDeliveryResult(await api.deliverHandoffCardToCodex({ missionId, handoffCardId, dryRun }));
-    const [nextMissions, nextMissionDetail] = await Promise.all([
-      api.listMissions(),
-      api.getMissionDetail(missionId)
-    ]);
-    setMissions(nextMissions);
-    selectedMissionIdRef.current = missionId;
-    setSelectedMissionId(missionId);
-    setMissionDetail(nextMissionDetail);
-  }
-
-  async function configureNativeHost(): Promise<void> {
-    setSetupError(undefined);
-    try {
-      const nextStatus = await api.configureNativeHost({ ...(extensionId.trim() ? { extensionId } : {}) });
-      setSetupStatus(nextStatus);
-      await refresh();
-    } catch (error) {
-      setSetupError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function connectChrome(): Promise<void> {
-    setSetupError(undefined);
-    try {
-      const nextStatus = await api.connectChrome({ ...(extensionId.trim() ? { extensionId } : {}) });
-      setSetupStatus(nextStatus);
-      await refresh();
-    } catch (error) {
-      const message = error instanceof Error ? error.message : String(error);
-      setSetupError(message);
-      setLinkError(message);
-    }
-  }
-
-  async function openChromeExtensionInstall(): Promise<void> {
-    setSetupError(undefined);
-    try {
-      await api.openChromeExtensionInstall();
-    } catch (error) {
-      setSetupError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function openChromeExtensionsPage(): Promise<void> {
-    setSetupError(undefined);
-    try {
-      await api.openChromeExtensionsPage();
-    } catch (error) {
-      setSetupError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function openChromeExtensionFolder(): Promise<void> {
-    setSetupError(undefined);
-    try {
-      await api.openChromeExtensionFolder();
-    } catch (error) {
-      setSetupError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function openEmbeddedChatGpt(url?: string): Promise<void> {
-    setLinkError(undefined);
-    try {
-      const source = await api.openEmbeddedChatGpt({ ...(url?.trim() ? { url: url.trim() } : {}) });
-      await discoverComponents();
-      await refresh();
-      setSelectedSourceComponentId(`component_source_${source.id}`);
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
-  async function captureEmbeddedChatGptSelection(): Promise<void> {
-    setLinkError(undefined);
-    try {
-      const capture = await api.captureEmbeddedChatGptSelection();
-      setSelectedCaptureId(capture.id);
-      await discoverComponents();
-      await refresh();
-    } catch (error) {
-      setLinkError(error instanceof Error ? error.message : String(error));
-    }
-  }
-
   async function clearAudit(): Promise<void> {
     await api.clearAuditEvents();
     await refresh();
   }
 
   async function clearLocalData(): Promise<void> {
-    const confirmed = window.confirm("Clear local AgentBridge data on this machine? This removes saved task cards, captures, targets, artifacts, and settings.");
+    const confirmed = window.confirm("Clear local AgentBridge data on this machine? This removes saved tasks, artifacts, provider sessions, and settings.");
     if (!confirmed) {
       return;
     }
     await api.clearLocalData();
-    setPreview(undefined);
-    setDeliveryResult(undefined);
     selectedMissionIdRef.current = undefined;
     await refresh();
   }
@@ -835,19 +383,14 @@ export function App(): JSX.Element {
           <span className="brand-mark">AB</span>
           <div>
             <strong>AgentBridge</strong>
-            <small>Capture tasks. Send to agents. Verify results.</small>
+            <small>Plan with ChatGPT. Execute with Codex. Verify locally.</small>
           </div>
         </div>
         <nav aria-label="Main navigation">
           <NavButton icon={<Network size={18} />} label="Workbench" active={view === "workbench"} onClick={() => setView("workbench")} />
           <NavButton icon={<ClipboardList size={18} />} label="Tasks" active={view === "tasks"} onClick={() => setView("tasks")} />
           <NavButton icon={<Settings size={18} />} label="Settings" active={view === "settings"} onClick={() => setView("settings")} />
-          <NavButton
-            icon={<SlidersHorizontal size={18} />}
-            label="Advanced"
-            active={view === "advanced"}
-            onClick={() => setView("advanced")}
-          />
+          <NavButton icon={<SlidersHorizontal size={18} />} label="Advanced" active={view === "advanced"} onClick={() => setView("advanced")} />
         </nav>
       </aside>
 
@@ -867,7 +410,6 @@ export function App(): JSX.Element {
           <WorkbenchPage
             missionDetail={missionDetail}
             selectedMissionId={selectedMissionId}
-            codexTarget={codexTarget}
             codexThreads={codexThreads}
             agentSessions={agentSessions}
             workspaceCandidates={workspaceCandidates}
@@ -901,7 +443,6 @@ export function App(): JSX.Element {
               authStatus={authStatus}
               platformStatus={platformStatus}
               codexAppServerStatus={codexAppServerStatus}
-              codexTarget={codexTarget}
               setupError={setupError}
               onSignIn={() => void signInAgentBridge()}
               onSignOut={() => void signOutAgentBridge()}
@@ -918,41 +459,12 @@ export function App(): JSX.Element {
                 <button type="button" className="secondary-button" onClick={() => void api.openDataFolder()}>
                   Open data folder
                 </button>
-                <button type="button" className="secondary-button" onClick={() => void api.openNativeHostLog()}>
-                  Open logs
-                </button>
                 <button type="button" className="secondary-button danger" onClick={() => void clearLocalData()}>
                   Clear local data
                 </button>
               </div>
             </section>
-            <SetupPanel
-              status={setupStatus}
-              extensionId={extensionId}
-              setupError={setupError}
-              onExtensionIdChange={setExtensionId}
-              onConfigureNativeHost={() => void configureNativeHost()}
-              onConnectChrome={() => void connectChrome()}
-              onOpenChromeExtensionInstall={() => void openChromeExtensionInstall()}
-              onOpenChromeExtensionsPage={() => void openChromeExtensionsPage()}
-              onOpenChromeExtensionFolder={() => void openChromeExtensionFolder()}
-              onRefresh={() => void refresh()}
-              onGoToConnect={() => setView("workbench")}
-            />
             <CodexAppServerPanel status={codexAppServerStatus} onRefresh={() => void refresh()} />
-            <CodexTargetPanel
-              repoPath={repoPath}
-              onRepoPathChange={setRepoPath}
-              testCommand={testCommand}
-              lintCommand={lintCommand}
-              typecheckCommand={typecheckCommand}
-              onTestCommandChange={setTestCommand}
-              onLintCommandChange={setLintCommand}
-              onTypecheckCommandChange={setTypecheckCommand}
-              onCreate={() => void createCodexTarget()}
-              latestTarget={codexTarget}
-              error={targetError}
-            />
           </div>
         ) : null}
 
@@ -963,7 +475,6 @@ export function App(): JSX.Element {
             detail={missionDetail}
             onSelectMission={(id) => void selectMission(id)}
             onRunVerification={(id) => void runVerification(id)}
-            onDeliverHandoffCard={(missionId, handoffCardId, dryRun) => void deliverHandoffCard(missionId, handoffCardId, dryRun)}
           />
         ) : null}
 
@@ -973,143 +484,41 @@ export function App(): JSX.Element {
               <div className="panel-heading">
                 <div>
                   <h2>Advanced</h2>
-                  <p>Raw sources, targets, links, and provenance for debugging the local pipeline.</p>
+                  <p>Raw components and provenance for debugging the current ChatGPT to Codex pipeline.</p>
                 </div>
               </div>
               <div className="segmented-control advanced-tabs">
-                <button type="button" className={advancedView === "imports" ? "selected" : ""} onClick={() => setAdvancedView("imports")}>
-                  Import Center
-                </button>
                 <button type="button" className={advancedView === "components" ? "selected" : ""} onClick={() => setAdvancedView("components")}>
                   Components
-                </button>
-                <button type="button" className={advancedView === "captures" ? "selected" : ""} onClick={() => setAdvancedView("captures")}>
-                  Captures
-                </button>
-                <button type="button" className={advancedView === "links" ? "selected" : ""} onClick={() => setAdvancedView("links")}>
-                  Links
-                </button>
-                <button type="button" className={advancedView === "sources" ? "selected" : ""} onClick={() => setAdvancedView("sources")}>
-                  Sources
-                </button>
-                <button type="button" className={advancedView === "targets" ? "selected" : ""} onClick={() => setAdvancedView("targets")}>
-                  Targets
                 </button>
                 <button type="button" className={advancedView === "audit" ? "selected" : ""} onClick={() => setAdvancedView("audit")}>
                   Audit
                 </button>
-                <button type="button" className={advancedView === "demo" ? "selected" : ""} onClick={() => setAdvancedView("demo")}>
-                  Demo tools
-                </button>
               </div>
             </section>
-            {advancedView === "imports" ? (
-              <div className="start-screen">
-                <StartPage
-                  components={components}
-                  workflowLinks={workflowLinks}
-                  captures={captures}
-                  targets={targets}
-                  codexThreads={codexThreads}
-                  missions={missions}
-                  setupStatus={setupStatus}
-                  selectedSourceComponentId={selectedSourceComponentId}
-                  selectedWorkspaceComponentId={selectedWorkspaceComponentId}
-                  selectedTargetComponentId={selectedTargetComponentId}
-                  selectedCodexThreadId={selectedCodexThreadId}
-                  manualCodexThreadId={manualCodexThreadId}
-                  embeddedChatGptUrl={embeddedChatGptUrl}
-                  chatGptSourceMode={chatGptSourceMode}
-                  linkError={linkError}
-                  targetError={targetError}
-                  onSelectCodexThread={setSelectedCodexThreadId}
-                  onManualCodexThreadIdChange={setManualCodexThreadId}
-                  onEmbeddedChatGptUrlChange={setEmbeddedChatGptUrl}
-                  onChatGptSourceModeChange={(mode) => {
-                    setChatGptSourceMode(mode);
-                    const nextSource = components.find((component) => component.roleCapabilities.canBeSource && isSourceForMode(component, mode) && !isDemoSourceComponent(component));
-                    setSelectedSourceComponentId(nextSource?.id);
-                  }}
-                  onSaveManualCodexThread={() => void saveManualCodexThread()}
-                  onChooseRepo={() => void chooseRepoFolder()}
-                  onCreateWorkflowLink={() => void createWorkflowLink()}
-                  onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
-                  onOpenTasks={() => setView("tasks")}
-                  onOpenAdvanced={() => setView("advanced")}
-                  onOpenSettings={() => setView("settings")}
-                  onProbeDesktopApps={() => void discoverComponents()}
-                  onOpenEmbeddedChatGpt={(url) => void openEmbeddedChatGpt(url)}
-                  onCaptureEmbeddedChatGptSelection={() => void captureEmbeddedChatGptSelection()}
-                  onConnectChrome={() => void connectChrome()}
-                  onCheckChromeConnection={() => void refresh()}
-                />
-                {preview ? (
-                  <HandoffPreview
-                    preview={preview}
-                    deliveryResult={deliveryResult}
-                    onApproveDryRun={() => void dryRunCodex()}
-                    onApproveSend={() => void sendCodex()}
-                    onSaveDraft={() => {
-                      setPreview(undefined);
-                      setDeliveryResult(undefined);
-                      setView("tasks");
-                    }}
-                    onCancel={() => {
-                      setPreview(undefined);
-                      setDeliveryResult(undefined);
-                    }}
-                  />
-                ) : null}
-              </div>
-            ) : null}
             {advancedView === "components" ? (
-              <ConnectCenter
-                components={components}
-                workflowLinks={workflowLinks}
-                captures={captures}
-                sources={sources}
-                selectedSourceComponentId={selectedSourceComponentId}
-                selectedWorkspaceComponentId={selectedWorkspaceComponentId}
-                selectedTargetComponentId={selectedTargetComponentId}
-                selectedCaptureId={selectedCaptureId}
-                linkError={linkError}
-                discoveryWarnings={discoveryWarnings}
-                onSelectSource={setSelectedSourceComponentId}
-                onSelectWorkspace={setSelectedWorkspaceComponentId}
-                onSelectTarget={setSelectedTargetComponentId}
-                onSelectCapture={setSelectedCaptureId}
-                onDiscover={() => void discoverComponents()}
-                onCreateWorkflowLink={() => void createWorkflowLink()}
-                onCreateTaskFromWorkflowLink={(id) => void createTaskFromWorkflowLink(id)}
-              />
+              <EntityPanel title="Components" items={components.map((component) => describeComponent(component))} empty="No components discovered yet." />
             ) : null}
-            {advancedView === "captures" ? (
-              <CaptureInbox
-                captures={captures}
-                sources={sources}
-                selectedCaptureId={selectedCaptureId}
-                onSelectCapture={setSelectedCaptureId}
-              />
-            ) : null}
-            {advancedView === "sources" ? (
-              <EntityPanel title="Sources" items={sources.map((source) => describeSource(source))} empty="No sources saved yet." />
-            ) : null}
-            {advancedView === "targets" ? (
-              <EntityPanel title="Saved Targets" items={targets.map((target) => describeTarget(target))} empty="No targets saved yet." />
-            ) : null}
-            {advancedView === "links" ? (
-              <LinkManager
-                sources={sources}
-                targets={targets}
-                links={links}
-                recipe={recipe}
-                selectedSourceId={selectedSourceId}
-                selectedTargetId={selectedTargetId}
-                onRecipeChange={setRecipe}
-                onSourceChange={setSelectedSourceId}
-                onTargetChange={setSelectedTargetId}
-                onCreateLink={() => void createLink()}
-              />
+            {advancedView === "components" && discoveryWarnings.length > 0 ? (
+              <section className="panel">
+                <div className="panel-heading compact">
+                  <div>
+                    <h2>Discovery Warnings</h2>
+                    <p>{discoveryWarnings.length} warning(s)</p>
+                  </div>
+                  <button type="button" className="secondary-button" onClick={() => void discoverComponents()}>
+                    Refresh components
+                  </button>
+                </div>
+                <div className="item-list">
+                  {discoveryWarnings.map((warning) => (
+                    <article className="list-card" key={warning}>
+                      <strong>Warning</strong>
+                      <span>{warning}</span>
+                    </article>
+                  ))}
+                </div>
+              </section>
             ) : null}
             {advancedView === "audit" ? (
               <div className="advanced-panel">
@@ -1136,19 +545,6 @@ export function App(): JSX.Element {
                   )}
                 </div>
               </div>
-            ) : null}
-            {advancedView === "demo" ? (
-              <section className="panel">
-                <div className="panel-heading">
-                  <div>
-                    <h2>Demo tools</h2>
-                    <p>Development-only seed data for trying Task Cards without a real Chrome capture.</p>
-                  </div>
-                </div>
-                <button type="button" className="secondary-button" onClick={() => void bindMockSource()}>
-                  Use demo capture
-                </button>
-              </section>
             ) : null}
           </div>
         ) : null}
@@ -1186,22 +582,10 @@ function initialViewFromUrl(): View {
 
 function initialAdvancedViewFromUrl(): AdvancedView {
   if (typeof window === "undefined") {
-    return "imports";
+    return "components";
   }
   const value = new URLSearchParams(window.location.search).get("advancedView");
-  switch (value) {
-    case "imports":
-    case "components":
-    case "captures":
-    case "links":
-    case "sources":
-    case "targets":
-    case "audit":
-    case "demo":
-      return value;
-    default:
-      return "imports";
-  }
+  return value === "audit" ? "audit" : "components";
 }
 
 function EntityPanel({
@@ -1268,7 +652,7 @@ function CodexAppServerPanel({
       <div className="setup-checks">
         <article className={status?.available ? "setup-check ready" : "setup-check warning"}>
           <strong>Existing Codex sessions</strong>
-          <span>{status?.canSendIntoExistingThreads ? "Can send" : "Open-only fallback"}</span>
+          <span>{status?.canSendIntoExistingThreads ? "Can send" : "Unavailable"}</span>
           <small>{status?.endpoint ?? "No endpoint configured"}</small>
         </article>
       </div>
@@ -1286,7 +670,6 @@ function ProviderSettingsPanel({
   authStatus,
   platformStatus,
   codexAppServerStatus,
-  codexTarget,
   setupError,
   onSignIn,
   onSignOut,
@@ -1296,7 +679,6 @@ function ProviderSettingsPanel({
   authStatus?: AgentBridgeAuthStatus | undefined;
   platformStatus?: PlatformStatus | undefined;
   codexAppServerStatus?: CodexAppServerStatus | undefined;
-  codexTarget?: CodexDeepLinkTarget | undefined;
   setupError?: string | undefined;
   onSignIn(): void;
   onSignOut(): void;
@@ -1335,27 +717,20 @@ function ProviderSettingsPanel({
         <article className="setup-check ready">
           <strong>Planner: ChatGPT handoff</strong>
           <span>Manual</span>
-          <small>AgentBridge copies a planning prompt, captures the selected ChatGPT plan, and parses it locally.</small>
+          <small>AgentBridge copies a planning prompt, imports the selected ChatGPT plan, and parses it locally.</small>
           <small>No API key or remote planning call is used by Workbench.</small>
         </article>
         <article className="setup-check">
           <strong>Executor Provider: Codex</strong>
           <span>{codex?.status ?? "unknown"}</span>
-          <small>Deep link: {codexTarget ? "available" : "choose a repo first"}</small>
           <small>
             App Server: {codexAppServerStatus?.available ? "connected" : codexAppServerStatus?.configured ? "not connected" : "not configured"}
           </small>
         </article>
         <article className="setup-check">
-          <strong>Repo settings</strong>
-          <span>{codexTarget ? codexTarget.repoPath : "No repo selected"}</span>
-          <small>Workspace is optional until Codex new-thread delivery or verification needs it.</small>
-        </article>
-        <article className="setup-check">
           <strong>Platform</strong>
           <span>{platformStatus?.capabilities.platform ?? "unknown"}</span>
           <small>Shell: {platformStatus?.defaultShell ?? "unknown"}</small>
-          <small>Codex deep links: {platformStatus?.capabilities.canUseCodexDeepLinks ? "available" : "unavailable"}</small>
         </article>
         <article className="setup-check">
           <strong>File exchange policy</strong>
@@ -1366,58 +741,19 @@ function ProviderSettingsPanel({
       </div>
       {!codexAppServerStatus?.available ? (
         <div className="warning-callout">
-          New Codex thread delivery can use deep links. Sending into existing Codex threads requires CODEX_APP_SERVER_URL.
+          Codex execution requires Codex App Server. Start AgentBridge from an environment where the Codex app server is available.
         </div>
       ) : null}
     </section>
   );
 }
 
-function verificationCommandsFromComponent(component?: LinkableComponent): Array<{ kind: "test" | "lint" | "typecheck"; command: string }> {
-  const metadata = component?.metadata as { testCommand?: unknown; lintCommand?: unknown; typecheckCommand?: unknown } | undefined;
-  return [
-    typeof metadata?.testCommand === "string" && metadata.testCommand ? { kind: "test" as const, command: metadata.testCommand } : undefined,
-    typeof metadata?.lintCommand === "string" && metadata.lintCommand ? { kind: "lint" as const, command: metadata.lintCommand } : undefined,
-    typeof metadata?.typecheckCommand === "string" && metadata.typecheckCommand
-      ? { kind: "typecheck" as const, command: metadata.typecheckCommand }
-      : undefined
-  ].filter(Boolean) as Array<{ kind: "test" | "lint" | "typecheck"; command: string }>;
-}
-
-function isDemoSourceComponent(component: LinkableComponent): boolean {
-  return typeof component.backingRef.sourceId === "string" && component.backingRef.sourceId.includes("mock");
-}
-
-function isSourceForMode(component: LinkableComponent, mode: ChatGptSourceMode): boolean {
-  if (mode === "desktop") {
-    return component.provider === "chatgptDesktop" || component.kind === "chatgptDesktop";
-  }
-  return component.provider === "chatgpt" && component.kind === "browserTab";
-}
-
-function isCodexTargetComponent(component: LinkableComponent): boolean {
-  return component.provider === "codex" || component.provider === "codexThread";
-}
-
-function describeSource(source: SourceEndpoint): { title: string; subtitle: string; detail?: string } {
-  if (source.kind === "browserTab") {
-    return { title: source.title || "Browser tab", subtitle: source.url, detail: source.boundAt };
-  }
-  if (source.kind === "chatgptDesktop") {
-    return { title: source.sessionTitle ?? source.windowTitle ?? "ChatGPT Desktop", subtitle: source.executablePath ?? source.hwnd ?? source.fingerprint, detail: source.boundAt };
-  }
-  const fallback = source as SourceEndpoint & { kind: string; id: string };
-  return { title: fallback.kind, subtitle: fallback.id };
-}
-
-function describeTarget(target: TargetEndpoint): { title: string; subtitle: string; detail?: string } {
-  if (target.kind === "codexDeepLink") {
-    return { title: "Codex", subtitle: target.repoPath, detail: target.boundAt };
-  }
-  if (target.kind === "windowsDesktopWindow") {
-    return { title: target.title, subtitle: target.executablePath ?? target.hwnd, detail: target.boundAt };
-  }
-  return { title: "Clipboard fallback", subtitle: target.parentTargetId };
+function describeComponent(component: LinkableComponent): { title: string; subtitle: string; detail?: string } {
+  return {
+    title: component.label,
+    subtitle: `${component.provider} / ${component.status}`,
+    detail: component.subtitle
+  };
 }
 
 function titleForView(view: View): string {
@@ -1434,6 +770,6 @@ function subtitleForView(view: View): string {
     workbench: "",
     tasks: "Task history, verification results, artifacts, and follow-up drafts.",
     settings: "Configure ChatGPT handoff, Codex Executor, repo, and local diagnostics.",
-    advanced: "Components, captures, links, sources, targets, audit, and demo tools."
+    advanced: "Current pipeline components and audit events."
   }[view];
 }

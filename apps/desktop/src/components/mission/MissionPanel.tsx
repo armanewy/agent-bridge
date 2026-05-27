@@ -11,7 +11,6 @@ interface MissionPanelProps {
   detail?: MissionDetail | undefined;
   onSelectMission(id: string): void;
   onRunVerification(id: string): void;
-  onDeliverHandoffCard(missionId: string, handoffCardId: string, dryRun: boolean): void;
 }
 
 export function MissionPanel({
@@ -19,8 +18,7 @@ export function MissionPanel({
   selectedMissionId,
   detail,
   onSelectMission,
-  onRunVerification,
-  onDeliverHandoffCard
+  onRunVerification
 }: MissionPanelProps): JSX.Element {
   const [selectedArtifactId, setSelectedArtifactId] = useState<string | undefined>();
   const selectedArtifact = detail?.artifacts.find((artifact) => artifact.id === selectedArtifactId) ?? detail?.artifacts[0];
@@ -43,7 +41,7 @@ export function MissionPanel({
         </div>
         <div className="item-list">
           {missions.length === 0 ? (
-            <p className="empty-copy">Create a Task Card from a capture to start tracking agent work.</p>
+            <p className="empty-copy">Create a mission in Workbench to start tracking agent work.</p>
           ) : (
             missions.map((mission) => (
               <button
@@ -75,14 +73,13 @@ export function MissionPanel({
             <div className="task-status-summary">
               <span className="eyebrow">Status</span>
               <strong>{summaryFor(detail)}</strong>
-              <p>{detail.verificationResults[0]?.summary ?? "AgentBridge is tracking capture, prompt, delivery, and verification state for this task."}</p>
+            <p>{detail.verificationResults[0]?.summary ?? "AgentBridge is tracking plan, prompt, delivery, and verification state for this task."}</p>
             </div>
 
             <div className="mission-detail-grid">
               <DetailBlock label="Repo" value={detail.mission.repoContext?.repoPath ?? "No repo context"} />
               <DetailBlock label="Branch" value={detail.mission.repoContext?.currentBranch ?? "Unknown"} />
               <DetailBlock label="Verification" value={detail.verificationResults[0]?.status ?? "not_run"} />
-              <DetailBlock label="Captures" value={String(detail.captures.length)} />
               <DetailBlock label="Artifacts" value={String(detail.artifacts.length)} />
               <DetailBlock label="Deliveries" value={String(detail.deliveryAttempts.length)} />
             </div>
@@ -107,27 +104,11 @@ export function MissionPanel({
                   <strong>{nextAction.title}</strong>
                   <p>{nextAction.description}</p>
                 </div>
-                {nextAction.kind === "send" ? (
-                  <button
-                    type="button"
-                    className="primary-button"
-                    onClick={() => onDeliverHandoffCard(detail.mission.id, nextAction.handoffCardId, false)}
-                  >
-                    {nextAction.label}
-                  </button>
-                ) : null}
                 {nextAction.kind === "verify" ? (
                   <button type="button" className="primary-button" onClick={() => onRunVerification(detail.mission.id)}>
                     Run verification
                   </button>
                 ) : null}
-              </div>
-            ) : null}
-
-            {detail.captures[0] ? (
-              <div className="capture-excerpt">
-                <span className="eyebrow">Source Capture</span>
-                <pre>{detail.captures[0].text.slice(0, 600)}</pre>
               </div>
             ) : null}
 
@@ -154,14 +135,6 @@ export function MissionPanel({
                     <div className="prompt-preview">
                       <span className="eyebrow">Generated Prompt</span>
                       <pre>{card.generatedPrompt}</pre>
-                    </div>
-                    <div className="button-row">
-                      <button type="button" className="secondary-button" onClick={() => onDeliverHandoffCard(detail.mission.id, card.id, true)}>
-                        Dry run Codex
-                      </button>
-                      <button type="button" className="primary-button" onClick={() => onDeliverHandoffCard(detail.mission.id, card.id, false)}>
-                        Send to Codex
-                      </button>
                     </div>
                   </article>
                 ))}
@@ -210,7 +183,7 @@ export function MissionPanel({
         ) : (
           <div className="preview-empty">
             <h2>Task Detail</h2>
-            <p>Select a task to see what was captured, sent, verified, and what should happen next.</p>
+            <p>Select a task to see what was planned, sent, verified, and what should happen next.</p>
           </div>
         )}
       </section>
@@ -255,7 +228,7 @@ function nextActionFor(detail: MissionDetail):
     return {
       kind: "verify",
       title: "Verify the result",
-      description: "After Codex changes files, run the configured local checks and capture artifacts."
+      description: "After Codex changes files, run the configured local checks and save artifacts."
     };
   }
   if (detail.verificationResults[0]?.status === "failed") {
@@ -275,9 +248,9 @@ function nextActionFor(detail: MissionDetail):
 function timelineFor(detail: MissionDetail): Array<{ label: string; detail: string; done: boolean }> {
   return [
     {
-      label: "Captured",
-      detail: detail.captures[0]?.createdAt ?? "No capture attached",
-      done: detail.captures.length > 0
+      label: "Planned",
+      detail: detail.artifacts.find((artifact) => artifact.title === "Imported ChatGPT planner response")?.createdAt ?? "No ChatGPT plan attached",
+      done: detail.artifacts.some((artifact) => artifact.title === "Imported ChatGPT planner response")
     },
     {
       label: "Task created",

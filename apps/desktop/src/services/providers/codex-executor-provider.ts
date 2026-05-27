@@ -1,13 +1,10 @@
 import { randomUUID } from "node:crypto";
 import {
-  createCodexDeepLinkTarget,
   renderTaskSpecForTarget,
   type AgentProviderProfile,
   type AgentSessionRef,
   type AgentTurn,
-  type CodexDeepLinkTarget,
-  type CodexIntegrationMode,
-  type CodexOpenMode,
+  type DeliveryAttempt,
   type CodexThreadRef,
   type ExecutorProvider,
   type ExecutorTaskRequest,
@@ -16,7 +13,6 @@ import {
 } from "@agentbridge/core";
 import { ExecutorTaskRequestSchema } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
-import type { CodexTargetService } from "../codex-target-service.js";
 import type { CodexSessionService } from "../codex-session-service.js";
 import type { CodexAppServerClient } from "../codex-app-server-client.js";
 import type { ArtifactBrokerService } from "../artifact-broker-service.js";
@@ -25,14 +21,12 @@ export const CODEX_EXECUTOR_PROVIDER_ID = "codex";
 
 export interface CodexExecutorProviderOptions {
   platform?: string;
-  canUseCodexDeepLinks?: boolean;
 }
 
 export class CodexExecutorProvider implements ExecutorProvider {
   constructor(
     private readonly store: LocalStore,
     private readonly codexSessionService: CodexSessionService,
-    private readonly codexTargetService: CodexTargetService,
     private readonly appServerClient?: CodexAppServerClient,
     private readonly now: () => string = () => new Date().toISOString(),
     private readonly options: CodexExecutorProviderOptions = {},
@@ -74,12 +68,8 @@ export class CodexExecutorProvider implements ExecutorProvider {
   }
 
   async status(): Promise<AgentProviderProfile> {
-    const [targets, appServerStatus] = await Promise.all([
-      this.store.listTargets(),
-      this.appServerClient?.healthCheck() ?? Promise.resolve({ available: false, message: "Codex App Server is not configured." })
-    ]);
-    const codexTargets = targets.filter((target): target is CodexDeepLinkTarget => target.kind === "codexDeepLink");
-    const deepLinkFallbackAvailable = codexTargets.length > 0 && this.options.canUseCodexDeepLinks !== false;
+    const appServerStatus = await (this.appServerClient?.healthCheck() ??
+      Promise.resolve({ available: false, message: "Codex App Server is not configured." }));
     const available = appServerStatus.available;
     return {
       ...this.profile(),
@@ -87,13 +77,8 @@ export class CodexExecutorProvider implements ExecutorProvider {
       metadata: {
         adapter: "codex-executor",
         platform: this.options.platform ?? "unknown",
-        deepLinkTargetCount: codexTargets.length,
         appServerAvailable: appServerStatus.available,
         appServerMessage: appServerStatus.message,
-        fallbackAvailable: deepLinkFallbackAvailable,
-        deepLinkFallbackAvailable,
-        fallbackMeaning: "Deep links can open Codex, but AgentBridge cannot confirm a chat or turn without Codex App Server.",
-        canUseCodexDeepLinks: this.options.canUseCodexDeepLinks !== false,
         canStreamEvents: appServerStatus.available
       }
     };
@@ -108,72 +93,55 @@ export class CodexExecutorProvider implements ExecutorProvider {
 
   async createSession(input: { title?: string; repoPath?: string; metadata?: Record<string, unknown> } = {}): Promise<AgentSessionRef> {
     const now = this.now();
-    if (this.appServerClient && input.repoPath) {
-      const thread = await this.appServerClient.startThread({
-        cwd: input.repoPath,
-        ...(input.title ? { title: input.title } : {}),
-        ...(input.title ? { goal: input.title } : {})
-      });
-      const session: AgentSessionRef = {
-        id: `codex_session_${thread.threadId}`,
-        providerId: CODEX_EXECUTOR_PROVIDER_ID,
-        providerKind: "executor",
-        externalSessionId: thread.threadId,
-        status: "active",
-        createdAt: now,
-        lastSeenAt: now,
-        title: thread.name ?? input.title ?? "Codex task",
-        repoPath: thread.cwd ?? input.repoPath,
-        metadata: {
-          openMode: "existingThread",
-          integrationMode: "appServer",
-          deliveryMode: "appServerTurnStart",
-          codexThreadId: thread.threadId,
-          ...(thread.sessionId ? { codexSessionId: thread.sessionId } : {}),
-          ...input.metadata
-        }
-      };
-      await this.store.saveAgentSession(session);
-      await this.store.saveCodexThreadRef({
-        id: `codex_thread_${thread.threadId}`,
-        threadId: thread.threadId,
-        ...(session.title ? { name: session.title } : {}),
-        repoPath: session.repoPath,
-        status: "active",
-        source: "appServer",
-        lastSeenAt: now,
-        metadata: thread.metadata
-      });
-      return session;
+    if (!this.appServerClient) {
+      throw new Error("Codex App Server is required before AgentBridge can start a Codex session.");
     }
-
+    if (!input.repoPath) {
+      throw new Error("Codex App Server session creation requires a workspace repo path.");
+    }
+    const thread = await this.appServerClient.startThread({
+      cwd: input.repoPath,
+      ...(input.title ? { title: input.title } : {}),
+      ...(input.title ? { goal: input.title } : {})
+    });
     const session: AgentSessionRef = {
-      id: `codex_session_${randomUUID()}`,
+      id: `codex_session_${thread.threadId}`,
       providerId: CODEX_EXECUTOR_PROVIDER_ID,
       providerKind: "executor",
-      externalSessionId: `new_thread_${randomUUID()}`,
+      externalSessionId: thread.threadId,
       status: "active",
       createdAt: now,
       lastSeenAt: now,
+      title: thread.name ?? input.title ?? "Codex task",
+      repoPath: thread.cwd ?? input.repoPath,
       metadata: {
-        openMode: "newThread",
-        integrationMode: "deepLink",
-        deliveryMode: "newDeepLink",
+        integrationMode: "appServer",
+        deliveryMode: "appServerTurnStart",
+        codexThreadId: thread.threadId,
+        ...(thread.sessionId ? { codexSessionId: thread.sessionId } : {}),
         ...input.metadata
-      },
-      ...(input.title ? { title: input.title } : { title: "New Codex thread" }),
-      ...(input.repoPath ? { repoPath: input.repoPath } : {})
+      }
     };
     await this.store.saveAgentSession(session);
+    await this.store.saveCodexThreadRef({
+      id: `codex_thread_${thread.threadId}`,
+      threadId: thread.threadId,
+      ...(session.title ? { name: session.title } : {}),
+      repoPath: session.repoPath,
+      status: "active",
+      source: "appServer",
+      lastSeenAt: now,
+      metadata: thread.metadata
+    });
     return session;
   }
 
   async resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef> {
     const now = this.now();
-    const openMode = codexOpenModeFromSession(sessionRef);
-    if (openMode === "existingThread" && codexIntegrationModeFromSession(sessionRef) === "appServer" && this.appServerClient) {
-      await this.appServerClient.resumeThread(sessionRef.externalSessionId, sessionRef.repoPath ? { cwd: sessionRef.repoPath } : {});
+    if (!this.appServerClient) {
+      throw new Error("Codex App Server is required before AgentBridge can resume a Codex session.");
     }
+    await this.appServerClient.resumeThread(sessionRef.externalSessionId, sessionRef.repoPath ? { cwd: sessionRef.repoPath } : {});
     const resumed: AgentSessionRef = {
       ...sessionRef,
       status: "active",
@@ -195,10 +163,12 @@ export class CodexExecutorProvider implements ExecutorProvider {
     if (!repoPath) {
       throw new Error("Codex Executor requires a repo path.");
     }
-    const target = await this.resolveCodexTarget(repoPath, session);
+    if (!this.appServerClient) {
+      throw new Error("Codex App Server is required before AgentBridge can send a TaskSpec to Codex.");
+    }
     const preparedArtifacts = await this.prepareArtifactsForInput(request);
     const prompt = [
-      request.generatedPrompt ?? renderTaskSpecForTarget(request.taskSpec, target, request.repoContext),
+      request.generatedPrompt ?? renderTaskSpecForTarget(request.taskSpec, request.repoContext),
       renderCodexArtifactManifest(preparedArtifacts)
     ]
       .filter((section) => section.trim())
@@ -208,26 +178,39 @@ export class CodexExecutorProvider implements ExecutorProvider {
       sessionRefId: session.id,
       payload: {
         missionId: request.missionId,
-        openMode: target.openMode,
-        integrationMode: target.integrationMode ?? "deepLink",
+        integrationMode: "appServer",
         dryRun: request.dryRun,
         stagedFilePaths: preparedArtifacts.stagedFilePaths
       }
     });
-    let result;
+    let codexTurnId: string | undefined;
     try {
-      result = await this.codexTargetService.deliver({
-        target,
-        prompt,
-        dryRun: request.dryRun,
+      if (!request.dryRun) {
+        await this.appServerClient.resumeThread(session.externalSessionId, { cwd: repoPath });
+        const turn = await this.appServerClient.startTurn(session.externalSessionId, prompt, { cwd: repoPath });
+        codexTurnId = turn.turnId;
+      }
+      await this.saveDeliveryAttempt({
         missionId: request.missionId,
-        handoffCardId: request.handoffCardId ?? `provider_card_${randomUUID()}`,
+        ...(request.handoffCardId ? { handoffCardId: request.handoffCardId } : {}),
         handoffId: stringFromMetadata(request.metadata.handoffId) ?? `provider_handoff_${randomUUID()}`,
-        ...(target.existingThreadId ? { codexThreadId: target.existingThreadId } : {}),
-        codexOpenMode: target.openMode,
-        codexIntegrationMode: target.integrationMode ?? "deepLink"
+        session,
+        repoPath,
+        dryRun: request.dryRun,
+        success: true,
+        ...(codexTurnId ? { codexTurnId } : {})
       });
     } catch (error) {
+      await this.saveDeliveryAttempt({
+        missionId: request.missionId,
+        ...(request.handoffCardId ? { handoffCardId: request.handoffCardId } : {}),
+        handoffId: stringFromMetadata(request.metadata.handoffId) ?? `provider_handoff_${randomUUID()}`,
+        session,
+        repoPath,
+        dryRun: request.dryRun,
+        success: false,
+        error: error instanceof Error ? error.message : String(error)
+      });
       await this.appendAgentEvent("turn.error", {
         sessionRefId: session.id,
         payload: {
@@ -242,18 +225,18 @@ export class CodexExecutorProvider implements ExecutorProvider {
       id: `agent_turn_${randomUUID()}`,
       providerId: CODEX_EXECUTOR_PROVIDER_ID,
       sessionRefId: session.id,
-      ...(result.codexTurnId ? { externalTurnId: result.codexTurnId } : {}),
+      ...(codexTurnId ? { externalTurnId: codexTurnId } : {}),
       role: "user",
       content: prompt,
-      status: result.success ? "completed" : "failed",
+      status: "completed",
       artifactIds,
       createdAt: completedAt,
       completedAt,
       metadata: {
-        deliveryMode: result.deliveryMode,
-        codexThreadId: result.codexThreadId,
-        codexTurnId: result.codexTurnId,
-        warnings: result.warnings ?? []
+        deliveryMode: request.dryRun ? "dryRun" : "appServerTurnStart",
+        codexThreadId: session.externalSessionId,
+        codexTurnId,
+        warnings: []
       }
     };
     await this.store.saveAgentTurn(turn);
@@ -263,20 +246,20 @@ export class CodexExecutorProvider implements ExecutorProvider {
       lastSeenAt: completedAt,
       metadata: {
         ...session.metadata,
-        lastDeliveryMode: result.deliveryMode,
-        ...(result.codexThreadId ? { codexThreadId: result.codexThreadId } : {}),
-        ...(result.codexTurnId ? { codexTurnId: result.codexTurnId } : {})
+        lastDeliveryMode: request.dryRun ? "dryRun" : "appServerTurnStart",
+        codexThreadId: session.externalSessionId,
+        ...(codexTurnId ? { codexTurnId } : {})
       }
     });
-    await this.appendAgentEvent(result.success ? "turn.completed" : "turn.failed", {
+    await this.appendAgentEvent("turn.completed", {
       sessionRefId: session.id,
       turnId: turn.id,
       payload: {
         missionId: request.missionId,
-        deliveryMode: result.deliveryMode,
-        codexThreadId: result.codexThreadId,
-        codexTurnId: result.codexTurnId,
-        warnings: result.warnings ?? []
+        deliveryMode: request.dryRun ? "dryRun" : "appServerTurnStart",
+        codexThreadId: session.externalSessionId,
+        codexTurnId,
+        warnings: []
       }
     });
 
@@ -285,16 +268,15 @@ export class CodexExecutorProvider implements ExecutorProvider {
       providerId: CODEX_EXECUTOR_PROVIDER_ID,
       sessionRef: session,
       turnId: turn.id,
-      deliveryMode: executorDeliveryMode(result.deliveryMode, request.dryRun),
-      success: result.success,
-      warnings: result.warnings ?? [],
+      deliveryMode: request.dryRun ? "dryRun" : "existingSession",
+      success: true,
+      warnings: [],
       artifactIds,
       createdAt: completedAt,
       metadata: {
-        codexThreadId: result.codexThreadId,
-        codexTurnId: result.codexTurnId,
-        rawDeliveryMode: result.deliveryMode,
-        deepLink: result.deepLink,
+        codexThreadId: session.externalSessionId,
+        codexTurnId,
+        rawDeliveryMode: request.dryRun ? "dryRun" : "appServerTurnStart",
         stagedFilePaths: preparedArtifacts.stagedFilePaths
       }
     };
@@ -302,7 +284,7 @@ export class CodexExecutorProvider implements ExecutorProvider {
 
   async steerTurn(sessionRef: AgentSessionRef, text: string, context: { missionId?: string; turnId?: string } = {}): Promise<AgentTurn> {
     const session = (await this.store.getAgentSession(sessionRef.id)) ?? sessionRef;
-    if (codexIntegrationModeFromSession(session) !== "appServer" || !this.appServerClient) {
+    if (!this.appServerClient) {
       throw new Error("Codex steering requires an existing Codex App Server session.");
     }
     const startedAt = this.now();
@@ -354,18 +336,8 @@ export class CodexExecutorProvider implements ExecutorProvider {
   async monitorTurn(sessionRef: AgentSessionRef, context: { missionId?: string; turnId?: string } = {}): Promise<ExecutorTurnMonitorResult> {
     const session = (await this.store.getAgentSession(sessionRef.id)) ?? sessionRef;
     const requestedTurnId = context.turnId ?? stringFromMetadata(session.metadata.codexTurnId);
-    if (codexIntegrationModeFromSession(session) !== "appServer" || !this.appServerClient) {
-      return {
-        providerId: CODEX_EXECUTOR_PROVIDER_ID,
-        sessionRefId: session.id,
-        ...(requestedTurnId ? { turnId: requestedTurnId } : {}),
-        status: "unknown",
-        eventCount: 0,
-        needsApproval: false,
-        artifactIds: [],
-        warnings: ["Codex App Server is not available; deep-link delivery cannot be observed."],
-        metadata: { mode: "unobserved" }
-      };
+    if (!this.appServerClient) {
+      throw new Error("Codex monitoring requires an existing Codex App Server session.");
     }
     const events = await this.appServerClient.listThreadEvents(session.externalSessionId, requestedTurnId);
     for (const event of events) {
@@ -456,33 +428,6 @@ export class CodexExecutorProvider implements ExecutorProvider {
     return session;
   }
 
-  private async resolveCodexTarget(repoPath: string, session: AgentSessionRef): Promise<CodexDeepLinkTarget> {
-    const openMode = codexOpenModeFromSession(session);
-    const integrationMode = codexIntegrationModeFromSession(session);
-    const threadId = openMode === "existingThread" ? session.externalSessionId : undefined;
-    const targets = await this.store.listTargets();
-    const existing = targets.find(
-      (target): target is CodexDeepLinkTarget =>
-        target.kind === "codexDeepLink" &&
-        normalizePath(target.repoPath) === normalizePath(repoPath) &&
-        target.openMode === openMode &&
-        (!threadId || target.existingThreadId === threadId)
-    );
-    if (existing) {
-      return existing;
-    }
-    const target = createCodexDeepLinkTarget({
-      id: `target_codex_provider_${randomUUID()}`,
-      repoPath,
-      openMode,
-      integrationMode,
-      ...(threadId ? { existingThreadId: threadId } : {}),
-      ...(session.title ? { existingThreadName: session.title } : {})
-    });
-    await this.store.saveTarget(target);
-    return target;
-  }
-
   private async saveExecutorPromptArtifact(
     input: ExecutorTaskRequest,
     prompt: string,
@@ -499,8 +444,7 @@ export class CodexExecutorProvider implements ExecutorProvider {
         providerId: CODEX_EXECUTOR_PROVIDER_ID,
         sessionRefId: session.id,
         externalSessionId: session.externalSessionId,
-        openMode: codexOpenModeFromSession(session),
-        integrationMode: codexIntegrationModeFromSession(session)
+        integrationMode: "appServer"
       },
       createdAt: this.now()
     };
@@ -522,6 +466,50 @@ export class CodexExecutorProvider implements ExecutorProvider {
       createdAt: this.now()
     });
   }
+
+  private async saveDeliveryAttempt(input: {
+    missionId: string;
+    handoffCardId?: string;
+    handoffId: string;
+    session: AgentSessionRef;
+    repoPath: string;
+    dryRun: boolean;
+    success: boolean;
+    codexTurnId?: string;
+    error?: string;
+  }): Promise<void> {
+    const attempt: DeliveryAttempt = {
+      id: `delivery_${randomUUID()}`,
+      handoffId: input.handoffId,
+      missionId: input.missionId,
+      ...(input.handoffCardId ? { handoffCardId: input.handoffCardId } : {}),
+      targetId: `codex_app_server:${input.session.externalSessionId}`,
+      strategy: input.dryRun ? "dryRun" : "codexAppServerTurnStart",
+      success: input.success,
+      warnings: [],
+      ...(input.error ? { error: input.error } : {}),
+      targetMetadata: {
+        repoPath: input.repoPath,
+        dryRun: input.dryRun,
+        deliveryMode: input.dryRun ? "dryRun" : "appServerTurnStart",
+        codexThreadId: input.session.externalSessionId,
+        codexTurnId: input.codexTurnId
+      },
+      attemptedAt: this.now()
+    };
+    await this.store.saveDeliveryAttempt(attempt);
+    if (!input.handoffCardId) {
+      return;
+    }
+    const card = await this.store.getHandoffCard(input.handoffCardId);
+    if (card) {
+      await this.store.saveHandoffCard({
+        ...card,
+        deliveryAttemptIds: [...new Set([...card.deliveryAttemptIds, attempt.id])],
+        updatedAt: this.now()
+      });
+    }
+  }
 }
 
 function codexThreadRefToSession(ref: CodexThreadRef, now: string): AgentSessionRef {
@@ -535,8 +523,7 @@ function codexThreadRefToSession(ref: CodexThreadRef, now: string): AgentSession
     status: agentSessionStatusFromCodex(ref.status),
     lastSeenAt: ref.lastSeenAt || now,
     metadata: {
-      openMode: "existingThread",
-      integrationMode: ref.source === "appServer" ? "appServer" : ref.source === "sdk" ? "sdk" : "deepLink",
+      integrationMode: "appServer",
       codexThreadSource: ref.source,
       codexThreadId: ref.threadId,
       ...ref.metadata
@@ -546,31 +533,6 @@ function codexThreadRefToSession(ref: CodexThreadRef, now: string): AgentSession
 
 function agentSessionStatusFromCodex(status: CodexThreadRef["status"] | undefined): AgentSessionRef["status"] {
   return status === "systemError" ? "unavailable" : status ?? "unknown";
-}
-
-function codexOpenModeFromSession(session: AgentSessionRef): CodexOpenMode {
-  return session.metadata.openMode === "existingThread" ? "existingThread" : "newThread";
-}
-
-function codexIntegrationModeFromSession(session: AgentSessionRef): CodexIntegrationMode {
-  const value = session.metadata.integrationMode;
-  return value === "appServer" || value === "sdk" || value === "deepLink" ? value : "deepLink";
-}
-
-function executorDeliveryMode(mode: unknown, dryRun: boolean): ExecutorTaskResult["deliveryMode"] {
-  if (dryRun) {
-    return "dryRun";
-  }
-  if (mode === "appServerTurnStart") {
-    return "existingSession";
-  }
-  if (mode === "existingDeepLinkOpen") {
-    return "openOnlyFallback";
-  }
-  if (mode === "newDeepLink") {
-    return "openOnlyFallback";
-  }
-  return "newSession";
 }
 
 function renderCodexArtifactManifest(preparedArtifacts: Record<string, unknown>): string {
@@ -602,10 +564,6 @@ function renderCodexArtifactManifest(preparedArtifacts: Record<string, unknown>)
 
 function sessionSearchText(ref: CodexThreadRef): string {
   return [ref.threadId, ref.name, ref.repoPath].filter(Boolean).join(" ").toLowerCase();
-}
-
-function normalizePath(path: string): string {
-  return path.replace(/\\/g, "/").replace(/\/+$/, "").toLowerCase();
 }
 
 function stringFromMetadata(value: unknown): string | undefined {

@@ -28,10 +28,11 @@ This builds:
 
 ## Current Flow
 
-- Connect detects linkable components and creates reusable Workflow Links.
-- Workflow Links create Task Cards from explicit browser captures.
-- Settings connects Chrome and configures the repo/Codex target.
+- Workbench accepts a mission in plain text.
+- ChatGPT returns a structured plan that the user imports into Workbench.
+- Workbench creates a TaskSpec, sends it to Codex, runs verification, and surfaces review evidence.
+- Settings configures the repo/Codex target.
 - Tasks shows task history, artifacts, verification, and follow-up drafts.
-- Advanced contains raw source/target/link/audit diagnostics.
+- Advanced contains current pipeline components and audit diagnostics.
 
 No cloud auth is required.

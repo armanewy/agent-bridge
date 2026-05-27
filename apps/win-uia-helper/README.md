@@ -18,7 +18,6 @@ Delivery strategies:
 - `dryRun`: validate and report target metadata without sending text.
 - `valuePattern`: attempt `ValuePattern.SetValue` on a writable UIA candidate.
 - `autoUiaOnly`: currently uses the same safe UIA ValuePattern path.
-- `clipboardPasteApproved`: separate fallback strategy reserved for a later hardening wave.
 
 ## Manual Notepad Test
 
@@ -32,5 +31,3 @@ Delivery strategies:
 3. Send `{"command":"listTopLevelWindows"}` and copy the Notepad `hwnd`.
 4. Send `{"command":"findEditableTargets","payload":{"hwnd":"0x..."}}`.
 5. Send `{"command":"deliverText","payload":{"hwnd":"0x...","text":"AgentBridge test","strategy":"valuePattern"}}`.
-
-Clipboard fallback is intentionally not the default and must stay approval-gated.

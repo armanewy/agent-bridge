@@ -7,7 +7,7 @@ AgentBridge should coordinate work without forcing repo access too early.
 ```text
 Bridge mode
   No repo required.
-  Planner messages, TaskSpec creation, hosted review, and existing Codex-session coordination can proceed.
+  ChatGPT planner import, TaskSpec creation, review, and existing Codex-session coordination can proceed.
 
 Workspace mode
   Repo path is useful for Codex cwd, branch naming, and context chips.
@@ -15,7 +15,7 @@ Workspace mode
 
 Verification mode
   Repo path is required.
-  Verification runs configured commands and captures git diff/output artifacts.
+  Verification runs configured commands and saves git diff/output artifacts.
 
 Artifact/file mode
   Explicit approval or policy is required.
@@ -35,16 +35,15 @@ Artifact/file mode
 Use evidence in this order:
 
 1. Codex App Server thread `cwd` or `gitInfo`.
-2. `CodexDeepLinkTarget.repoPath`.
-3. Prior AgentBridge mission/session mapping.
-4. GitHub URL in intent/context.
-5. Provider self-report.
-6. Window/title hints.
-7. User selection.
+2. Prior AgentBridge mission/session mapping.
+3. GitHub URL in intent/context.
+4. Provider self-report.
+5. Window/title hints.
+6. User selection.
 
 ## Runtime Behavior
 
-- Mission creation and hosted Planner turns must not require `repoPath`.
+- Mission creation and ChatGPT planner import must not require `repoPath`.
 - TaskSpec creation must not require `repoPath`.
 - Existing Codex sessions may be selected without a local repo path, but sending into a new Codex thread requires a workspace.
 - Verification must stop with `Choose workspace to run verification.` when no workspace is attached.

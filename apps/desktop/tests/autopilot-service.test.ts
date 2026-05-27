@@ -285,8 +285,7 @@ describe("AutopilotService", () => {
     await store.saveHandoffCard({
       id: "card_1",
       missionId: "mission_1",
-      sourceId: "provider:chatgpt-manual",
-      captureId: "artifact_modelResponse",
+      inputArtifactId: "artifact_modelResponse",
       targetId: "provider:codex",
       recipe: "implementationBrief",
       taskSpec: taskSpec(),
@@ -337,8 +336,7 @@ function fakeWorkbench(store: JsonFileStore): WorkbenchService {
       const card: HandoffCard = {
         id: "card_1",
         missionId,
-        sourceId: "provider:chatgpt-manual",
-        captureId: artifact.id,
+        inputArtifactId: artifact.id,
         targetId: "provider:codex",
         recipe: "implementationBrief",
         taskSpec: taskSpec(),
@@ -404,8 +402,6 @@ function mission(): Mission {
     title: "Autopilot mission",
     goal: "Run a simple loop.",
     status: "draft",
-    sourceIds: [],
-    captureIds: [],
     handoffCardIds: [],
     artifactIds: [],
     runIds: [],
@@ -434,8 +430,7 @@ function handoffCard(): HandoffCard {
   return {
     id: "card_1",
     missionId: "mission_1",
-    sourceId: "provider:chatgpt-manual",
-    captureId: "artifact_modelResponse",
+    inputArtifactId: "artifact_modelResponse",
     targetId: "provider:codex",
     recipe: "implementationBrief",
     taskSpec: taskSpec(),

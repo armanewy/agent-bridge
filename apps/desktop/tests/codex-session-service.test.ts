@@ -17,16 +17,6 @@ afterEach(async () => {
 });
 
 describe("CodexSessionService", () => {
-  it("persists manual thread refs", async () => {
-    const store = new JsonFileStore(tempDir);
-    const service = new CodexSessionService(store);
-
-    const ref = await service.saveManualThreadRef("thread_123", "Auth refactor", tempDir);
-
-    expect(await service.getCodexThreadRef("thread_123")).toEqual(ref);
-    expect(await service.listSavedCodexThreadRefs(tempDir)).toEqual([ref]);
-  });
-
   it("turns app-server threads into stored CodexThreadRefs", async () => {
     const store = new JsonFileStore(tempDir);
     const client = new CodexAppServerClient({
@@ -69,12 +59,20 @@ describe("CodexSessionService", () => {
     expect(refs[0]?.repoPath).toBeUndefined();
   });
 
-  it("falls back to saved refs when app-server is unavailable", async () => {
+  it("uses saved app-server refs when app-server is unavailable", async () => {
     const store = new JsonFileStore(tempDir);
-    await new CodexSessionService(store).saveManualThreadRef("thread_manual", undefined, tempDir);
+    await store.saveCodexThreadRef({
+      id: "codex_thread_saved",
+      threadId: "thread_saved",
+      repoPath: tempDir,
+      status: "idle",
+      source: "appServer",
+      lastSeenAt: new Date().toISOString(),
+      metadata: {}
+    });
 
     await expect(new CodexSessionService(store).listCodexThreads(tempDir)).resolves.toEqual([
-      expect.objectContaining({ threadId: "thread_manual", source: "manual" })
+      expect.objectContaining({ threadId: "thread_saved", source: "appServer" })
     ]);
   });
 });

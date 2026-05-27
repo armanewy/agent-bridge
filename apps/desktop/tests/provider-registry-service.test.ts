@@ -5,12 +5,9 @@ import { afterEach, beforeEach, describe, expect, it } from "vitest";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
-  AgentTurn,
-  PlannerProvider,
-  PlannerRequest,
-  PlannerResponse,
-  ReviewRequest,
-  ReviewResult
+  ExecutorProvider,
+  ExecutorTaskRequest,
+  ExecutorTaskResult
 } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { ProviderRegistryService } from "../src/services/provider-registry-service.js";
@@ -65,29 +62,29 @@ describe("ProviderRegistryService", () => {
     expect(await registry.listSessions("codex")).toEqual([session]);
   });
 
-  it("uses explicitly registered adapters without adding default planner modes", async () => {
+  it("uses explicitly registered executors", async () => {
     const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
-    registry.registerProvider(new MockManualPlanner("chatgpt-manual-test", "manual response"));
+    registry.registerProvider(new MockExecutor("codex-test"));
 
     const profiles = await registry.listProviderProfiles();
 
-    expect(profiles.map((profile) => profile.id)).toEqual(["chatgpt-manual-test", "codex"]);
-    await expect(registry.getProviderStatus("chatgpt-manual-test")).resolves.toMatchObject({
-      id: "chatgpt-manual-test",
+    expect(profiles.map((profile) => profile.id)).toEqual(["codex", "codex-test"]);
+    await expect(registry.getProviderStatus("codex-test")).resolves.toMatchObject({
+      id: "codex-test",
       status: "available"
     });
   });
 });
 
-class MockManualPlanner implements PlannerProvider {
-  constructor(private readonly id: string, private readonly response: string) {}
+class MockExecutor implements ExecutorProvider {
+  constructor(private readonly id: string) {}
 
   profile(): AgentProviderProfile {
     return {
       id: this.id,
-      kind: "planner",
+      kind: "executor",
       displayName: this.id,
-      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      capabilities: ["canExecuteCode", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
       authMode: "none",
       status: "available",
       metadata: {}
@@ -102,7 +99,7 @@ class MockManualPlanner implements PlannerProvider {
     return {
       id: `session_${this.id}`,
       providerId: this.id,
-      providerKind: "planner",
+      providerKind: "executor",
       externalSessionId: `external_${this.id}`,
       status: "active",
       lastSeenAt: "2026-01-01T00:00:00.000Z",
@@ -114,39 +111,20 @@ class MockManualPlanner implements PlannerProvider {
     return sessionRef;
   }
 
-  async sendMessage(sessionRef: AgentSessionRef, message: string): Promise<AgentTurn> {
-    return {
-      id: `turn_${this.id}`,
-      providerId: this.id,
-      sessionRefId: sessionRef.id,
-      role: "assistant",
-      content: message,
-      status: "completed",
-      artifactIds: [],
-      createdAt: "2026-01-01T00:00:00.000Z",
-      completedAt: "2026-01-01T00:00:00.000Z",
-      metadata: {}
-    };
+  async listSessions(): Promise<AgentSessionRef[]> {
+    return [];
   }
 
-  async plan(input: PlannerRequest): Promise<PlannerResponse> {
+  async sendTask(input: ExecutorTaskRequest): Promise<ExecutorTaskResult> {
     return {
+      id: `result_${this.id}`,
       providerId: this.id,
-      content: this.response,
+      deliveryMode: "dryRun",
+      success: true,
+      warnings: [],
       artifactIds: [],
       createdAt: "2026-01-01T00:00:00.000Z",
-      metadata: { prompt: input.prompt }
-    };
-  }
-
-  async review(_input: ReviewRequest): Promise<ReviewResult> {
-    return {
-      providerId: this.id,
-      content: this.response,
-      statusSuggestion: "needs_review",
-      artifactIds: [],
-      createdAt: "2026-01-01T00:00:00.000Z",
-      metadata: {}
+      metadata: { missionId: input.missionId }
     };
   }
 }

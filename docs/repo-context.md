@@ -2,7 +2,7 @@
 
 Repo context makes a Codex handoff repository-aware without reading arbitrary source files into the prompt.
 
-## Captured Fields
+## Stored Fields
 
 - `repoPath`
 - `repoName`

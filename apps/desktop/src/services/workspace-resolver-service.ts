@@ -1,5 +1,5 @@
 import { randomUUID } from "node:crypto";
-import type { CodexDeepLinkTarget, CodexThreadRef, Mission, WorkspaceCandidate } from "@agentbridge/core";
+import type { CodexThreadRef, Mission, WorkspaceCandidate } from "@agentbridge/core";
 import type { LocalStore } from "@agentbridge/local-store";
 
 export class WorkspaceResolverService {
@@ -15,11 +15,6 @@ export class WorkspaceResolverService {
     const candidates: WorkspaceCandidate[] = [];
     for (const ref of await this.store.listCodexThreadRefs()) {
       candidates.push(...this.inferFromCodexThreadRef(ref));
-    }
-    for (const target of await this.store.listTargets()) {
-      if (target.kind === "codexDeepLink") {
-        candidates.push(...this.inferFromCodexDeepLinkTarget(target));
-      }
     }
     candidates.push(...await this.inferFromPriorMissions({ missionId }));
     if (mission) {
@@ -39,18 +34,6 @@ export class WorkspaceResolverService {
         source: "codexAppServerThread",
         confidence: 95,
         evidence: [`Codex thread ${threadRef.threadId} reported cwd/repoPath.`]
-      })
-    ];
-  }
-
-  inferFromCodexDeepLinkTarget(target: CodexDeepLinkTarget): WorkspaceCandidate[] {
-    return [
-      this.candidate({
-        repoPath: target.repoPath,
-        repoName: repoNameFromPath(target.repoPath),
-        source: "codexDeepLinkTarget",
-        confidence: 95,
-        evidence: [`Codex target ${target.id} is configured for this repo path.`]
       })
     ];
   }

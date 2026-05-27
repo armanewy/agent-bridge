@@ -10,9 +10,7 @@ export const PlatformCapabilitiesSchema = z.object({
   canPackageDesktopApp: z.boolean(),
   canRunShellCommands: z.boolean(),
   canOpenExternalLinks: z.boolean(),
-  canUseCodexDeepLinks: z.boolean(),
   canUseCodexAppServer: z.boolean(),
-  canUseChromeNativeMessaging: z.boolean(),
   canUseDesktopAutomation: z.boolean(),
   canUseWindowsUia: z.boolean(),
   canUseMacAccessibility: z.boolean(),
@@ -24,22 +22,7 @@ export const PlatformCapabilitiesSchema = z.object({
 });
 export type PlatformCapabilities = z.infer<typeof PlatformCapabilitiesSchema>;
 
-export const LinkSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  sourceId: z.string().min(1),
-  targetId: z.string().min(1),
-  transformId: z.string().min(1),
-  deliveryMode: z.enum(["codexDeepLink", "windowsUia", "clipboardFallbackApproved", "dryRun"]),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema,
-  enabled: z.boolean()
-});
-export type Link = z.infer<typeof LinkSchema>;
-
 export const LinkableComponentKindSchema = z.enum([
-  "browserTab",
-  "chatgptDesktop",
   "codexDesktop",
   "codexThread",
   "desktopWindow",
@@ -53,7 +36,6 @@ export type LinkableComponentKind = z.infer<typeof LinkableComponentKindSchema>;
 
 export const ComponentProviderSchema = z.enum([
   "chatgpt",
-  "chatgptDesktop",
   "claude",
   "gemini",
   "github",
@@ -64,16 +46,13 @@ export const ComponentProviderSchema = z.enum([
   "cursor",
   "terminal",
   "repo",
-  "browser",
   "unknown"
 ]);
 export type ComponentProvider = z.infer<typeof ComponentProviderSchema>;
 
 export const ComponentRoleCapabilitiesSchema = z.object({
-  canBeSource: z.boolean(),
   canBeTarget: z.boolean(),
   canBeWorkspace: z.boolean(),
-  canCapture: z.boolean(),
   canDeliver: z.boolean(),
   canVerify: z.boolean(),
   canObserve: z.boolean(),
@@ -96,12 +75,9 @@ export const LinkableComponentSchema = z.object({
   status: z.enum(["available", "permission_needed", "unsupported", "unavailable"]),
   fitScore: z.number().int().min(0).max(100),
   backingRef: z.object({
-    sourceId: z.string().optional(),
     targetId: z.string().optional(),
     repoPath: z.string().optional(),
     hwnd: z.string().optional(),
-    tabId: z.number().int().optional(),
-    windowId: z.number().int().optional(),
     sessionId: z.string().optional(),
     processId: z.number().int().optional(),
     codexThreadId: z.string().optional()
@@ -111,55 +87,6 @@ export const LinkableComponentSchema = z.object({
   updatedAt: TimestampSchema
 });
 export type LinkableComponent = z.infer<typeof LinkableComponentSchema>;
-
-export const BrowserTabSourceSchema = z.object({
-  id: z.string().min(1),
-  kind: z.literal("browserTab"),
-  browser: z.enum(["agentbridge", "chrome", "edge", "firefox"]),
-  tabId: z.number().int().optional(),
-  windowId: z.number().int().optional(),
-  title: z.string(),
-  url: z.string().url(),
-  favIconUrl: z.string().url().optional(),
-  boundAt: TimestampSchema
-});
-export type BrowserTabSource = z.infer<typeof BrowserTabSourceSchema>;
-
-export const DesktopAppSessionCapabilitiesSchema = z.object({
-  canReadSelectedText: z.boolean(),
-  canReadLatestMessage: z.boolean(),
-  canListSessions: z.boolean(),
-  canSendTurn: z.boolean()
-});
-export type DesktopAppSessionCapabilities = z.infer<typeof DesktopAppSessionCapabilitiesSchema>;
-
-export const DesktopAppSessionSchema = z.object({
-  id: z.string().min(1),
-  provider: z.enum(["chatgpt", "codex", "unknown"]),
-  appKind: z.literal("desktopApp"),
-  processId: z.number().int().positive().optional(),
-  hwnd: z.string().optional(),
-  executablePath: z.string().optional(),
-  windowTitle: z.string().optional(),
-  sessionTitle: z.string().optional(),
-  sessionId: z.string().optional(),
-  fingerprint: z.string().min(1),
-  capabilities: DesktopAppSessionCapabilitiesSchema,
-  confidence: z.enum(["high", "medium", "low"]),
-  discoveredAt: TimestampSchema,
-  updatedAt: TimestampSchema
-});
-export type DesktopAppSession = z.infer<typeof DesktopAppSessionSchema>;
-
-export const ChatGptDesktopSourceSchema = DesktopAppSessionSchema.extend({
-  kind: z.literal("chatgptDesktop"),
-  provider: z.literal("chatgpt"),
-  boundAt: TimestampSchema
-});
-export type ChatGptDesktopSource = z.infer<typeof ChatGptDesktopSourceSchema>;
-
-export const SourceEndpointSchema = z.discriminatedUnion("kind", [BrowserTabSourceSchema, ChatGptDesktopSourceSchema]);
-export type SourceEndpoint = z.infer<typeof SourceEndpointSchema>;
 
 export const WindowsDesktopWindowTargetSchema = z.object({
   id: z.string().min(1),
@@ -176,14 +103,8 @@ export type WindowsDesktopWindowTarget = z.infer<typeof WindowsDesktopWindowTarg
 export const CodexThreadStatusSchema = z.enum(["unknown", "notLoaded", "idle", "active", "systemError", "archived"]);
 export type CodexThreadStatus = z.infer<typeof CodexThreadStatusSchema>;
 
-export const CodexThreadSourceSchema = z.enum(["manual", "deepLink", "appServer", "sdk"]);
+export const CodexThreadSourceSchema = z.literal("appServer");
 export type CodexThreadSource = z.infer<typeof CodexThreadSourceSchema>;
-
-export const CodexIntegrationModeSchema = z.enum(["deepLink", "appServer", "sdk"]);
-export type CodexIntegrationMode = z.infer<typeof CodexIntegrationModeSchema>;
-
-export const CodexOpenModeSchema = z.enum(["newThread", "existingThread"]);
-export type CodexOpenMode = z.infer<typeof CodexOpenModeSchema>;
 
 export const CodexThreadRefSchema = z.object({
   id: z.string().min(1),
@@ -197,62 +118,8 @@ export const CodexThreadRefSchema = z.object({
 });
 export type CodexThreadRef = z.infer<typeof CodexThreadRefSchema>;
 
-export const ExtensionHeartbeatMessageTypeSchema = z.enum([
-  "healthCheck",
-  "bindSource",
-  "browserTabsDiscovered",
-  "capture"
-]);
-export type ExtensionHeartbeatMessageType = z.infer<typeof ExtensionHeartbeatMessageTypeSchema>;
-
-export const ExtensionHeartbeatSchema = z.object({
-  extensionId: z.string().optional(),
-  extensionVersion: z.string().optional(),
-  receivedAt: TimestampSchema,
-  messageType: ExtensionHeartbeatMessageTypeSchema,
-  permissionMode: z.enum(["allTabs", "activeTab"]).optional(),
-  messageSource: z.literal("agentbridge-extension").optional()
-});
-export type ExtensionHeartbeat = z.infer<typeof ExtensionHeartbeatSchema>;
-
-export const CodexDeepLinkTargetSchema = z.object({
-  id: z.string().min(1),
-  kind: z.literal("codexDeepLink"),
-  repoPath: z.string().min(1),
-  originUrl: z.string().url().optional(),
-  existingThreadId: z.string().optional(),
-  existingThreadName: z.string().optional(),
-  openMode: CodexOpenModeSchema,
-  integrationMode: CodexIntegrationModeSchema.optional(),
-  boundAt: TimestampSchema
-});
-export type CodexDeepLinkTarget = z.infer<typeof CodexDeepLinkTargetSchema>;
-
-export const ClipboardFallbackTargetSchema = z.object({
-  id: z.string().min(1),
-  kind: z.literal("clipboardFallback"),
-  parentTargetId: z.string().min(1),
-  requiresExplicitApproval: z.literal(true)
-});
-export type ClipboardFallbackTarget = z.infer<typeof ClipboardFallbackTargetSchema>;
-
-export const TargetEndpointSchema = z.discriminatedUnion("kind", [
-  WindowsDesktopWindowTargetSchema,
-  CodexDeepLinkTargetSchema,
-  ClipboardFallbackTargetSchema
-]);
+export const TargetEndpointSchema = WindowsDesktopWindowTargetSchema;
 export type TargetEndpoint = z.infer<typeof TargetEndpointSchema>;
-
-export const CaptureSchema = z.object({
-  id: z.string().min(1),
-  sourceId: z.string().min(1),
-  captureType: z.enum(["selectedText", "latestMessage", "pageTextSummary"]),
-  text: z.string().min(1),
-  metadata: z.record(z.unknown()).default({}),
-  createdAt: TimestampSchema,
-  userTriggered: z.literal(true)
-});
-export type Capture = z.infer<typeof CaptureSchema>;
 
 export const RedactionFindingSchema = z.object({
   id: z.string().min(1),
@@ -264,17 +131,6 @@ export const RedactionFindingSchema = z.object({
   recommendation: z.enum(["redact", "warn"])
 });
 export type RedactionFinding = z.infer<typeof RedactionFindingSchema>;
-
-export const StructuredHandoffSchema = z.object({
-  goal: z.string(),
-  context: z.string(),
-  constraints: z.array(z.string()),
-  acceptanceCriteria: z.array(z.string()),
-  suggestedFiles: z.array(z.string()),
-  verificationSteps: z.array(z.string()),
-  originalCaptureRef: z.string().min(1)
-});
-export type StructuredHandoff = z.infer<typeof StructuredHandoffSchema>;
 
 export const MissionStatusSchema = z.enum([
   "draft",
@@ -327,24 +183,6 @@ export const VerificationCommandSchema = z.object({
 });
 export type VerificationCommand = z.infer<typeof VerificationCommandSchema>;
 
-export const WorkflowLinkSchema = z.object({
-  id: z.string().min(1),
-  name: z.string().min(1),
-  sourceComponentId: z.string().min(1),
-  workspaceComponentId: z.string().optional(),
-  targetComponentId: z.string().min(1),
-  recipe: z.enum(["rawRelay", "implementationBrief", "codeReviewRequest", "debuggingRequest"]),
-  verificationCommandDefaults: z.array(VerificationCommandSchema).default([]),
-  codexThreadId: z.string().optional(),
-  codexThreadName: z.string().optional(),
-  codexOpenMode: CodexOpenModeSchema.optional(),
-  codexIntegrationMode: CodexIntegrationModeSchema.optional(),
-  enabled: z.boolean(),
-  createdAt: TimestampSchema,
-  updatedAt: TimestampSchema
-});
-export type WorkflowLink = z.infer<typeof WorkflowLinkSchema>;
-
 export const VerificationPlanSchema = z.object({
   commands: z.array(VerificationCommandSchema),
   manualChecklist: z.array(z.string()),
@@ -358,8 +196,6 @@ export const MissionSchema = z.object({
   title: z.string().min(1),
   goal: z.string().min(1),
   status: MissionStatusSchema,
-  sourceIds: z.array(z.string()),
-  captureIds: z.array(z.string()),
   handoffCardIds: z.array(z.string()),
   artifactIds: z.array(z.string()),
   runIds: z.array(z.string()),
@@ -373,7 +209,6 @@ export const MissionSchema = z.object({
 export type Mission = z.infer<typeof MissionSchema>;
 
 export const ArtifactKindSchema = z.enum([
-  "capture",
   "taskSpec",
   "generatedPrompt",
   "deliveryResult",
@@ -447,10 +282,9 @@ export type ArtifactBundle = z.infer<typeof ArtifactBundleSchema>;
 export const HandoffCardSchema = z.object({
   id: z.string().min(1),
   missionId: z.string().min(1),
-  sourceId: z.string().min(1),
-  captureId: z.string().min(1),
+  inputArtifactId: z.string().min(1),
   targetId: z.string().min(1),
-  recipe: z.enum(["rawRelay", "implementationBrief", "codeReviewRequest", "debuggingRequest"]),
+  recipe: z.enum(["implementationBrief", "debuggingRequest"]),
   taskSpec: TaskSpecSchema,
   generatedPrompt: z.string().min(1),
   repoContext: RepoContextPackSchema.optional(),
@@ -460,8 +294,6 @@ export const HandoffCardSchema = z.object({
   artifactIds: z.array(z.string()),
   codexThreadId: z.string().optional(),
   codexThreadName: z.string().optional(),
-  codexDeliveryMode: CodexOpenModeSchema.optional(),
-  codexIntegrationMode: CodexIntegrationModeSchema.optional(),
   createdAt: TimestampSchema,
   updatedAt: TimestampSchema
 });
@@ -489,12 +321,10 @@ export const VerificationResultSchema = z.object({
 });
 export type VerificationResult = z.infer<typeof VerificationResultSchema>;
 
-export const AgentProviderKindSchema = z.enum(["planner", "executor", "reviewer", "verifier", "browser", "repository", "unknown"]);
+export const AgentProviderKindSchema = z.enum(["executor", "verifier", "repository", "unknown"]);
 export type AgentProviderKind = z.infer<typeof AgentProviderKindSchema>;
 
 export const AgentProviderCapabilitySchema = z.enum([
-  "canPlan",
-  "canReview",
   "canExecuteCode",
   "canUseRepo",
   "canListSessions",
@@ -514,7 +344,6 @@ export type AgentBridgeCloudAuthStatus = z.infer<typeof AgentBridgeCloudAuthStat
 
 export const WorkspaceCandidateSourceSchema = z.enum([
   "codexAppServerThread",
-  "codexDeepLinkTarget",
   "agentBridgeHistory",
   "githubUrl",
   "providerSelfReport",
@@ -612,34 +441,6 @@ export const AgentEventSchema = z.object({
 });
 export type AgentEvent = z.infer<typeof AgentEventSchema>;
 
-export const PlannerRequestSchema = z.object({
-  id: z.string().optional(),
-  missionId: z.string().optional(),
-  sessionRefId: z.string().optional(),
-  prompt: z.string().min(1),
-  repoContext: RepoContextPackSchema.optional(),
-  contextArtifactIds: z.array(z.string()).default([]),
-  artifactBundleIds: z.array(z.string()).default([]),
-  fileIds: z.array(z.string()).default([]),
-  includeFileSummaries: z.boolean().default(false),
-  createdAt: TimestampSchema.optional(),
-  metadata: z.record(z.unknown()).default({})
-});
-export type PlannerRequest = z.input<typeof PlannerRequestSchema>;
-
-export const PlannerResponseSchema = z.object({
-  id: z.string().optional(),
-  providerId: z.string().min(1),
-  sessionRefId: z.string().optional(),
-  turnId: z.string().optional(),
-  content: z.string().min(1),
-  taskSpec: TaskSpecSchema.optional(),
-  artifactIds: z.array(z.string()).default([]),
-  createdAt: TimestampSchema,
-  metadata: z.record(z.unknown()).default({})
-});
-export type PlannerResponse = z.infer<typeof PlannerResponseSchema>;
-
 export const ExecutorTaskRequestSchema = z.object({
   id: z.string().optional(),
   missionId: z.string().min(1),
@@ -662,7 +463,7 @@ export const ExecutorTaskResultSchema = z.object({
   providerId: z.string().min(1),
   sessionRef: AgentSessionRefSchema.optional(),
   turnId: z.string().optional(),
-  deliveryMode: z.enum(["newSession", "existingSession", "openOnlyFallback", "dryRun"]),
+  deliveryMode: z.enum(["newSession", "existingSession", "dryRun"]),
   success: z.boolean(),
   warnings: z.array(z.string()).default([]),
   artifactIds: z.array(z.string()).default([]),
@@ -683,37 +484,6 @@ export const ExecutorTurnMonitorResultSchema = z.object({
   metadata: z.record(z.unknown()).default({})
 });
 export type ExecutorTurnMonitorResult = z.infer<typeof ExecutorTurnMonitorResultSchema>;
-
-export const ReviewRequestSchema = z.object({
-  id: z.string().optional(),
-  missionId: z.string().min(1),
-  sessionRefId: z.string().optional(),
-  taskSpec: TaskSpecSchema,
-  verificationResult: VerificationResultSchema.optional(),
-  verificationSummary: z.string().optional(),
-  artifactIds: z.array(z.string()).default([]),
-  artifactBundleIds: z.array(z.string()).default([]),
-  fileIds: z.array(z.string()).default([]),
-  verificationResultIds: z.array(z.string()).default([]),
-  includeFileSummaries: z.boolean().default(false),
-  createdAt: TimestampSchema.optional(),
-  metadata: z.record(z.unknown()).default({})
-});
-export type ReviewRequest = z.input<typeof ReviewRequestSchema>;
-
-export const ReviewResultSchema = z.object({
-  id: z.string().optional(),
-  providerId: z.string().min(1),
-  sessionRefId: z.string().optional(),
-  turnId: z.string().optional(),
-  content: z.string().min(1),
-  statusSuggestion: z.enum(["passed", "needs_review", "follow_up_needed"]),
-  followUpTaskSpec: TaskSpecSchema.optional(),
-  artifactIds: z.array(z.string()).default([]),
-  createdAt: TimestampSchema,
-  metadata: z.record(z.unknown()).default({})
-});
-export type ReviewResult = z.infer<typeof ReviewResultSchema>;
 
 export const AutopilotPolicySchema = z.object({
   id: z.string().min(1),
@@ -816,19 +586,6 @@ export const UserDecisionSchema = z.object({
 });
 export type UserDecision = z.infer<typeof UserDecisionSchema>;
 
-export interface PlannerProvider {
-  profile(): AgentProviderProfile;
-  status(): Promise<AgentProviderProfile>;
-  createSession(input?: { title?: string; repoPath?: string; metadata?: Record<string, unknown> }): Promise<AgentSessionRef>;
-  resumeSession(sessionRef: AgentSessionRef): Promise<AgentSessionRef>;
-  sendMessage(sessionRef: AgentSessionRef, message: string, context?: PlannerRequest): Promise<AgentTurn>;
-  plan(input: PlannerRequest): Promise<PlannerResponse>;
-  review(input: ReviewRequest): Promise<ReviewResult>;
-  prepareArtifactsForInput?(request: PlannerRequest | ReviewRequest, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
-  extractArtifactsFromResult?(result: PlannerResponse | ReviewResult, context?: Record<string, unknown>): Promise<string[]>;
-  listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;
-}
-
 export interface ExecutorProvider {
   profile(): AgentProviderProfile;
   status(): Promise<AgentProviderProfile>;
@@ -843,17 +600,8 @@ export interface ExecutorProvider {
   listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;
 }
 
-export interface ReviewerProvider {
-  profile(): AgentProviderProfile;
-  status(): Promise<AgentProviderProfile>;
-  review(input: ReviewRequest): Promise<ReviewResult>;
-  prepareArtifactsForInput?(request: ReviewRequest, context?: Record<string, unknown>): Promise<Record<string, unknown>>;
-  extractArtifactsFromResult?(result: ReviewResult, context?: Record<string, unknown>): Promise<string[]>;
-  listProviderReturnedArtifacts?(turnId: string): Promise<Artifact[]>;
-}
-
 export interface ProviderRegistry {
-  registerProvider(provider: PlannerProvider | ExecutorProvider | ReviewerProvider): void;
+  registerProvider(provider: ExecutorProvider): void;
   listProviderProfiles(): Promise<AgentProviderProfile[]>;
   getProviderProfile(providerId: string): Promise<AgentProviderProfile | undefined>;
   listSessions(providerId?: string): Promise<AgentSessionRef[]>;
@@ -863,7 +611,7 @@ export const RunStepSchema = z.object({
   id: z.string().min(1),
   runId: z.string().min(1),
   missionId: z.string().min(1),
-  kind: z.enum(["capture", "planning", "transform", "approval", "delivery", "verification", "review", "followUp"]),
+  kind: z.enum(["planning", "taskSpec", "delivery", "verification", "review", "followUp"]),
   status: z.enum(["pending", "running", "passed", "failed", "skipped", "needs_review"]),
   title: z.string().min(1),
   details: z.record(z.unknown()),
@@ -905,41 +653,6 @@ export const RouteDecisionSchema = z.object({
 });
 export type RouteDecision = z.infer<typeof RouteDecisionSchema>;
 
-export const HandoffSchema = z.object({
-  id: z.string().min(1),
-  missionId: z.string().optional(),
-  handoffCardId: z.string().optional(),
-  captureId: z.string().min(1),
-  sourceId: z.string().min(1),
-  targetId: z.string().min(1),
-  transformId: z.string().min(1),
-  prompt: z.string().min(1),
-  structured: StructuredHandoffSchema,
-  redactionFindings: z.array(RedactionFindingSchema),
-  createdAt: TimestampSchema
-});
-export type Handoff = z.infer<typeof HandoffSchema>;
-
-export const TransformSchema = z.object({
-  id: z.string().min(1),
-  recipe: z.enum(["rawRelay", "implementationBrief", "codeReviewRequest", "debuggingRequest"]),
-  inputCaptureId: z.string().min(1),
-  outputHandoffId: z.string().min(1),
-  createdAt: TimestampSchema
-});
-export type Transform = z.infer<typeof TransformSchema>;
-
-export const ApprovalSchema = z.object({
-  id: z.string().min(1),
-  handoffId: z.string().min(1),
-  decision: z.enum(["approved", "cancelled", "edited"]),
-  editedPrompt: z.string().optional(),
-  approvedFallbackStrategies: z.array(z.string()),
-  approvedAt: TimestampSchema.optional(),
-  cancelledAt: TimestampSchema.optional()
-});
-export type Approval = z.infer<typeof ApprovalSchema>;
-
 export const DeliveryAttemptSchema = z.object({
   id: z.string().min(1),
   handoffId: z.string().min(1),
@@ -948,14 +661,9 @@ export const DeliveryAttemptSchema = z.object({
   runId: z.string().optional(),
   targetId: z.string().min(1),
   strategy: z.enum([
-    "codexDeepLink",
-    "newCodexDeepLink",
-    "existingCodexDeepLinkOpen",
     "codexAppServerTurnStart",
-    "codexSdkRun",
     "autoUiaOnly",
     "valuePattern",
-    "clipboardPasteApproved",
     "dryRun"
   ]),
   success: z.boolean(),
@@ -969,12 +677,7 @@ export type DeliveryAttempt = z.infer<typeof DeliveryAttemptSchema>;
 export const AuditEventSchema = z.object({
   id: z.string().min(1),
   type: z.enum([
-    "sourceBound",
     "targetBound",
-    "captureCreated",
-    "transformCreated",
-    "approvalGranted",
-    "approvalCancelled",
     "deliveryAttempted",
     "deliverySucceeded",
     "deliveryFailed",
@@ -995,17 +698,3 @@ export const SettingSchema = z.object({
   updatedAt: TimestampSchema
 });
 export type Setting = z.infer<typeof SettingSchema>;
-
-export interface AdapterStatus {
-  available: boolean;
-  message?: string;
-  checkedAt: string;
-}
-
-export interface TargetValidation {
-  available: boolean;
-  changed: boolean;
-  warnings: string[];
-  resolvedTarget?: TargetEndpoint;
-  checkedAt: string;
-}

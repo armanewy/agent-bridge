@@ -32,9 +32,7 @@ export class PlatformService {
       canPackageDesktopApp: isDesktopPlatform,
       canRunShellCommands: isDesktopPlatform,
       canOpenExternalLinks: isDesktopPlatform,
-      canUseCodexDeepLinks: this.platform === "windows" || this.platform === "macos" || this.platform === "linux",
       canUseCodexAppServer: isDesktopPlatform,
-      canUseChromeNativeMessaging: isDesktopPlatform,
       canUseDesktopAutomation: this.platform === "windows",
       canUseWindowsUia: this.platform === "windows",
       canUseMacAccessibility: false,
@@ -163,7 +161,7 @@ export function assertAllowedExternalUrl(rawUrl: string): void {
   }
 }
 
-const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "codex:"]);
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:"]);
 
 export function platformKindFromNodePlatform(platform: NodeJS.Platform | PlatformKind | string): PlatformKind {
   if (platform === "win32" || platform === "windows") {

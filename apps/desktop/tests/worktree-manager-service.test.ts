@@ -87,8 +87,6 @@ describe("WorktreeManagerService", () => {
       title: "Add regression coverage for missing evidence",
       goal: "Add regression coverage for missing evidence",
       status: "draft",
-      sourceIds: [],
-      captureIds: [],
       handoffCardIds: [],
       artifactIds: [],
       runIds: [],

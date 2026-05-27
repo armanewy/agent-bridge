@@ -675,24 +675,17 @@ function statusForStep(kind: AutopilotStep["kind"]): AutopilotRunStatus {
 function classifyStepFailure(error: unknown): AutopilotStepFailure {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const normalized = rawMessage.toLowerCase();
-    const providerUnavailable =
-    /agentbridge cloud returned http (401|403|408|409|429|500|502|503|504)/i.test(rawMessage) ||
-    normalized.includes("quota") ||
-    normalized.includes("rate limit") ||
-    normalized.includes("openai_api_key") ||
+  const providerUnavailable =
+    normalized.includes("codex app server") ||
     normalized.includes("provider unavailable") ||
-    normalized.includes("planner is unavailable") ||
     normalized.includes("fetch failed") ||
     normalized.includes("econnrefused");
 
   if (providerUnavailable) {
-    const quotaHelp = normalized.includes("429") || normalized.includes("quota")
-      ? " The provider returned a quota or billing error."
-      : "";
     return {
       runStatus: "blocked",
       kind: "providerUnavailable",
-      reason: `Provider is unavailable.${quotaHelp} ${rawMessage}`.trim(),
+      reason: `Provider is unavailable. ${rawMessage}`.trim(),
       rawMessage
     };
   }
