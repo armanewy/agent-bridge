@@ -163,7 +163,7 @@ export function WorkbenchPage({
   }, [latestPayloadSummary?.artifactId, latestPayloadSummary?.redactionFindings.length]);
 
   return (
-    <div className="workbench-layout">
+    <div className="workbench-layout" data-testid="workbench-view">
       <section className="panel workbench-shell">
         <div className="workbench-title-row">
           <div>
@@ -351,6 +351,7 @@ function ProgressTabs({
         <button
           key={item.tab}
           type="button"
+          data-testid={`workbench-tab-${item.tab}`}
           className={[
             "step-tab",
             activeTab === item.tab ? "active" : "",

@@ -52,8 +52,8 @@ type ChatGptSourceMode = "chrome" | "desktop";
 const api = getAgentBridgeApi();
 
 export function App(): JSX.Element {
-  const [view, setView] = useState<View>("workbench");
-  const [advancedView, setAdvancedView] = useState<AdvancedView>("legacy");
+  const [view, setView] = useState<View>(() => initialViewFromUrl());
+  const [advancedView, setAdvancedView] = useState<AdvancedView>(() => initialAdvancedViewFromUrl());
   const [sources, setSources] = useState<SourceEndpoint[]>([]);
   const [targets, setTargets] = useState<TargetEndpoint[]>([]);
   const [links, setLinks] = useState<Link[]>([]);
@@ -838,8 +838,8 @@ export function App(): JSX.Element {
   }
 
   return (
-    <div className="app-shell">
-      <aside className="sidebar">
+    <div className="app-shell" data-testid="app-shell">
+      <aside className="sidebar" data-testid="sidebar">
         <div className="brand">
           <span className="brand-mark">AB</span>
           <div>
@@ -860,8 +860,8 @@ export function App(): JSX.Element {
         </nav>
       </aside>
 
-      <main className="workspace">
-        <header className="topbar">
+      <main className="workspace" data-testid="workspace">
+        <header className="topbar" data-testid="topbar">
           <div>
             <h1>{titleForView(view)}</h1>
             {subtitleForView(view) ? <p>{subtitleForView(view)}</p> : null}
@@ -904,7 +904,7 @@ export function App(): JSX.Element {
         ) : null}
 
         {view === "settings" ? (
-          <div className="settings-layout">
+          <div className="settings-layout" data-testid="settings-view">
             <ProviderSettingsPanel
               profiles={providerProfiles}
               authStatus={authStatus}
@@ -980,7 +980,7 @@ export function App(): JSX.Element {
         ) : null}
 
         {view === "advanced" ? (
-          <div className="advanced-layout">
+          <div className="advanced-layout" data-testid="advanced-view">
             <section className="panel">
               <div className="panel-heading">
                 <div>
@@ -1181,11 +1181,38 @@ function NavButton({
   onClick(): void;
 }): JSX.Element {
   return (
-    <button type="button" className={active ? "nav-button active" : "nav-button"} onClick={onClick}>
+    <button type="button" className={active ? "nav-button active" : "nav-button"} data-testid={`nav-${label.toLowerCase()}`} onClick={onClick}>
       {icon}
       <span>{label}</span>
     </button>
   );
+}
+
+function initialViewFromUrl(): View {
+  if (typeof window === "undefined") {
+    return "workbench";
+  }
+  const value = new URLSearchParams(window.location.search).get("view");
+  return value === "tasks" || value === "settings" || value === "advanced" ? value : "workbench";
+}
+
+function initialAdvancedViewFromUrl(): AdvancedView {
+  if (typeof window === "undefined") {
+    return "legacy";
+  }
+  const value = new URLSearchParams(window.location.search).get("advancedView");
+  switch (value) {
+    case "components":
+    case "captures":
+    case "links":
+    case "sources":
+    case "targets":
+    case "audit":
+    case "demo":
+      return value;
+    default:
+      return "legacy";
+  }
 }
 
 function EntityPanel({

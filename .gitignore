@@ -4,6 +4,8 @@ dist-bundle/
 dist-electron/
 dist-renderer/
 coverage/
+playwright-report/
+test-results/
 release/
 .vite/
 *.log

@@ -43,6 +43,17 @@ import type {
 } from "@agentbridge/core";
 
 const now = () => new Date().toISOString();
+const scenarioTimestamp = "2026-05-27T12:00:00.000Z";
+
+type MockScenarioName =
+  | "default"
+  | "empty"
+  | "first-run"
+  | "connected"
+  | "mission-planned"
+  | "verification-failed"
+  | "autopilot-running"
+  | "long-content";
 
 const mockSource: BrowserTabSource = {
   id: "src_mock_browser",
@@ -73,35 +84,7 @@ let mockCaptures: Capture[] = [mockCapture];
 let mockAuditEvents: AuditEvent[] = [];
 let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
-let mockProviderProfiles: AgentProviderProfile[] = [
-  {
-    id: "agentbridge-hosted-planner",
-    kind: "planner",
-    displayName: "AgentBridge Hosted Planner",
-    capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
-    authMode: "agentBridgeCloud",
-    status: "needsAuth",
-    metadata: { mode: "hostedAgentBridge", reason: "Sign in to AgentBridge." }
-  },
-  {
-    id: "openai-planner",
-    kind: "planner",
-    displayName: "OpenAI Planner",
-    capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
-    authMode: "apiKey",
-    status: "needsAuth",
-    metadata: { mode: "userOpenAiApiKey", advanced: true, adapter: "mock", reason: "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY." }
-  },
-  {
-    id: "codex",
-    kind: "executor",
-    displayName: "Codex",
-    capabilities: ["canExecuteCode", "canUseRepo", "canListSessions", "canCreateSession", "canResumeSession", "canSendMessage"],
-    authMode: "appServer",
-    status: "unavailable",
-    metadata: { adapter: "mock", reason: "Codex provider wrapper is not active in renderer mock." }
-  }
-];
+let mockProviderProfiles: AgentProviderProfile[] = defaultMockProviderProfiles();
 let mockPlannerMode: PlannerProviderMode = "hostedAgentBridge";
 let mockAgentSessions: AgentSessionRef[] = [];
 let mockAgentTurns: AgentTurn[] = [];
@@ -118,6 +101,8 @@ let mockCodexAppServerStatus: CodexAppServerStatus = {
   message: "Codex App Server endpoint is not configured.",
   checkedAt: now()
 };
+let mockAutopilotStatuses = new Map<string, AutopilotStatus>();
+let mockScenarioInitialized = false;
 const mockPlatformStatus: PlatformStatus = {
   capabilities: {
     platform: "windows",
@@ -143,11 +128,377 @@ const mockPlatformStatus: PlatformStatus = {
   defaultShell: "cmd.exe"
 };
 
+function defaultMockProviderProfiles(): AgentProviderProfile[] {
+  return [
+    {
+      id: "agentbridge-hosted-planner",
+      kind: "planner",
+      displayName: "AgentBridge Hosted Planner",
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      authMode: "agentBridgeCloud",
+      status: "needsAuth",
+      metadata: { mode: "hostedAgentBridge", reason: "Sign in to AgentBridge." }
+    },
+    {
+      id: "openai-planner",
+      kind: "planner",
+      displayName: "OpenAI Planner",
+      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
+      authMode: "apiKey",
+      status: "needsAuth",
+      metadata: { mode: "userOpenAiApiKey", advanced: true, adapter: "mock", reason: "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY." }
+    },
+    {
+      id: "codex",
+      kind: "executor",
+      displayName: "Codex",
+      capabilities: ["canExecuteCode", "canUseRepo", "canListSessions", "canCreateSession", "canResumeSession", "canSendMessage"],
+      authMode: "appServer",
+      status: "unavailable",
+      metadata: { adapter: "mock", reason: "Codex provider wrapper is not active in renderer mock." }
+    }
+  ];
+}
+
+function initializeMockScenario(): void {
+  if (mockScenarioInitialized) {
+    return;
+  }
+  mockScenarioInitialized = true;
+
+  const scenario = mockScenarioFromUrl();
+  resetMockState({ includeDefaultCapture: scenario === "default" });
+
+  switch (scenario) {
+    case "empty":
+    case "first-run":
+      return;
+    case "connected":
+      seedConnectedScenario();
+      return;
+    case "mission-planned":
+      seedConnectedScenario();
+      seedWorkbenchMission("planned");
+      return;
+    case "verification-failed":
+      seedConnectedScenario();
+      seedWorkbenchMission("verification-failed");
+      return;
+    case "autopilot-running":
+      seedConnectedScenario();
+      seedWorkbenchMission("autopilot-running");
+      return;
+    case "long-content":
+      seedConnectedScenario({ longContent: true });
+      seedWorkbenchMission("long-content");
+      return;
+    case "default":
+      return;
+  }
+}
+
+function mockScenarioFromUrl(): MockScenarioName {
+  if (typeof window === "undefined") {
+    return "default";
+  }
+  const value = new URLSearchParams(window.location.search).get("scenario");
+  switch (value) {
+    case "empty":
+    case "first-run":
+    case "connected":
+    case "mission-planned":
+    case "verification-failed":
+    case "autopilot-running":
+    case "long-content":
+      return value;
+    default:
+      return "default";
+  }
+}
+
+function resetMockState({ includeDefaultCapture }: { includeDefaultCapture: boolean }): void {
+  mockSources = includeDefaultCapture ? [mockSource] : [];
+  mockTargets = [];
+  mockLinks = [];
+  mockWorkflowLinks = [];
+  mockCodexThreads = [];
+  mockComponents = includeDefaultCapture ? [mockBrowserTabComponent(mockSource)] : [];
+  mockCaptures = includeDefaultCapture ? [mockCapture] : [];
+  mockAuditEvents = [];
+  mockMissions = [];
+  mockMissionDetails = new Map<string, MissionDetail>();
+  mockProviderProfiles = defaultMockProviderProfiles();
+  mockPlannerMode = "hostedAgentBridge";
+  mockAgentSessions = [];
+  mockAgentTurns = [];
+  mockAgentEvents = [];
+  mockAuthSignedIn = false;
+  mockCloudBaseUrl = "http://127.0.0.1:8787";
+  mockWorkspaceCandidates = [];
+  mockExtensionId = "";
+  mockExtensionConnected = false;
+  mockCodexAppServerStatus = {
+    configured: false,
+    available: false,
+    canSendIntoExistingThreads: false,
+    message: "Codex App Server endpoint is not configured.",
+    checkedAt: scenarioTimestamp
+  };
+  mockAutopilotStatuses = new Map<string, AutopilotStatus>();
+}
+
+function seedConnectedScenario(options: { longContent?: boolean } = {}): void {
+  const source: BrowserTabSource = {
+    id: "src_scenario_chatgpt",
+    kind: "browserTab",
+    browser: "agentbridge",
+    title: options.longContent ? "ChatGPT - Long implementation brief" : "ChatGPT - AgentBridge UI iteration",
+    url: "https://chatgpt.com/c/agentbridge-ui-testing",
+    boundAt: scenarioTimestamp
+  };
+  const capture: Capture = {
+    id: "cap_scenario_selection",
+    sourceId: source.id,
+    captureType: "selectedText",
+    text: options.longContent ? longScenarioText() : "Make AgentBridge UI iteration fast: add deterministic mock states, browser smoke tests, and screenshots for the workbench flow.",
+    metadata: { mode: "embeddedBrowser", scenario: true },
+    createdAt: scenarioTimestamp,
+    userTriggered: true
+  };
+  const target: CodexDeepLinkTarget = {
+    id: "target_codex_agentbridge",
+    kind: "codexDeepLink",
+    repoPath: "C:\\Users\\aoztu\\Documents\\Agent Bridge",
+    openMode: "newThread",
+    boundAt: scenarioTimestamp
+  };
+  const sourceComponent = mockBrowserTabComponent(source);
+  const targetComponent = mockTargetComponent(target);
+  const workspaceComponent = mockRepoComponent(createMockRepoContext(target.repoPath), `scenario_${target.id}`);
+
+  mockSources = [source];
+  mockCaptures = [capture];
+  mockTargets = [target];
+  mockComponents = mergeMockComponents([sourceComponent, targetComponent, workspaceComponent]);
+  mockWorkflowLinks = [
+    {
+      id: "workflow_scenario_chatgpt_to_codex",
+      name: "ChatGPT to AgentBridge repo",
+      sourceComponentId: sourceComponent.id,
+      workspaceComponentId: workspaceComponent.id,
+      targetComponentId: targetComponent.id,
+      recipe: "implementationBrief",
+      verificationCommandDefaults: [
+        { kind: "test", command: "pnpm test" },
+        { kind: "typecheck", command: "pnpm build" }
+      ],
+      codexOpenMode: "newThread",
+      codexIntegrationMode: "appServer",
+      enabled: true,
+      createdAt: scenarioTimestamp,
+      updatedAt: scenarioTimestamp
+    }
+  ];
+  mockCodexThreads = [
+    {
+      id: "codex_thread_scenario",
+      threadId: "thread_scenario_ui",
+      name: "AgentBridge UI test thread",
+      repoPath: target.repoPath,
+      status: "active",
+      source: "appServer",
+      lastSeenAt: scenarioTimestamp,
+      metadata: { scenario: true }
+    }
+  ];
+  mockAgentSessions = [
+    {
+      id: "agent_session_scenario_codex",
+      providerId: "codex",
+      providerKind: "executor",
+      externalSessionId: "thread_scenario_ui",
+      title: "AgentBridge UI test thread",
+      repoPath: target.repoPath,
+      status: "active",
+      createdAt: scenarioTimestamp,
+      lastSeenAt: scenarioTimestamp,
+      metadata: { integrationMode: "appServer" }
+    }
+  ];
+  mockExtensionId = "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa";
+  mockExtensionConnected = true;
+  mockAuthSignedIn = true;
+  mockProviderProfiles = mockProviderProfiles.map((profile) => {
+    if (profile.id === "agentbridge-hosted-planner" || profile.id === "codex") {
+      return { ...profile, status: "available", metadata: { ...profile.metadata, reason: "Scenario ready." } };
+    }
+    return profile;
+  });
+  mockCodexAppServerStatus = {
+    configured: true,
+    available: true,
+    canSendIntoExistingThreads: true,
+    message: "Scenario Codex App Server is available.",
+    checkedAt: scenarioTimestamp
+  };
+}
+
+function seedWorkbenchMission(scenario: "planned" | "verification-failed" | "autopilot-running" | "long-content"): void {
+  const target = mockTargets.find((item): item is CodexDeepLinkTarget => item.kind === "codexDeepLink");
+  const capture = mockCaptures[0];
+  const repoContext = createMockRepoContext(target?.repoPath ?? "C:\\Users\\aoztu\\Documents\\Agent Bridge");
+  const missionId = `mission_scenario_${scenario}`;
+  const taskSpec: TaskSpec = {
+    ...mockTaskSpec(),
+    title: scenario === "long-content" ? "Stress test long UI copy without layout overlap" : "Add browser-first UI tests",
+    goal: "Make AgentBridge UI changes easy to verify before shipping.",
+    background: scenario === "long-content" ? longScenarioText() : "The renderer should expose deterministic states for browser automation.",
+    acceptanceCriteria: [
+      "Renderer states can be opened directly by URL.",
+      "Smoke tests cover connected, planned, verification, and long-content states."
+    ],
+    verificationSteps: ["pnpm ui:test", "pnpm build"]
+  };
+  const plannerArtifact = {
+    id: "artifact_scenario_planner_response",
+    missionId,
+    kind: "modelResponse" as const,
+    title: "Planner response",
+    content: "Scenario planner response with enough structure to generate a TaskSpec.",
+    metadata: { scenario: true },
+    createdAt: scenarioTimestamp
+  };
+  const card = {
+    ...mockHandoffCard(missionId, taskSpec),
+    id: "card_scenario_task",
+    sourceId: capture?.sourceId ?? "provider:agentbridge-hosted-planner",
+    captureId: capture?.id ?? "mock_planner_turn",
+    targetId: target?.id ?? "target_codex_agentbridge",
+    taskSpec,
+    repoContext,
+    generatedPrompt: buildMockPrompt(taskSpec.background, "implementationBrief"),
+    artifactIds: ["artifact_scenario_prompt"],
+    createdAt: scenarioTimestamp,
+    updatedAt: scenarioTimestamp
+  };
+  const promptArtifact = {
+    id: "artifact_scenario_prompt",
+    missionId,
+    handoffCardId: card.id,
+    kind: "generatedPrompt" as const,
+    title: "Generated prompt",
+    content: card.generatedPrompt,
+    metadata: { scenario: true },
+    createdAt: scenarioTimestamp
+  };
+  const verificationArtifact = {
+    id: "artifact_scenario_verification",
+    missionId,
+    kind: "gitDiff" as const,
+    title: "Git diff summary",
+    content: "Mock verification found a UI regression in the smoke path.",
+    metadata: { scenario: true },
+    createdAt: scenarioTimestamp
+  };
+  const verificationRun = {
+    id: "run_scenario_verification",
+    missionId,
+    status: "needs_review" as const,
+    stepIds: [],
+    artifactIds: [verificationArtifact.id],
+    startedAt: scenarioTimestamp,
+    completedAt: scenarioTimestamp,
+    createdAt: scenarioTimestamp,
+    updatedAt: scenarioTimestamp
+  };
+  const verificationResult = {
+    id: "verification_scenario_failed",
+    missionId,
+    runId: verificationRun.id,
+    status: "failed" as const,
+    commandResults: [
+      {
+        kind: "test" as const,
+        command: "pnpm ui:test",
+        exitCode: 1,
+        status: "failed" as const
+      }
+    ],
+    summary: "Mock verification failed: a smoke test caught a UI regression.",
+    artifactIds: [verificationArtifact.id],
+    createdAt: scenarioTimestamp
+  };
+  const artifacts = scenario === "planned"
+    ? [plannerArtifact]
+    : [plannerArtifact, promptArtifact, ...(scenario === "verification-failed" ? [verificationArtifact] : [])];
+  const mission: Mission = {
+    id: missionId,
+    title: taskSpec.title,
+    goal: taskSpec.goal,
+    status: scenario === "verification-failed" ? "needs_review" : scenario === "planned" ? "planned" : "ready",
+    sourceIds: ["provider:agentbridge-hosted-planner"],
+    captureIds: capture ? [capture.id] : [],
+    handoffCardIds: scenario === "planned" ? [] : [card.id],
+    artifactIds: artifacts.map((artifact) => artifact.id),
+    runIds: scenario === "verification-failed" ? [verificationRun.id] : [],
+    repoContext,
+    verificationPlan: {
+      commands: [
+        { kind: "test", command: "pnpm ui:test", cwd: repoContext.repoPath },
+        { kind: "typecheck", command: "pnpm build", cwd: repoContext.repoPath }
+      ],
+      manualChecklist: ["Inspect desktop and mobile screenshots."],
+      expectedArtifacts: ["TaskSpec", "verification summary"]
+    },
+    createdAt: scenarioTimestamp,
+    updatedAt: scenarioTimestamp
+  };
+
+  mockMissions = [mission];
+  mockMissionDetails.set(mission.id, {
+    mission,
+    handoffCards: scenario === "planned" ? [] : [card],
+    captures: capture ? [capture] : [],
+    artifacts,
+    deliveryAttempts: [],
+    runs: scenario === "verification-failed" ? [verificationRun] : [],
+    verificationResults: scenario === "verification-failed" ? [verificationResult] : [],
+    missionWorkspaces: [
+      {
+        id: "workspace_scenario",
+        missionId,
+        baseRepoPath: repoContext.repoPath,
+        workingPath: repoContext.repoPath,
+        strategy: "none",
+        baseBranch: repoContext.currentBranch,
+        branchName: repoContext.currentBranch,
+        status: "active",
+        createdAt: scenarioTimestamp,
+        updatedAt: scenarioTimestamp
+      }
+    ]
+  });
+
+  if (scenario === "autopilot-running") {
+    const status = mockAutopilotStatus(mission.id, "policy_supervised_default", "autopilot_run_scenario", "planning");
+    mockAutopilotStatuses.set(mission.id, status);
+  }
+}
+
+function longScenarioText(): string {
+  return [
+    "Refactor the AgentBridge desktop workbench so it can handle long task descriptions, nested planner output, and verbose verification summaries without overlapping controls or truncating the primary decision buttons.",
+    "The test fixture should include unusually long repository paths, detailed acceptance criteria, multiple verification commands, and a dense explanation of why browser-first UI testing lets us iterate faster before packaging Electron.",
+    "Keep the copy realistic: this is a power-user tool for routing intent into Codex, tracking evidence, and reviewing agent output."
+  ].join(" ");
+}
+
 export function getAgentBridgeApi(): AgentBridgeApi {
   return window.agentBridge ?? createMockAgentBridgeApi();
 }
 
 function createMockAgentBridgeApi(): AgentBridgeApi {
+  initializeMockScenario();
   return {
     async listSources() {
       return mockSources;
@@ -497,13 +848,19 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       };
     },
     async startAutopilot(missionId, policyId) {
-      return mockAutopilotStatus(missionId, policyId);
+      const status = mockAutopilotStatus(missionId, policyId);
+      mockAutopilotStatuses.set(missionId, status);
+      return status;
     },
     async stopAutopilot(autopilotRunId) {
-      return mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "cancelled");
+      const status = mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "cancelled");
+      mockAutopilotStatuses.set(status.run?.missionId ?? "mission_mock", status);
+      return status;
     },
     async continueAutopilot(autopilotRunId) {
-      return mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "planning");
+      const status = mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "planning");
+      mockAutopilotStatuses.set(status.run?.missionId ?? "mission_mock", status);
+      return status;
     },
     async steerAutopilot(autopilotRunId, text) {
       const status = mockAutopilotStatus("mission_mock", undefined, autopilotRunId, "steering");
@@ -519,11 +876,11 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         completedAt: now(),
         metadata: { text }
       });
+      mockAutopilotStatuses.set(status.run?.missionId ?? "mission_mock", status);
       return status;
     },
     async getAutopilotStatus(missionId) {
-      void missionId;
-      return { steps: [] };
+      return mockAutopilotStatuses.get(missionId) ?? { steps: [] };
     },
     async resolvePendingDecision(decisionId, selectedOption) {
       return {
@@ -955,27 +1312,7 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       return undefined;
     },
     async clearLocalData() {
-      mockSources = [mockSource];
-      mockTargets = [];
-      mockLinks = [];
-      mockWorkflowLinks = [];
-      mockCodexThreads = [];
-      mockComponents = [mockBrowserTabComponent(mockSource)];
-      mockCaptures = [mockCapture];
-      mockAuditEvents = [];
-      mockMissions = [];
-      mockMissionDetails = new Map<string, MissionDetail>();
-      mockAgentSessions = [];
-      mockAgentTurns = [];
-      mockAgentEvents = [];
-      mockExtensionConnected = false;
-      mockCodexAppServerStatus = {
-        configured: false,
-        available: false,
-        canSendIntoExistingThreads: false,
-        message: "Codex App Server endpoint is not configured.",
-        checkedAt: now()
-      };
+      resetMockState({ includeDefaultCapture: true });
     },
     async listAuditEvents() {
       return mockAuditEvents;
