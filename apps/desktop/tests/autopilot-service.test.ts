@@ -162,6 +162,49 @@ describe("AutopilotService", () => {
     expect(status.run?.stopReason).toContain("same verification failure");
   });
 
+  it("does not treat an empty warnings array as a provider warning", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    await store.saveArtifact(textArtifact("mission_1", "modelResponse", "Planner response"));
+    await store.saveHandoffCard(handoffCard());
+    const delivery = textArtifact("mission_1", "deliveryResult", JSON.stringify({ success: true, warnings: [] }));
+    delivery.title = "Executor delivery result";
+    await store.saveArtifact(delivery);
+    await store.saveVerificationResult({
+      id: "verification_1",
+      missionId: "mission_1",
+      status: "passed",
+      commandResults: [],
+      summary: "Passed",
+      artifactIds: [],
+      createdAt: fixedNow()
+    });
+    const policy: AutopilotPolicy = {
+      id: "policy_autonomous",
+      name: "Autonomous",
+      mode: "autonomous",
+      maxIterations: 1,
+      allowPlannerTurnsWithoutApproval: true,
+      allowCodexTurnsWithoutApproval: true,
+      allowVerificationWithoutApproval: true,
+      allowShellCommands: "configuredOnly",
+      allowFileWrites: "repoOnly",
+      allowNetworkAccess: false,
+      stopOnVerificationFailure: false,
+      stopOnRedactionFinding: true,
+      stopOnProviderWarning: true,
+      createdAt: fixedNow(),
+      updatedAt: fixedNow()
+    };
+    await store.saveAutopilotPolicy(policy);
+    const service = new AutopilotService(store, fakeWorkbench(store), fixedNow);
+
+    const status = await service.startAutopilot("mission_1", policy.id);
+
+    expect(status.run?.status).toBe("passed");
+    expect(status.run?.stopReason).toBe("Verification passed.");
+  });
+
   it("stores steering notes as mission artifacts", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveMission(mission());

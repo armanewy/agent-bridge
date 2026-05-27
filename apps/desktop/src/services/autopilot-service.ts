@@ -337,8 +337,8 @@ export class AutopilotService {
     }).length;
 
     const providerWarnings = artifacts
-      .filter((artifact) => artifact.kind === "deliveryResult" && /warning/i.test(artifact.content ?? ""))
-      .map((artifact) => artifact.title);
+      .filter((artifact) => artifact.kind === "deliveryResult")
+      .flatMap((artifact) => extractDeliveryWarnings(artifact));
 
     return {
       ...(repeatedFailureCount ? { repeatedFailureCount } : {}),
@@ -696,6 +696,25 @@ function basePolicy(id: string, name: string, now: string): AutopilotPolicy {
 
 function normalizeSignal(value: string): string {
   return value.replace(/\s+/g, " ").trim().slice(0, 1600);
+}
+
+function extractDeliveryWarnings(artifact: Artifact): string[] {
+  const metadataWarnings = artifact.metadata.warnings;
+  if (Array.isArray(metadataWarnings)) {
+    return metadataWarnings.filter((warning): warning is string => typeof warning === "string" && warning.trim().length > 0);
+  }
+  if (!artifact.content) {
+    return [];
+  }
+  try {
+    const parsed = JSON.parse(artifact.content) as { warnings?: unknown };
+    if (Array.isArray(parsed.warnings)) {
+      return parsed.warnings.filter((warning): warning is string => typeof warning === "string" && warning.trim().length > 0);
+    }
+  } catch {
+    return /^warning[:\s]/i.test(artifact.content.trim()) ? [artifact.title] : [];
+  }
+  return [];
 }
 
 function hasSteerExecutor(value: WorkbenchService): value is WorkbenchService & {
