@@ -36,6 +36,18 @@ describe("AutopilotService", () => {
     ]);
   });
 
+  it("continues after the supervised Codex approval is resolved", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    const service = new AutopilotService(store, fakeWorkbench(store), fixedNow);
+
+    const blocked = await service.startAutopilot("mission_1");
+    const continued = await service.resolvePendingDecision(blocked.pendingDecision?.id ?? "", "Approve");
+
+    expect(continued.run?.status).toBe("passed");
+    expect((await store.listArtifactsForMission("mission_1")).some((artifact) => artifact.title === "Executor delivery result")).toBe(true);
+  });
+
   it("can complete a one-iteration autonomous loop", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveMission(mission());

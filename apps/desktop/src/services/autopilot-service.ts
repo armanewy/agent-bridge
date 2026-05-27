@@ -146,6 +146,7 @@ export class AutopilotService {
           source: "userDecision",
           decisionId: decision.id,
           decisionType: decision.decisionType,
+          approvedPrompt: decision.prompt,
           approvedRisk: /approve/i.test(selectedOption),
           approvedCompletionContract: /completion contract/i.test(decision.prompt) && /approve/i.test(selectedOption)
         },
@@ -352,7 +353,7 @@ export class AutopilotService {
       return true;
     }
     if (kind === "sendToExecutor") {
-      return !policy.allowCodexTurnsWithoutApproval;
+      return !policy.allowCodexTurnsWithoutApproval && !(await this.hasApprovedPrompt(run.missionId, "Send this TaskSpec to Codex?"));
     }
     if (kind === "requestApproval") {
       return true;
@@ -364,6 +365,16 @@ export class AutopilotService {
       return !policy.allowPlannerTurnsWithoutApproval;
     }
     return false;
+  }
+
+  private async hasApprovedPrompt(missionId: string, prompt: string): Promise<boolean> {
+    const artifacts = await this.store.listArtifactsForMission(missionId);
+    return artifacts.some(
+      (artifact) =>
+        artifact.metadata.source === "userDecision" &&
+        artifact.metadata.approvedPrompt === prompt &&
+        artifact.metadata.approvedRisk === true
+    );
   }
 
   private async runStep(
