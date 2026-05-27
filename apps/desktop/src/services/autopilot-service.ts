@@ -87,7 +87,10 @@ export class AutopilotService {
         });
         return this.statusForRunId(run.id);
       }
-      await this.runStep(run, action.kind, action.title, action.execute);
+      const stepOutcome = await this.runStep(run, action.kind, action.title, action.execute);
+      if (stepOutcome !== "completed") {
+        return this.statusForRunId(run.id);
+      }
       const latest = await this.requireRun(run.id);
       run = {
         ...latest,
@@ -392,7 +395,7 @@ export class AutopilotService {
     kind: AutopilotStep["kind"],
     title: string,
     execute?: () => Promise<string[]>
-  ): Promise<void> {
+  ): Promise<AutopilotStepOutcome> {
     const startedAt = this.now();
     const step: AutopilotStep = {
       id: `autopilot_step_${randomUUID()}`,
@@ -415,18 +418,20 @@ export class AutopilotService {
         outputArtifactIds,
         completedAt: this.now()
       });
+      return "completed";
     } catch (error) {
+      const failure = classifyStepFailure(error);
       await this.store.appendAutopilotStep({
         ...step,
-        status: "failed",
+        status: failure.runStatus === "blocked" ? "blocked" : "failed",
         completedAt: this.now(),
-        metadata: { title, error: error instanceof Error ? error.message : String(error) }
+        metadata: { title, error: failure.rawMessage, failureKind: failure.kind }
       });
-      await this.updateRun(run.id, "failed", {
+      await this.updateRun(run.id, failure.runStatus, {
         completedAt: this.now(),
-        stopReason: error instanceof Error ? error.message : String(error)
+        stopReason: failure.reason
       });
-      throw error;
+      return failure.runStatus === "blocked" ? "blocked" : "failed";
     }
   }
 
@@ -636,6 +641,14 @@ export class AutopilotService {
 }
 
 type ExecutableAutopilotStepKind = Exclude<AutopilotStep["kind"], "stop">;
+type AutopilotStepOutcome = "completed" | "blocked" | "failed";
+
+interface AutopilotStepFailure {
+  runStatus: Extract<AutopilotRunStatus, "blocked" | "failed">;
+  kind: "providerUnavailable" | "executionFailed";
+  reason: string;
+  rawMessage: string;
+}
 
 interface ExecutableAutopilotAction {
   kind: ExecutableAutopilotStepKind;
@@ -678,6 +691,39 @@ function statusForStep(kind: AutopilotStep["kind"]): AutopilotRunStatus {
     return "steering";
   }
   return "blocked";
+}
+
+function classifyStepFailure(error: unknown): AutopilotStepFailure {
+  const rawMessage = error instanceof Error ? error.message : String(error);
+  const normalized = rawMessage.toLowerCase();
+  const providerUnavailable =
+    /agentbridge cloud returned http (401|403|408|409|429|500|502|503|504)/i.test(rawMessage) ||
+    normalized.includes("quota") ||
+    normalized.includes("rate limit") ||
+    normalized.includes("openai_api_key") ||
+    normalized.includes("provider unavailable") ||
+    normalized.includes("planner is unavailable") ||
+    normalized.includes("fetch failed") ||
+    normalized.includes("econnrefused");
+
+  if (providerUnavailable) {
+    const quotaHelp = normalized.includes("429") || normalized.includes("quota")
+      ? " OpenAI quota or billing is blocking the hosted planner; update the key/billing or restart local dev with mock planner mode."
+      : "";
+    return {
+      runStatus: "blocked",
+      kind: "providerUnavailable",
+      reason: `Provider is unavailable.${quotaHelp} ${rawMessage}`.trim(),
+      rawMessage
+    };
+  }
+
+  return {
+    runStatus: "failed",
+    kind: "executionFailed",
+    reason: rawMessage,
+    rawMessage
+  };
 }
 
 function basePolicy(id: string, name: string, now: string): AutopilotPolicy {

@@ -1,6 +1,8 @@
 param(
   [switch]$MockPlanner,
   [switch]$NoDevSignIn,
+  [switch]$RequireOpenAI,
+  [switch]$SkipPlannerProbe,
   [int]$CloudPort = 0,
   [string]$EnvFile = ".env.local"
 )
@@ -115,6 +117,65 @@ function Set-DesktopDevAuth {
   Write-Host "Dev auth: signed in to local AgentBridge Cloud as $($login.user.email)"
 }
 
+function Get-CloudErrorMessage {
+  param([Parameter(Mandatory=$true)]$ErrorRecord)
+
+  if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
+    try {
+      $payload = $ErrorRecord.ErrorDetails.Message | ConvertFrom-Json
+      if ($payload.error) {
+        return [string]$payload.error
+      }
+    } catch {
+      return $ErrorRecord.ErrorDetails.Message
+    }
+  }
+  return $ErrorRecord.Exception.Message
+}
+
+function Test-MockPlannerEnabled {
+  $value = "$env:AGENTBRIDGE_CLOUD_MOCK".ToLowerInvariant()
+  return $value -eq "1" -or $value -eq "true"
+}
+
+function Test-CloudPlanner {
+  param([Parameter(Mandatory=$true)][string]$CloudBaseUrl)
+
+  try {
+    $login = Invoke-RestMethod -Method Post -Uri "$CloudBaseUrl/v1/auth/session/dev-login" -ContentType "application/json"
+    $body = @{
+      payload = @{
+        intent = "AgentBridge local planner startup probe."
+      }
+    } | ConvertTo-Json -Depth 5
+    Invoke-RestMethod `
+      -Method Post `
+      -Uri "$CloudBaseUrl/v1/planner/task-spec" `
+      -Headers @{ authorization = "Bearer $($login.token)" } `
+      -ContentType "application/json" `
+      -Body $body | Out-Null
+    return @{ ok = $true; message = "" }
+  } catch {
+    return @{ ok = $false; message = Get-CloudErrorMessage -ErrorRecord $_ }
+  }
+}
+
+function Start-AgentBridgeCloud {
+  param(
+    [Parameter(Mandatory=$true)][string]$NodeCommand,
+    [Parameter(Mandatory=$true)][string]$WorkingDirectory
+  )
+
+  return Start-Process `
+    -FilePath $NodeCommand `
+    -ArgumentList @("apps/cloud/dist/src/index.js") `
+    -WorkingDirectory $WorkingDirectory `
+    -WindowStyle Hidden `
+    -RedirectStandardOutput $cloudOut `
+    -RedirectStandardError $cloudErr `
+    -PassThru
+}
+
 Push-Location $repoRoot
 try {
   Import-DotEnvFile -Path (Join-Path $repoRoot $EnvFile)
@@ -125,7 +186,7 @@ try {
   if ($MockPlanner) {
     $env:AGENTBRIDGE_CLOUD_MOCK = "1"
   }
-  if (!$env:OPENAI_API_KEY -and !$env:AGENTBRIDGE_CLOUD_MOCK) {
+  if (!$env:OPENAI_API_KEY -and !(Test-MockPlannerEnabled)) {
     $env:AGENTBRIDGE_CLOUD_MOCK = "1"
     Write-Warning "OPENAI_API_KEY is not set; starting AgentBridge Cloud in deterministic mock planner mode."
   }
@@ -143,22 +204,29 @@ try {
     $nodeCommand = (Get-Command node -ErrorAction Stop).Source
   }
 
-  $cloud = Start-Process `
-    -FilePath $nodeCommand `
-    -ArgumentList @("apps/cloud/dist/src/index.js") `
-    -WorkingDirectory $repoRoot `
-    -WindowStyle Hidden `
-    -RedirectStandardOutput $cloudOut `
-    -RedirectStandardError $cloudErr `
-    -PassThru
+  $cloud = Start-AgentBridgeCloud -NodeCommand $nodeCommand -WorkingDirectory $repoRoot
 
   try {
     Wait-ForHttp -Url "$env:AGENTBRIDGE_CLOUD_URL/health" -Process $cloud -Name "AgentBridge Cloud"
+    if (!(Test-MockPlannerEnabled) -and !$SkipPlannerProbe) {
+      $probe = Test-CloudPlanner -CloudBaseUrl $env:AGENTBRIDGE_CLOUD_URL
+      if (!$probe.ok) {
+        if ($RequireOpenAI) {
+          throw "OpenAI planner startup probe failed: $($probe.message)"
+        }
+        Write-Warning "OpenAI planner startup probe failed: $($probe.message)"
+        Write-Warning "Restarting AgentBridge Cloud in deterministic mock planner mode for local development. Use -RequireOpenAI to fail instead."
+        Stop-Process -Id $cloud.Id -Force -ErrorAction SilentlyContinue
+        $env:AGENTBRIDGE_CLOUD_MOCK = "1"
+        $cloud = Start-AgentBridgeCloud -NodeCommand $nodeCommand -WorkingDirectory $repoRoot
+        Wait-ForHttp -Url "$env:AGENTBRIDGE_CLOUD_URL/health" -Process $cloud -Name "AgentBridge Cloud"
+      }
+    }
     if (!$NoDevSignIn) {
       Set-DesktopDevAuth -CloudBaseUrl $env:AGENTBRIDGE_CLOUD_URL
     }
     Write-Host "AgentBridge Cloud: $env:AGENTBRIDGE_CLOUD_URL"
-    Write-Host "Planner mode: $(if ($env:AGENTBRIDGE_CLOUD_MOCK) { 'mock' } else { 'OpenAI' })"
+    Write-Host "Planner mode: $(if (Test-MockPlannerEnabled) { 'mock' } else { 'OpenAI' })"
     pnpm desktop:dev
   } finally {
     if (!$cloud.HasExited) {

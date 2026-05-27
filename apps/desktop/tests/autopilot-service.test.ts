@@ -94,6 +94,29 @@ describe("AutopilotService", () => {
     expect(status.pendingDecision?.prompt).toContain("Environment-style secret");
   });
 
+  it("blocks instead of failing when the planner provider is unavailable", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    const service = new AutopilotService(
+      store,
+      {
+        async sendUserMessageToPlanner() {
+          throw new Error("AgentBridge Cloud returned HTTP 429: quota exceeded");
+        }
+      } as unknown as WorkbenchService,
+      fixedNow
+    );
+
+    const status = await service.startAutopilot("mission_1");
+
+    expect(status.run?.status).toBe("blocked");
+    expect(status.run?.stopReason).toContain("Provider is unavailable");
+    expect(status.run?.stopReason).toContain("quota");
+    await expect(store.listAutopilotSteps(status.run?.id ?? "")).resolves.toEqual([
+      expect.objectContaining({ kind: "plan", status: "blocked" })
+    ]);
+  });
+
   it("blocks autonomous execution when completion contract lacks objective evidence", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveMission(mission());
