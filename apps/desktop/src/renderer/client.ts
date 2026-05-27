@@ -35,9 +35,6 @@ import type {
   AgentTurn,
   ExecutorTaskResult,
   HandoffCard,
-  PlannerProviderMode,
-  PlannerResponse,
-  ReviewResult,
   TaskSpec,
   WorkspaceCandidate
 } from "@agentbridge/core";
@@ -85,7 +82,6 @@ let mockAuditEvents: AuditEvent[] = [];
 let mockMissions: Mission[] = [];
 let mockMissionDetails = new Map<string, MissionDetail>();
 let mockProviderProfiles: AgentProviderProfile[] = defaultMockProviderProfiles();
-let mockPlannerMode: PlannerProviderMode = "hostedAgentBridge";
 let mockAgentSessions: AgentSessionRef[] = [];
 let mockAgentTurns: AgentTurn[] = [];
 let mockAgentEvents: AgentEvent[] = [];
@@ -130,24 +126,6 @@ const mockPlatformStatus: PlatformStatus = {
 
 function defaultMockProviderProfiles(): AgentProviderProfile[] {
   return [
-    {
-      id: "agentbridge-hosted-planner",
-      kind: "planner",
-      displayName: "AgentBridge Hosted Planner",
-      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
-      authMode: "agentBridgeCloud",
-      status: "needsAuth",
-      metadata: { mode: "hostedAgentBridge", reason: "Sign in to AgentBridge." }
-    },
-    {
-      id: "openai-planner",
-      kind: "planner",
-      displayName: "OpenAI Planner",
-      capabilities: ["canPlan", "canReview", "canCreateSession", "canResumeSession", "canSendMessage", "canReadResult"],
-      authMode: "apiKey",
-      status: "needsAuth",
-      metadata: { mode: "userOpenAiApiKey", advanced: true, adapter: "mock", reason: "Set OPENAI_API_KEY or AGENTBRIDGE_OPENAI_API_KEY." }
-    },
     {
       id: "codex",
       kind: "executor",
@@ -228,7 +206,6 @@ function resetMockState({ includeDefaultCapture }: { includeDefaultCapture: bool
   mockMissions = [];
   mockMissionDetails = new Map<string, MissionDetail>();
   mockProviderProfiles = defaultMockProviderProfiles();
-  mockPlannerMode = "hostedAgentBridge";
   mockAgentSessions = [];
   mockAgentTurns = [];
   mockAgentEvents = [];
@@ -329,7 +306,7 @@ function seedConnectedScenario(options: { longContent?: boolean } = {}): void {
   mockExtensionConnected = true;
   mockAuthSignedIn = true;
   mockProviderProfiles = mockProviderProfiles.map((profile) => {
-    if (profile.id === "agentbridge-hosted-planner" || profile.id === "codex") {
+    if (profile.id === "codex") {
       return { ...profile, status: "available", metadata: { ...profile.metadata, reason: "Scenario ready." } };
     }
     return profile;
@@ -363,15 +340,15 @@ function seedWorkbenchMission(scenario: "planned" | "verification-failed" | "aut
     id: "artifact_scenario_planner_response",
     missionId,
     kind: "modelResponse" as const,
-    title: "Planner response",
-    content: "Scenario planner response with enough structure to generate a TaskSpec.",
-    metadata: { scenario: true },
+    title: "Imported ChatGPT planner response",
+    content: "Scenario ChatGPT plan with enough structure to generate a TaskSpec.",
+    metadata: { scenario: true, providerId: "chatgpt-manual", source: "manualChatGptPlannerImport", imported: true },
     createdAt: scenarioTimestamp
   };
   const card = {
     ...mockHandoffCard(missionId, taskSpec),
     id: "card_scenario_task",
-    sourceId: capture?.sourceId ?? "provider:agentbridge-hosted-planner",
+    sourceId: capture?.sourceId ?? "provider:chatgpt-manual",
     captureId: capture?.id ?? "mock_planner_turn",
     targetId: target?.id ?? "target_codex_agentbridge",
     taskSpec,
@@ -436,7 +413,7 @@ function seedWorkbenchMission(scenario: "planned" | "verification-failed" | "aut
     title: taskSpec.title,
     goal: taskSpec.goal,
     status: scenario === "verification-failed" ? "needs_review" : scenario === "planned" ? "planned" : "ready",
-    sourceIds: ["provider:agentbridge-hosted-planner"],
+    sourceIds: ["provider:chatgpt-manual"],
     captureIds: capture ? [capture.id] : [],
     handoffCardIds: scenario === "planned" ? [] : [card.id],
     artifactIds: artifacts.map((artifact) => artifact.id),
@@ -610,57 +587,6 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         .filter((event) => !filter.turnId || event.turnId === filter.turnId)
         .filter((event) => !filter.type || event.type === filter.type);
     },
-    async getPlannerMode() {
-      return mockPlannerMode;
-    },
-    async setPlannerMode(mode) {
-      mockPlannerMode = mode;
-      return mockPlannerMode;
-    },
-    async listPlannerModes() {
-      return [
-        {
-          mode: "hostedAgentBridge" as const,
-          providerId: "agentbridge-hosted-planner",
-          label: "AgentBridge hosted",
-          default: true,
-          advanced: false,
-          status: mockAuthSignedIn ? "available" as const : "needsAuth" as const,
-          description: "Default hosted planner."
-        },
-        {
-          mode: "userOpenAiApiKey" as const,
-          providerId: "openai-planner",
-          label: "Use my OpenAI API key",
-          default: false,
-          advanced: true,
-          status: "needsAuth" as const,
-          description: "Advanced BYOK mode."
-        },
-        {
-          mode: "codexLocalPlanner" as const,
-          providerId: "codex-local-planner",
-          label: "Codex-only local planner",
-          default: false,
-          advanced: true,
-          status: "unsupported" as const,
-          description: "Future no-cloud mode."
-        },
-        {
-          mode: "localModelPlaceholder" as const,
-          providerId: "local-model-planner",
-          label: "Local model",
-          default: false,
-          advanced: true,
-          status: "unsupported" as const,
-          description: "Future local model mode."
-        }
-      ];
-    },
-    async getActivePlannerProvider() {
-      const providerId = mockPlannerMode === "hostedAgentBridge" ? "agentbridge-hosted-planner" : "openai-planner";
-      return mockProviderProfiles.find((profile) => profile.id === providerId);
-    },
     async getAgentBridgeAuthStatus() {
       return {
         status: mockAuthSignedIn ? "signedIn" : "signedOut",
@@ -672,16 +598,10 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     },
     async signInAgentBridgeDevMode() {
       mockAuthSignedIn = true;
-      mockProviderProfiles = mockProviderProfiles.map((profile) =>
-        profile.id === "agentbridge-hosted-planner" ? { ...profile, status: "available" } : profile
-      );
       return this.getAgentBridgeAuthStatus();
     },
     async signOutAgentBridge() {
       mockAuthSignedIn = false;
-      mockProviderProfiles = mockProviderProfiles.map((profile) =>
-        profile.id === "agentbridge-hosted-planner" ? { ...profile, status: "needsAuth" } : profile
-      );
       return this.getAgentBridgeAuthStatus();
     },
     async getAgentBridgeCurrentUser() {
@@ -738,15 +658,30 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
       return mission;
     },
     async createWorkbenchMission(input = {}) {
+      const plannerArtifact = input.importedPlannerResponse?.trim()
+        ? {
+            id: `artifact_planner_${Date.now()}`,
+            missionId: `mission_${mockMissions.length + 1}`,
+            kind: "modelResponse" as const,
+            title: "Imported ChatGPT planner response",
+            content: input.importedPlannerResponse.trim(),
+            metadata: {
+              providerId: "chatgpt-manual",
+              source: "manualChatGptPlannerImport",
+              imported: true
+            },
+            createdAt: now()
+          }
+        : undefined;
       const mission: Mission = {
-        id: `mission_${mockMissions.length + 1}`,
+        id: plannerArtifact?.missionId ?? `mission_${mockMissions.length + 1}`,
         title: input.title ?? "Workbench task",
         goal: input.goal ?? "Plan, execute, verify, and review an AI-agent task.",
-        status: "draft",
-        sourceIds: ["provider:agentbridge-hosted-planner"],
+        status: plannerArtifact ? "planned" : "draft",
+        sourceIds: ["provider:chatgpt-manual"],
         captureIds: [],
         handoffCardIds: [],
-        artifactIds: [],
+        artifactIds: plannerArtifact ? [plannerArtifact.id] : [],
         runIds: [],
         ...(input.repoContext ? { repoContext: input.repoContext } : {}),
         verificationPlan: {
@@ -762,26 +697,12 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
         mission,
         handoffCards: [],
         captures: [],
-        artifacts: [],
+        artifacts: plannerArtifact ? [plannerArtifact] : [],
         deliveryAttempts: [],
         runs: [],
         verificationResults: []
       });
       return mission;
-    },
-    async sendUserMessageToPlanner(missionId, text) {
-      const response: PlannerResponse = {
-        id: `planner_response_${mockAgentTurns.length + 1}`,
-        providerId: "agentbridge-hosted-planner",
-        sessionRefId: "mock_planner_session",
-        turnId: `agent_turn_${mockAgentTurns.length + 1}`,
-        content: `Mock planner response: ${text}`,
-        artifactIds: [],
-        createdAt: now(),
-        metadata: { mock: true }
-      };
-      updateMockMission(missionId, { status: "planned" });
-      return response;
     },
     async createTaskSpecFromLatestPlannerTurn(missionId) {
       const taskSpec = mockTaskSpec();
@@ -809,19 +730,6 @@ function createMockAgentBridgeApi(): AgentBridgeApi {
     },
     async runMissionWorkbenchVerification(missionId, input = {}) {
       return this.runVerification({ missionId, ...input });
-    },
-    async sendVerificationToPlannerForReview(missionId) {
-      const result: ReviewResult = {
-        id: `review_result_${mockAgentTurns.length + 1}`,
-        providerId: "agentbridge-hosted-planner",
-        content: "Mock planner review: needs review.",
-        statusSuggestion: "needs_review",
-        artifactIds: [],
-        createdAt: now(),
-        metadata: { mock: true }
-      };
-      updateMockMission(missionId, { status: "needs_review" });
-      return result;
     },
     async createFollowUpFromPlannerReview(missionId) {
       const card = mockHandoffCard(missionId, {
@@ -1510,7 +1418,7 @@ function mockHandoffCard(missionId: string, taskSpec: TaskSpec): HandoffCard {
   return {
     id: `card_${Date.now()}_${Math.random().toString(36).slice(2)}`,
     missionId,
-    sourceId: "provider:agentbridge-hosted-planner",
+    sourceId: "provider:chatgpt-manual",
     captureId: "mock_planner_turn",
     targetId: "provider:codex",
     recipe: "implementationBrief",

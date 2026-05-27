@@ -10,10 +10,7 @@
     "start": "node dist/src/index.js",
     "test": "vitest run"
   },
-  "dependencies": {
-    "@agentbridge/core": "workspace:*",
-    "openai": "^6.39.0"
-  },
+  "dependencies": {},
   "devDependencies": {
     "@types/node": "^22.10.2",
     "typescript": "^5.7.2",

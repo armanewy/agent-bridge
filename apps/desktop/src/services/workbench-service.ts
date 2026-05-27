@@ -9,10 +9,6 @@ import {
   type ExecutorTurnMonitorResult,
   type HandoffCard,
   type Mission,
-  type PlannerProvider,
-  type PlannerRequest,
-  type PlannerResponse,
-  type ReviewResult,
   type Run,
   type RunStep,
   type TaskSpec,
@@ -26,6 +22,8 @@ import type { VerificationService } from "./verification-service.js";
 import type { WorkspaceResolverService } from "./workspace-resolver-service.js";
 import { RepoContextService } from "./repo-context-service.js";
 import { parseTaskSpecText } from "../shared/task-spec-import.js";
+
+const CHATGPT_MANUAL_PROVIDER_ID = "chatgpt-manual";
 
 export interface CreateWorkbenchMissionInput {
   title?: string;
@@ -47,7 +45,6 @@ export class WorkbenchService {
 
   constructor(
     private readonly store: LocalStore,
-    private readonly planner: PlannerProvider,
     private readonly executor: ExecutorProvider,
     private readonly verificationService: VerificationService,
     private readonly now: () => string = () => new Date().toISOString(),
@@ -64,7 +61,7 @@ export class WorkbenchService {
       title: input.title ?? "Workbench task",
       goal: input.goal ?? "Plan, execute, verify, and review an AI-agent task.",
       status: "draft",
-      sourceIds: [`provider:${this.planner.profile().id}`],
+      sourceIds: [`provider:${CHATGPT_MANUAL_PROVIDER_ID}`],
       captureIds: [],
       handoffCardIds: [],
       artifactIds: [],
@@ -109,25 +106,6 @@ export class WorkbenchService {
     return savedMission;
   }
 
-  async sendUserMessageToPlanner(missionId: string, text: string): Promise<PlannerResponse> {
-    const mission = await this.requireMission(missionId);
-    const response = await this.planner.plan({
-      missionId,
-      prompt: text,
-      contextArtifactIds: mission.artifactIds,
-      ...(mission.repoContext ? { repoContext: mission.repoContext } : {}),
-      metadata: { source: "workbenchPlanner" }
-    });
-    await this.store.saveMission({
-      ...mission,
-      status: "planned",
-      artifactIds: unique([...mission.artifactIds, ...response.artifactIds]),
-      updatedAt: this.now()
-    });
-    await this.appendRunStep(missionId, "planning", "Ask Planner", "passed", response.artifactIds);
-    return response;
-  }
-
   async createTaskSpecFromLatestPlannerTurn(missionId: string): Promise<HandoffCard> {
     const mission = await this.requireMission(missionId);
     const plannerArtifact = await this.latestArtifact(missionId, (artifact) => artifact.kind === "modelResponse");
@@ -135,18 +113,12 @@ export class WorkbenchService {
       throw new Error("No planner response artifact found for this mission.");
     }
     const parsedPlannerTaskSpec = parseTaskSpecText(plannerArtifact.content);
-    const taskSpecResponse = !parsedPlannerTaskSpec && hasCreateTaskSpec(this.planner)
-      ? await this.planner.createTaskSpec({
-          missionId,
-          prompt: plannerArtifact.content,
-          contextArtifactIds: unique([...mission.artifactIds, plannerArtifact.id]),
-          ...(mission.repoContext ? { repoContext: mission.repoContext } : {}),
-          metadata: { source: "workbenchTaskSpec" }
-        })
-      : undefined;
-    const taskSpec = parsedPlannerTaskSpec ?? taskSpecResponse?.taskSpec ?? taskSpecFromPlannerText(plannerArtifact.content, mission);
+    if (!parsedPlannerTaskSpec) {
+      throw new Error("Selected ChatGPT plan is missing the expected headings. Plan with ChatGPT again, then use the selected plan.");
+    }
+    const taskSpec = parsedPlannerTaskSpec;
     const createdAt = this.now();
-    const generatedFromArtifactId = taskSpecResponse?.artifactIds[0] ?? plannerArtifact.id;
+    const generatedFromArtifactId = plannerArtifact.id;
     const taskArtifact: Artifact = {
       id: `artifact_${randomUUID()}`,
       missionId,
@@ -169,7 +141,7 @@ export class WorkbenchService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId,
-      sourceId: `provider:${this.planner.profile().id}`,
+      sourceId: `provider:${CHATGPT_MANUAL_PROVIDER_ID}`,
       captureId: plannerArtifact.id,
       targetId: "provider:codex",
       recipe: "implementationBrief",
@@ -192,11 +164,10 @@ export class WorkbenchService {
       goal: taskSpec.goal,
       status: completionContract?.status === "invalid" || completionContract?.status === "needs_user_input" ? "needs_review" : "ready",
       handoffCardIds: unique([...mission.handoffCardIds, card.id]),
-      artifactIds: unique([...mission.artifactIds, ...(taskSpecResponse?.artifactIds ?? []), taskArtifact.id, promptArtifact.id]),
+      artifactIds: unique([...mission.artifactIds, taskArtifact.id, promptArtifact.id]),
       updatedAt: createdAt
     });
     await this.appendRunStep(missionId, "transform", "Generate TaskSpec", "passed", [
-      ...(taskSpecResponse?.artifactIds ?? []),
       taskArtifact.id,
       promptArtifact.id
     ]);
@@ -266,35 +237,6 @@ export class WorkbenchService {
     return updated;
   }
 
-  async sendVerificationToPlannerForReview(missionId: string): Promise<ReviewResult> {
-    const mission = await this.requireMission(missionId);
-    const card = await this.latestHandoffCard(missionId);
-    const verificationResults = await this.store.listVerificationResultsForMission(missionId);
-    const verificationResult = verificationResults[0];
-    if (!verificationResult) {
-      throw new Error("No verification result found for this mission.");
-    }
-    const artifacts = await this.store.listArtifactsForMission(missionId);
-    const review = await this.planner.review({
-      missionId,
-      taskSpec: card.taskSpec,
-      verificationResult,
-      verificationSummary: buildPlannerReviewSummary(verificationResult.summary, artifacts),
-      artifactIds: unique([...mission.artifactIds, ...verificationResult.artifactIds]),
-      metadata: { source: "verificationReview" }
-    });
-    const status = review.statusSuggestion === "passed" ? "passed" : review.statusSuggestion === "follow_up_needed" ? "needs_review" : "needs_review";
-    const current = await this.requireMission(missionId);
-    await this.store.saveMission({
-      ...current,
-      status,
-      artifactIds: unique([...current.artifactIds, ...review.artifactIds]),
-      updatedAt: this.now()
-    });
-    await this.appendRunStep(missionId, "review", "Ask Planner to review verification", "passed", review.artifactIds);
-    return review;
-  }
-
   async createFollowUpFromPlannerReview(missionId: string): Promise<HandoffCard> {
     const mission = await this.requireMission(missionId);
     const reviewArtifact = await this.latestArtifact(missionId, (artifact) => artifact.kind === "modelResponse");
@@ -317,7 +259,7 @@ export class WorkbenchService {
     const card: HandoffCard = {
       id: `card_${randomUUID()}`,
       missionId,
-      sourceId: `provider:${this.planner.profile().id}`,
+      sourceId: `provider:${CHATGPT_MANUAL_PROVIDER_ID}`,
       captureId: reviewArtifact.id,
       targetId: "provider:codex",
       recipe: "debuggingRequest",
@@ -574,34 +516,8 @@ function taskSpecFromPlannerText(content: string, mission: Mission, fallback?: T
   };
 }
 
-function buildPlannerReviewSummary(summary: string, artifacts: Artifact[]): string {
-  const gitDiff = artifacts.find((artifact) => artifact.kind === "gitDiff");
-  const commandOutputs = artifacts.filter(
-    (artifact) => artifact.kind === "testOutput" || artifact.kind === "lintOutput" || artifact.kind === "typecheckOutput"
-  );
-  const failedOutputs = commandOutputs.filter((artifact) => /exitCode:\s*(?!0\b)\d+/i.test(artifact.content ?? ""));
-  return [
-    summary,
-    "",
-    "Changed files summary:",
-    excerpt(gitDiff?.content, 1200) ?? "No git diff artifact was captured.",
-    "",
-    "Failed command excerpts:",
-    failedOutputs.length === 0
-      ? "No failed command output artifacts were detected."
-      : failedOutputs.map((artifact) => [`${artifact.title}:`, excerpt(artifact.content, 1400) ?? "No output."].join("\n")).join("\n\n")
-  ].join("\n");
-}
-
 function statusForExecutorDelivery(result: ExecutorTaskResult): RunStep["status"] {
   return result.deliveryMode === "openOnlyFallback" ? "needs_review" : "passed";
-}
-
-function excerpt(value: string | undefined, maxLength: number): string | undefined {
-  if (!value?.trim()) {
-    return undefined;
-  }
-  return value.length > maxLength ? `${value.slice(0, maxLength)}\n...[truncated]` : value;
 }
 
 function firstLine(content: string): string | undefined {
@@ -626,10 +542,4 @@ function hasSteerTurn(provider: ExecutorProvider): provider is ExecutorProvider 
 
 function hasMonitorTurn(provider: ExecutorProvider): provider is ExecutorProvider & Required<Pick<ExecutorProvider, "monitorTurn">> {
   return typeof provider.monitorTurn === "function";
-}
-
-function hasCreateTaskSpec(provider: PlannerProvider): provider is PlannerProvider & {
-  createTaskSpec(input: PlannerRequest): Promise<PlannerResponse>;
-} {
-  return typeof (provider as PlannerProvider & { createTaskSpec?: unknown }).createTaskSpec === "function";
 }

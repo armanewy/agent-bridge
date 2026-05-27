@@ -3,7 +3,7 @@
 AgentBridge treats Windows and macOS as first-class desktop targets. The default Workbench path is OS-neutral:
 
 ```text
-OpenAI Planner Provider -> Codex Executor Provider -> repo verification -> local artifacts
+ChatGPT handoff -> Codex Executor Provider -> repo verification -> local artifacts
 ```
 
 The core path does not require browser extensions, clipboard capture, Windows UI Automation, macOS Accessibility, or generic desktop automation.
@@ -24,7 +24,6 @@ Current capability gating:
 | Capability | Windows | macOS | Notes |
 | --- | --- | --- | --- |
 | Electron desktop app | yes | yes | Packaged app target on both platforms. |
-| OpenAI Planner Provider | yes | yes | Uses API key from environment. |
 | Codex App Server Executor | yes | yes | Preferred executor surface. |
 | Codex deep-link fallback | yes | yes | Used only when platform reports support. |
 | Verification commands | yes | yes | Runs configured commands only. |

@@ -16,57 +16,24 @@ import { JsonFileStore } from "@agentbridge/local-store";
 import { ProviderRegistryService } from "../src/services/provider-registry-service.js";
 
 let tempDir: string;
-let oldOpenAiKey: string | undefined;
-let oldAgentBridgeOpenAiKey: string | undefined;
 
 beforeEach(async () => {
   tempDir = await mkdtemp(join(tmpdir(), "agentbridge-provider-registry-"));
-  oldOpenAiKey = process.env.OPENAI_API_KEY;
-  oldAgentBridgeOpenAiKey = process.env.AGENTBRIDGE_OPENAI_API_KEY;
-  delete process.env.OPENAI_API_KEY;
-  delete process.env.AGENTBRIDGE_OPENAI_API_KEY;
 });
 
 afterEach(async () => {
-  if (oldOpenAiKey === undefined) {
-    delete process.env.OPENAI_API_KEY;
-  } else {
-    process.env.OPENAI_API_KEY = oldOpenAiKey;
-  }
-  if (oldAgentBridgeOpenAiKey === undefined) {
-    delete process.env.AGENTBRIDGE_OPENAI_API_KEY;
-  } else {
-    process.env.AGENTBRIDGE_OPENAI_API_KEY = oldAgentBridgeOpenAiKey;
-  }
   await rm(tempDir, { recursive: true, force: true });
 });
 
 describe("ProviderRegistryService", () => {
-  it("lists placeholder provider profiles", async () => {
+  it("lists the Codex executor placeholder only", async () => {
     const store = new JsonFileStore(tempDir);
     const registry = new ProviderRegistryService(store);
 
     const profiles = await registry.listProviderProfiles();
 
-    expect(profiles.map((profile) => profile.id)).toEqual([
-      "agentbridge-hosted-planner",
-      "codex",
-      "codex-local-planner",
-      "local-model-planner",
-      "openai-planner"
-    ]);
-    expect(profiles.find((profile) => profile.id === "agentbridge-hosted-planner")?.kind).toBe("planner");
-    expect(profiles.find((profile) => profile.id === "openai-planner")?.kind).toBe("planner");
+    expect(profiles.map((profile) => profile.id)).toEqual(["codex"]);
     expect(profiles.find((profile) => profile.id === "codex")?.kind).toBe("executor");
-  });
-
-  it("reports OpenAI Planner as needsAuth when no API key is configured", async () => {
-    const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
-
-    const profile = await registry.getProviderStatus("openai-planner");
-
-    expect(profile?.status).toBe("needsAuth");
-    expect(profile?.authMode).toBe("apiKey");
   });
 
   it("persists placeholder provider profiles after listing", async () => {
@@ -75,15 +42,6 @@ describe("ProviderRegistryService", () => {
 
     await registry.listProviderProfiles();
 
-    expect(await store.getProviderProfile("openai-planner")).toMatchObject({
-      id: "openai-planner",
-      kind: "planner"
-    });
-    expect(await store.getProviderProfile("agentbridge-hosted-planner")).toMatchObject({
-      id: "agentbridge-hosted-planner",
-      kind: "planner",
-      authMode: "agentBridgeCloud"
-    });
     expect(await store.getProviderProfile("codex")).toMatchObject({
       id: "codex",
       kind: "executor"
@@ -107,56 +65,21 @@ describe("ProviderRegistryService", () => {
     expect(await registry.listSessions("codex")).toEqual([session]);
   });
 
-  it("uses hosted AgentBridge Planner as the default planner mode", async () => {
+  it("uses explicitly registered adapters without adding default planner modes", async () => {
     const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
+    registry.registerProvider(new MockManualPlanner("chatgpt-manual-test", "manual response"));
 
-    expect(await registry.getPlannerMode()).toBe("hostedAgentBridge");
-    expect(await registry.getActivePlannerProvider()).toMatchObject({
-      id: "agentbridge-hosted-planner",
-      authMode: "agentBridgeCloud"
-    });
-  });
+    const profiles = await registry.listProviderProfiles();
 
-  it("switches planner modes and rejects invalid modes", async () => {
-    const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
-
-    await expect(registry.setPlannerMode("userOpenAiApiKey")).resolves.toBe("userOpenAiApiKey");
-    await expect(registry.setPlannerMode("invalid" as never)).rejects.toThrow("not supported");
-    const modes = await registry.listPlannerModes();
-    expect(modes.find((mode) => mode.mode === "hostedAgentBridge")?.default).toBe(true);
-    expect(modes.find((mode) => mode.mode === "userOpenAiApiKey")?.advanced).toBe(true);
-  });
-
-  it("persists selected planner mode across registry instances", async () => {
-    const store = new JsonFileStore(tempDir);
-    const registry = new ProviderRegistryService(store);
-
-    await registry.setPlannerMode("userOpenAiApiKey");
-
-    const nextRegistry = new ProviderRegistryService(store);
-    await expect(nextRegistry.getPlannerMode()).resolves.toBe("userOpenAiApiKey");
-    await expect(nextRegistry.getActivePlannerProvider()).resolves.toMatchObject({ id: "openai-planner" });
-  });
-
-  it("resolves the active planner adapter from the selected planner mode", async () => {
-    const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
-    registry.registerProvider(new MockPlanner("agentbridge-hosted-planner", "hosted response"));
-    registry.registerProvider(new MockPlanner("codex-local-planner", "local response"));
-
-    await expect((await registry.getActivePlannerAdapter()).plan(plannerRequest())).resolves.toMatchObject({
-      content: "hosted response"
-    });
-
-    await registry.setPlannerMode("codexLocalPlanner");
-
-    expect(registry.getActivePlannerProfile()).toMatchObject({ id: "codex-local-planner" });
-    await expect((await registry.getActivePlannerAdapter()).plan(plannerRequest())).resolves.toMatchObject({
-      content: "local response"
+    expect(profiles.map((profile) => profile.id)).toEqual(["chatgpt-manual-test", "codex"]);
+    await expect(registry.getProviderStatus("chatgpt-manual-test")).resolves.toMatchObject({
+      id: "chatgpt-manual-test",
+      status: "available"
     });
   });
 });
 
-class MockPlanner implements PlannerProvider {
+class MockManualPlanner implements PlannerProvider {
   constructor(private readonly id: string, private readonly response: string) {}
 
   profile(): AgentProviderProfile {
@@ -226,12 +149,4 @@ class MockPlanner implements PlannerProvider {
       metadata: {}
     };
   }
-}
-
-function plannerRequest(): PlannerRequest {
-  return {
-    missionId: "mission_1",
-    prompt: "Plan",
-    metadata: {}
-  };
 }

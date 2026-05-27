@@ -20,7 +20,7 @@ describe("redaction helpers", () => {
   });
 
   it("redacts matched ranges", () => {
-    const input = "OPENAI_API_KEY=sk-abcdefghijklmnopqrstuvwxyz";
+    const input = "SECRET_TOKEN=sk-abcdefghijklmnopqrstuvwxyz";
     const findings = detectRedactions(input);
 
     expect(applyRedactions(input, findings)).toContain("[REDACTED:");

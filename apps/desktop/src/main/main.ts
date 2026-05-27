@@ -28,10 +28,7 @@ import { ComponentDiscoveryService } from "../services/component-discovery-servi
 import { CodexAppServerClient, findCodexExecutable, JsonRpcStdioTransport } from "../services/codex-app-server-client.js";
 import { CodexSessionService } from "../services/codex-session-service.js";
 import { WorkflowLinkService, type CreateWorkflowLinkInput, type CreateTaskFromWorkflowLinkInput } from "../services/workflow-link-service.js";
-import { ActivePlannerProvider, ProviderRegistryService } from "../services/provider-registry-service.js";
-import { AgentBridgeHostedPlannerProvider } from "../services/providers/agentbridge-hosted-planner-provider.js";
-import { OpenAIPlannerProvider } from "../services/providers/openai-planner-provider.js";
-import { CodexLocalPlannerProvider } from "../services/providers/codex-local-planner-provider.js";
+import { ProviderRegistryService } from "../services/provider-registry-service.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
 import { PlatformService, assertAllowedExternalUrl } from "../services/platform-service.js";
@@ -205,21 +202,13 @@ app.whenReady().then(async () => {
   const componentDiscoveryService = new ComponentDiscoveryService(store, windowsTargetService);
   const workflowLinkService = new WorkflowLinkService(store, transformService);
   const providerRegistryService = new ProviderRegistryService(store);
-  const hostedPlannerProvider = new AgentBridgeHostedPlannerProvider(store, authService);
-  const openAiPlannerProvider = new OpenAIPlannerProvider(store, { artifactBroker: artifactBrokerService });
-  const codexLocalPlannerProvider = new CodexLocalPlannerProvider(store, codexAppServerClient);
   const codexExecutorProvider = new CodexExecutorProvider(store, codexSessionService, codexTargetService, codexAppServerClient, undefined, {
     platform: platformCapabilities.platform,
     canUseCodexDeepLinks: platformCapabilities.canUseCodexDeepLinks
   }, artifactBrokerService);
-  providerRegistryService.registerProvider(hostedPlannerProvider);
-  providerRegistryService.registerProvider(openAiPlannerProvider);
-  providerRegistryService.registerProvider(codexLocalPlannerProvider);
   providerRegistryService.registerProvider(codexExecutorProvider);
-  const activePlannerProvider = new ActivePlannerProvider(providerRegistryService);
   const workbenchService = new WorkbenchService(
     store,
-    activePlannerProvider,
     codexExecutorProvider,
     verificationService,
     undefined,
@@ -261,10 +250,6 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:listAgentEvents", (_event, filter?: { providerId?: string; sessionRefId?: string; turnId?: string; type?: string }) =>
     providerRegistryService.listEvents(filter)
   );
-  ipcMain.handle("agentbridge:getPlannerMode", () => providerRegistryService.getPlannerMode());
-  ipcMain.handle("agentbridge:setPlannerMode", (_event, mode) => providerRegistryService.setPlannerMode(mode));
-  ipcMain.handle("agentbridge:listPlannerModes", () => providerRegistryService.listPlannerModes());
-  ipcMain.handle("agentbridge:getActivePlannerProvider", () => providerRegistryService.getActivePlannerProvider());
   ipcMain.handle("agentbridge:getAgentBridgeAuthStatus", () => authService.getAuthStatus());
   ipcMain.handle("agentbridge:signInAgentBridgeDevMode", () => authService.signInDevMode());
   ipcMain.handle("agentbridge:signOutAgentBridge", () => authService.signOut());
@@ -278,9 +263,6 @@ app.whenReady().then(async () => {
   ipcMain.handle("agentbridge:createWorkbenchMission", (_event, input?: CreateWorkbenchMissionInput) =>
     workbenchService.createWorkbenchMission(input)
   );
-  ipcMain.handle("agentbridge:sendUserMessageToPlanner", (_event, missionId: string, text: string) =>
-    workbenchService.sendUserMessageToPlanner(missionId, text)
-  );
   ipcMain.handle("agentbridge:createTaskSpecFromLatestPlannerTurn", (_event, missionId: string) =>
     workbenchService.createTaskSpecFromLatestPlannerTurn(missionId)
   );
@@ -289,9 +271,6 @@ app.whenReady().then(async () => {
   );
   ipcMain.handle("agentbridge:runMissionWorkbenchVerification", (_event, missionId: string, input?: Omit<VerificationRunRequest, "missionId">) =>
     workbenchService.runMissionVerification(missionId, input)
-  );
-  ipcMain.handle("agentbridge:sendVerificationToPlannerForReview", (_event, missionId: string) =>
-    workbenchService.sendVerificationToPlannerForReview(missionId)
   );
   ipcMain.handle("agentbridge:createFollowUpFromPlannerReview", (_event, missionId: string) =>
     workbenchService.createFollowUpFromPlannerReview(missionId)

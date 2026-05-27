@@ -182,14 +182,7 @@ export class AutopilotService {
     const latestVerification = verificationResults[0];
 
     if (!artifacts.some((artifact) => artifact.kind === "modelResponse")) {
-      return {
-        kind: "plan",
-        title: "Ask Planner",
-        execute: async () => {
-          const response = await this.workbenchService.sendUserMessageToPlanner(run.missionId, mission.goal);
-          return response.artifactIds;
-        }
-      };
+      return { kind: "stop", status: "blocked", reason: "Plan with ChatGPT before starting the mission." };
     }
     if (!cards.length) {
       return {
@@ -290,26 +283,12 @@ export class AutopilotService {
         return { kind: "stop", status: "passed", reason: decision.reason };
       }
       if (decision.kind === "retryWithFollowUp") {
-        return {
-          kind: "review",
-          title: "Ask Planner to review failed completion evidence",
-          execute: async () => {
-            const review = await this.workbenchService.sendVerificationToPlannerForReview(run.missionId);
-            return review.artifactIds;
-          }
-        };
+        return { kind: "stop", status: "blocked", reason: "Planner review is manual in the ChatGPT-first flow." };
       }
       return { kind: "stop", status: "passed", reason: "Verification passed." };
     }
     if (!artifacts.some((artifact) => artifact.kind === "modelResponse" && artifact.metadata.source === "verificationReview")) {
-      return {
-        kind: "review",
-        title: "Ask Planner to review",
-        execute: async () => {
-          const review = await this.workbenchService.sendVerificationToPlannerForReview(run.missionId);
-          return review.artifactIds;
-        }
-      };
+      return { kind: "stop", status: "blocked", reason: "Planner review is manual in the ChatGPT-first flow." };
     }
     return {
       kind: "createFollowUp",
@@ -696,7 +675,7 @@ function statusForStep(kind: AutopilotStep["kind"]): AutopilotRunStatus {
 function classifyStepFailure(error: unknown): AutopilotStepFailure {
   const rawMessage = error instanceof Error ? error.message : String(error);
   const normalized = rawMessage.toLowerCase();
-  const providerUnavailable =
+    const providerUnavailable =
     /agentbridge cloud returned http (401|403|408|409|429|500|502|503|504)/i.test(rawMessage) ||
     normalized.includes("quota") ||
     normalized.includes("rate limit") ||
@@ -708,7 +687,7 @@ function classifyStepFailure(error: unknown): AutopilotStepFailure {
 
   if (providerUnavailable) {
     const quotaHelp = normalized.includes("429") || normalized.includes("quota")
-      ? " OpenAI quota or billing is blocking the hosted planner; update the key/billing or plan with ChatGPT to skip the hosted planner."
+      ? " The provider returned a quota or billing error."
       : "";
     return {
       runStatus: "blocked",

@@ -2,32 +2,26 @@
 
 AgentBridge is local-first. Mission artifacts, staged files, prompts, verification logs, and provider records are stored under the local AgentBridge data directory by default.
 
-## Hosted Planner Threat Model
-
-Hosted planner mode removes OpenAI API-key setup from Simple Mode, but it introduces cloud payload risk. The default policy is payload minimization, not repo mirroring.
+## Default Threat Model
 
 Threats:
 
-- Hosted planner payload leakage.
-- Secret upload through artifacts or logs.
+- Secret transfer through artifacts or logs.
 - Unwanted repo reads during workspace inference.
 - Unwanted file writes from autonomous follow-up.
 - Autonomous command execution beyond configured verification.
 - Provider hallucination loops.
-- Hosted planner cost runaway.
 - Parallel mission conflicts in the same repo.
 
 Default mitigations:
 
-- Redact before hosted planner calls.
-- Block hosted planner calls when high-severity redaction findings are detected.
-- Reject oversized hosted planner payloads and raw file payloads server-side by default.
 - Keep repo files local by default.
-- Require approval for file upload.
+- Require approval for file transfer.
 - Run only configured verification commands by default.
-- Enforce max iterations and planner-call budgets.
+- Enforce max iterations and repeated-failure/no-change stop rules.
 - Require worktree/branch isolation for serious parallel loops.
 - Report delivery modes truthfully, especially Codex open-only fallback.
+- Treat ChatGPT planning as a user-mediated text handoff, not an automatic remote provider call.
 
 High-severity blockers:
 

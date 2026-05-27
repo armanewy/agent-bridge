@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { createCloudApp, type CloudPlannerRequest, type CloudPlannerTransport } from "../src/index.js";
+import { createCloudApp } from "../src/index.js";
 
 describe("AgentBridge Cloud scaffold", () => {
   it("responds to health checks", async () => {
@@ -9,14 +9,6 @@ describe("AgentBridge Cloud scaffold", () => {
 
     expect(response.status).toBe(200);
     expect(response.body.ok).toBe(true);
-  });
-
-  it("rejects unauthenticated planner routes", async () => {
-    const app = createTestCloudApp();
-
-    const response = await app.handle({ method: "POST", path: "/v1/planner/task-spec", body: {} });
-
-    expect(response.status).toBe(401);
   });
 
   it("supports development login and user lookup", async () => {
@@ -38,267 +30,53 @@ describe("AgentBridge Cloud scaffold", () => {
     expect(login.status).toBe(404);
   });
 
-  it("returns a valid mocked task spec", async () => {
-    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport(JSON.stringify(mockTaskSpec())) });
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
+  it("rejects authenticated routes without a token", async () => {
+    const app = createTestCloudApp();
 
-    const response = await app.handle({
+    const response = await app.handle({ method: "GET", path: "/v1/me" });
+
+    expect(response.status).toBe(401);
+  });
+
+  it("logs requests without raw request bodies", async () => {
+    const app = createTestCloudApp();
+    const login = await app.handle({
       method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "Simplify Workbench." } }
+      path: "/v1/auth/session/dev-login",
+      body: { secret: "do not log this" }
     });
-
-    expect(response.status).toBe(200);
-    expect(response.body.taskSpec).toMatchObject({ title: "Mock hosted planner TaskSpec" });
-  });
-
-  it("repairs an invalid task spec response once", async () => {
-    const requests: CloudPlannerRequest[] = [];
-    const app = createTestCloudApp(
-      {},
-      {
-        plannerTransport: {
-          async createResponse(request) {
-            requests.push(request);
-            return {
-              responseId: `resp_${requests.length}`,
-              outputText: requests.length === 1 ? "not json" : JSON.stringify(mockTaskSpec())
-            };
-          }
-        }
-      }
-    );
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-
-    const response = await app.handle({
-      method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "Simplify Workbench." } }
-    });
-
-    expect(response.status).toBe(200);
-    expect(requests).toHaveLength(2);
-    expect(response.body.metadata).toMatchObject({ repaired: true });
-  });
-
-  it("returns hosted review JSON from the planner transport", async () => {
-    const app = createTestCloudApp(
-      {},
-      {
-        plannerTransport: mockPlannerTransport(JSON.stringify({
-          reviewSummary: "Verification passed.",
-          statusSuggestion: "passed"
-        }))
-      }
-    );
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-
-    const response = await app.handle({
-      method: "POST",
-      path: "/v1/planner/review",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { verificationSummary: "pnpm test passed" }, missionId: "mission_1" }
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.body.statusSuggestion).toBe("passed");
-  });
-
-  it("returns unavailable when no server-side planner transport or OpenAI key exists", async () => {
-    const app = createTestCloudApp({ openAiApiKey: undefined, openAiApiKeyConfigured: false });
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-
-    const response = await app.handle({
-      method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "Plan." } }
-    });
-
-    expect(response.status).toBe(503);
-    expect(String(response.body.error)).toContain("OPENAI_API_KEY");
-  });
-
-  it("does not enable runtime mock planner unless explicitly allowed", async () => {
-    const previousMock = process.env.AGENTBRIDGE_CLOUD_MOCK;
-    const previousAllowMock = process.env.AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER;
-    const previousOpenAiKey = process.env.OPENAI_API_KEY;
-    try {
-      process.env.AGENTBRIDGE_CLOUD_MOCK = "1";
-      delete process.env.AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER;
-      delete process.env.OPENAI_API_KEY;
-      const app = createCloudApp({ allowDevLogin: true });
-      const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-      const token = String(login.body.token);
-
-      const response = await app.handle({
-        method: "POST",
-        path: "/v1/planner/task-spec",
-        headers: { authorization: `Bearer ${token}` },
-        body: { payload: { intent: "Plan." } }
-      });
-
-      expect(response.status).toBe(503);
-      expect(app.getConfig().mockPlanner).toBe(false);
-    } finally {
-      restoreEnv("AGENTBRIDGE_CLOUD_MOCK", previousMock);
-      restoreEnv("AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER", previousAllowMock);
-      restoreEnv("OPENAI_API_KEY", previousOpenAiKey);
-    }
-  });
-
-  it("preserves upstream planner error status codes", async () => {
-    const app = createTestCloudApp(
-      {},
-      {
-        plannerTransport: {
-          async createResponse() {
-            throw Object.assign(new Error("quota exceeded"), { status: 429 });
-          }
-        }
-      }
-    );
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-
-    const response = await app.handle({
-      method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "Plan." } }
-    });
-
-    expect(response.status).toBe(429);
-    expect(response.body.error).toBe("quota exceeded");
-  });
-
-  it("supports deterministic runtime mock planner mode without an OpenAI key", async () => {
-    const app = createTestCloudApp({ mockPlanner: true, openAiApiKey: undefined, openAiApiKeyConfigured: false });
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-
-    const response = await app.handle({
-      method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "Add completion contract regression tests." } }
-    });
-
-    expect(response.status).toBe(200);
-    expect(response.body.taskSpec).toMatchObject({
-      title: "Completion contract evidence regression",
-      verificationSteps: ["pnpm test", "pnpm build", "pnpm lint"]
-    });
-  });
-
-  it("does not store raw request bodies in request logs", async () => {
-    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
     await app.handle({
-      method: "POST",
-      path: "/v1/planner/sessions",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "secret prompt text" } }
+      method: "GET",
+      path: "/v1/usage/me",
+      headers: { authorization: `Bearer ${token}` }
     });
 
-    expect(JSON.stringify(app.getRequestLogs())).not.toContain("secret prompt text");
+    expect(JSON.stringify(app.getRequestLogs())).not.toContain("do not log this");
+    expect(app.getRequestLogs().map((entry) => entry.route)).toEqual([
+      "POST /v1/auth/session/dev-login",
+      "GET /v1/usage/me"
+    ]);
   });
 
-  it("records usage without raw prompt text", async () => {
-    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-    await app.handle({
-      method: "POST",
-      path: "/v1/planner/sessions",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "do not store this prompt" } }
-    });
-
-    expect(JSON.stringify(app.getUsageRecords())).not.toContain("do not store this prompt");
-    expect(app.getUsageRecords()[0]).toMatchObject({ route: "/v1/planner/sessions", status: 200 });
-  });
-
-  it("rejects oversized hosted planner payloads", async () => {
-    const app = createTestCloudApp({ maxPlannerPayloadBytes: 64 }, { plannerTransport: mockPlannerTransport("Planner response.") });
+  it("supports logout", async () => {
+    const app = createTestCloudApp();
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
-    const response = await app.handle({
+    const logout = await app.handle({
       method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { intent: "x".repeat(200) } }
+      path: "/v1/auth/session/logout",
+      headers: { authorization: `Bearer ${token}` }
     });
+    const me = await app.handle({ method: "GET", path: "/v1/me", headers: { authorization: `Bearer ${token}` } });
 
-    expect(response.status).toBe(413);
-  });
-
-  it("rejects file payloads unless enabled", async () => {
-    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
-    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
-    const token = String(login.body.token);
-
-    const response = await app.handle({
-      method: "POST",
-      path: "/v1/planner/task-spec",
-      headers: { authorization: `Bearer ${token}` },
-      body: { payload: { files: [{ fileData: "raw-file-content" }] } }
-    });
-
-    expect(response.status).toBe(400);
-    expect(String(response.body.error)).toContain("file payloads");
+    expect(logout.status).toBe(200);
+    expect(me.status).toBe(401);
   });
 });
 
-function mockPlannerTransport(outputText: string): CloudPlannerTransport {
-  return {
-    async createResponse() {
-      return {
-        responseId: "resp_mock",
-        outputText,
-        usage: { inputTokens: 10, outputTokens: 20 },
-        metadata: { transport: "mock" }
-      };
-    }
-  };
-}
-
-function restoreEnv(key: string, value: string | undefined): void {
-  if (value === undefined) {
-    delete process.env[key];
-    return;
-  }
-  process.env[key] = value;
-}
-
-function createTestCloudApp(
-  config: Parameters<typeof createCloudApp>[0] = {},
-  options: Parameters<typeof createCloudApp>[1] = {}
-) {
-  return createCloudApp({ allowDevLogin: true, ...config }, options);
-}
-
-function mockTaskSpec() {
-  return {
-    title: "Mock hosted planner TaskSpec",
-    goal: "Demonstrate the hosted planner contract.",
-    background: "Cloud planner routes are backed by an injectable transport in tests.",
-    instructions: ["Keep the task scoped."],
-    requirements: ["No repo files are required by default."],
-    constraints: ["Do not upload repo content."],
-    nonGoals: ["Do not implement additional providers."],
-    acceptanceCriteria: ["A valid TaskSpec is returned."],
-    suggestedFiles: [],
-    verificationSteps: [],
-    expectedSummaryFormat: "Summary, changed files, verification."
-  };
+function createTestCloudApp(config: Parameters<typeof createCloudApp>[0] = {}) {
+  return createCloudApp({ allowDevLogin: true, ...config });
 }

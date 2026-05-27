@@ -32,25 +32,24 @@
 - `AgentBridge.exe` launches without requiring a browser pointed at localhost.
 - Packaged app opens at 760x940 with minimum size 680x760.
 - Workbench screen fits in the compact window without horizontal scrolling.
-- Simple Mode shows the Workbench only: repo, Planner, Codex, task state, verification, and review.
+- Simple Mode shows the Workbench only: repo, ChatGPT handoff, Codex, task state, verification, and review.
 - Simple Mode does not require Chrome, ChatGPT Desktop, clipboard capture, manual capture, or demo data.
-- Production Simple Mode does not ask for `OPENAI_API_KEY`/`AGENTBRIDGE_OPENAI_API_KEY`; hosted planner sign-in is the default target.
-- BYOK OpenAI API key setup is visible only in Advanced.
+- Production Simple Mode does not ask for a model API key.
 - With no repo selected, Workbench accepts intent and asks for workspace only when new Codex thread creation, verification, or repo file operations require it.
-- With no repo selected, ask Planner and generate TaskSpec; confirm neither step asks for a workspace.
+- With no repo selected, import a ChatGPT plan and generate TaskSpec; confirm neither step asks for a workspace.
 - With an existing Codex session that reports cwd, confirm Workbench shows `Workspace inferred from Codex session` and can attach it with one click.
 - With no workspace and no existing Codex session selected, confirm `Send TaskSpec to Codex` asks for a workspace before creating a new Codex thread.
 - With no workspace, confirm `Run verification` asks for a workspace instead of failing generically.
-- User can choose repo, create a Workbench task, ask Planner, generate TaskSpec, send to Codex, run verification, ask Planner to review, and send a follow-up.
+- User can choose repo, create a Workbench task, import a ChatGPT plan, generate TaskSpec, send to Codex, run verification, review evidence, and send a follow-up.
 - User can enter one intent, choose Supervised mode, click `Start Mission`, and see the mission timeline advance.
-- User can start a hosted-planner mission without Chrome, ChatGPT Desktop, manual copy/paste, or a mandatory repo picker.
+- User can start a ChatGPT-handoff mission without Chrome extension setup, ChatGPT Desktop, clipboard capture, or a mandatory repo picker.
 - If Supervised mode reaches Codex delivery, a pending approval card appears before sending to Codex.
 - Resolving an approval with `Approve` continues the same Autopilot run.
 - `Stop` cancels an active Autopilot run and records the stop reason.
 - Steering text creates a mission artifact; with Codex App Server and an active existing session it sends `turn/steer`.
 - Latest provider event appears in the Workbench after Codex delivery or steering.
-- The artifact tray lists local planner/Codex/verification artifacts and file records.
-- Artifact tray actions can mark files for Planner review, Codex follow-up, or exclusion.
+- The artifact tray lists local ChatGPT/Codex/verification artifacts and file records.
+- Artifact tray actions can mark files for Codex follow-up or exclusion.
 - Artifact tray `Reveal` opens the local artifact file folder when the file exists.
 - Vite development preview loads Start at `http://127.0.0.1:5173`.
 - Mock capture is labeled demo-only.
@@ -88,9 +87,8 @@
 - Confirm no Chrome extension, clipboard capture, manual capture, or ChatGPT Desktop probe is required.
 - Confirm Autopilot pauses before Codex delivery unless the policy allows Codex turns.
 - Confirm verification runs only configured commands.
-- Confirm failed verification can ask Planner for review and draft a follow-up.
+- Confirm failed verification surfaces evidence and can draft a follow-up.
 - Confirm no provider file upload happens unless policy allows it.
-- Confirm hosted planner payload preview/minimization excludes repo files by default.
 - Add a secret-looking `.env` artifact and confirm Autopilot pauses for approval before provider transfer.
 - Confirm local artifact files are staged under the AgentBridge staging root, not written directly into the repo.
 

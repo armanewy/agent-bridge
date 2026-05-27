@@ -60,10 +60,10 @@ export function createDefaultChatGptCodexWorkflowTemplate(now = new Date().toISO
   return {
     id: "workflow_default_chatgpt_codex",
     name: "ChatGPT-style reasoning ↔ Codex coding",
-    description: "Default AgentBridge loop: hosted Planner reasons and reviews, Codex executes, local verification checks completion.",
+    description: "Default AgentBridge loop: user obtains a structured ChatGPT plan, Codex executes, local verification checks completion.",
     roles: [
-      { role: "planner", providerId: "agentbridge-hosted-planner", requiredCapabilities: ["canPlan", "canReview", "canSendMessage"], optional: false, defaultSessionPolicy: "reuseOrCreate" },
-      { role: "reviewer", providerId: "agentbridge-hosted-planner", requiredCapabilities: ["canReview"], optional: true, defaultSessionPolicy: "reuseOrCreate" },
+      { role: "planner", providerId: "chatgpt-manual", requiredCapabilities: [], optional: true, defaultSessionPolicy: "reuseOrCreate" },
+      { role: "reviewer", providerId: "chatgpt-manual", requiredCapabilities: [], optional: true, defaultSessionPolicy: "reuseOrCreate" },
       { role: "executor", providerId: "codex", requiredCapabilities: ["canExecuteCode", "canUseRepo", "canSendMessage"], optional: false, defaultSessionPolicy: "reuseOrCreate" },
       { role: "verifier", providerId: "local-verifier", requiredCapabilities: ["canVerify"], optional: false, defaultSessionPolicy: "create" }
     ],

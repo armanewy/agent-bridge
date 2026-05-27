@@ -5,33 +5,33 @@ AgentBridge is a local-first desktop app for turning intent into durable, verifi
 The narrow product loop is now:
 
 ```text
-AgentBridge hosted Planner
+ChatGPT handoff
 -> TaskSpec
 -> Codex executor
 -> verification artifacts
--> Planner review
+-> user review / follow-up
 -> optional Codex follow-up
 ```
 
-The default production path does not require a browser extension, external ChatGPT tab, clipboard capture, ChatGPT Desktop probing, or an OpenAI API key in Simple Mode. The hosted AgentBridge Planner creates scoped coding direction; Codex executes through deep links or Codex App Server.
+The default production path does not require a browser extension, clipboard capture, ChatGPT Desktop probing, or an API key in Simple Mode. The user writes a mission, asks ChatGPT for a structured plan, brings that plan back into AgentBridge, and AgentBridge parses it locally before handing scoped work to Codex.
 
 `http://127.0.0.1:5173` is development-only. The product surface is the packaged desktop app.
 
 ## Default Workbench Flow
 
 1. Launch AgentBridge.
-2. Sign in to AgentBridge.
-3. Connect Codex or use deep-link fallback.
-4. Describe the desired outcome once.
+2. Connect Codex or use deep-link fallback.
+3. Describe the desired outcome once.
+4. Use the ChatGPT planner action and capture the selected ChatGPT plan.
 5. Start a Manual, Supervised, or Autonomous mission.
-6. AgentBridge asks the hosted Planner, creates a TaskSpec, sends it to Codex, runs configured verification when a workspace is available, asks Planner to review, and drafts/sends follow-up work when policy allows it.
+6. AgentBridge creates a TaskSpec, sends it to Codex, runs configured verification when a workspace is available, and surfaces evidence for user review or follow-up work.
 
 Repo/workspace selection is optional until the next action requires it. AgentBridge should infer workspace from Codex sessions/history when possible.
 
 The detailed manual controls are still available in the expandable Workbench details panel:
 
 ```text
-Ask Planner -> Generate TaskSpec -> Send to Codex -> Verify -> Planner Review -> Follow-up
+Plan with ChatGPT -> Generate TaskSpec -> Send to Codex -> Verify -> Review -> Follow-up
 ```
 
 Optional adapters remain under Advanced for importing external ChatGPT/browser/Desktop context, but they are not the first-run requirement.
@@ -118,11 +118,9 @@ pnpm dev:native-host
 pnpm test:win-uia-helper
 ```
 
-`pnpm dev:local` is the lowest-friction local app launcher. It loads optional gitignored `.env.local` configuration, starts AgentBridge Cloud on a free local port, seeds development auth for that local Cloud process, probes the OpenAI-backed planner when `OPENAI_API_KEY` is set, then opens the Electron desktop with `AGENTBRIDGE_CLOUD_URL` already wired. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself. Deterministic mock planner mode is explicit integration-test mode only via `pnpm dev:local -- -MockPlanner`.
+`pnpm dev:local` is the lowest-friction local app launcher. It loads optional gitignored `.env.local` configuration, starts the minimal local AgentBridge Cloud auth scaffold on a free port, seeds development auth for that local process, then opens the Electron desktop with `AGENTBRIDGE_CLOUD_URL` already wired. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself.
 
-For OpenAI-backed local planner runs, set `OPENAI_API_KEY` in your shell or copy `.env.example` to `.env.local` and fill it in. Do not commit `.env.local`.
-
-To use ChatGPT as the planner without API billing, write the mission in Workbench, use the ChatGPT planner action, and bring the selected ChatGPT plan back into AgentBridge. AgentBridge parses the readable plan, displays it as a task with criteria and checks, skips the hosted planner call, and continues with TaskSpec -> Codex -> verification.
+For the ChatGPT planner handoff, write the mission in Workbench, use the ChatGPT planner action, and bring the selected ChatGPT plan back into AgentBridge. AgentBridge parses the readable plan, displays it as a task with criteria and checks, and continues with TaskSpec -> Codex -> verification.
 
 The packaged Windows app is written to:
 
@@ -139,14 +137,12 @@ A local desktop shortcut can point directly to that executable.
 Implemented:
 
 - Packaged Electron desktop app with compact `760x940` default window.
-- Workbench-first UI focused on Planner -> Codex -> verification -> Planner review.
-- Provider model for OpenAI Planner and Codex Executor profiles, sessions, turns, and events.
-- Workflow templates for the default Planner/Reviewer -> Codex Executor -> local Verifier loop.
+- Workbench-first UI focused on ChatGPT handoff -> Codex -> verification -> user review.
+- Provider model for Codex Executor profiles, sessions, turns, and events.
+- Workflow templates for the default ChatGPT handoff -> Codex Executor -> local Verifier loop.
 - Completion contracts that keep autonomous missions from passing without objective evidence.
-- OpenAI Planner provider using the Responses API through the official SDK, with API-key-from-environment setup.
-- Advanced Codex Local Planner provider for no-cloud dogfood mode through a separate Codex planning thread.
 - Codex Executor provider wrapping new-thread deep links, existing-thread open-only fallback, and App Server turn start.
-- Workbench orchestration service for mission creation, Planner turns, TaskSpec creation, Codex send, verification, Planner review, and follow-up send.
+- Workbench orchestration service for mission creation, imported ChatGPT plans, TaskSpec creation, Codex send, verification, and follow-up send.
 - Autopilot runner for intent-first Manual/Supervised/Autonomous missions with approvals, repeated-failure/no-change stop conditions, steering, and durable run steps.
 - Mission queue, file conflict detection, and branch/worktree isolation service foundations for parallel mission safety.
 - Artifact Broker for local-first generated files, staged provider inputs, hashes, file bundles, file risk scanning, and artifact transfer controls.
@@ -161,7 +157,6 @@ Implemented:
 - Repo context with branch/status/changed-files and test/lint/typecheck command settings.
 - Codex new-thread deep links, existing-thread deep-link open fallback, and App Server client support.
 - Task Card Preview with explicit delivery mode and warnings.
-- Hosted planner architecture docs for Simple Mode without OpenAI API-key friction.
 - Repo-minimal policy docs for Bridge, Workspace, Verification, and Artifact/file modes.
 - Mission-aware delivery attempts and audit provenance.
 - User-triggered verification runner that stores git diff and command output artifacts.
@@ -170,10 +165,8 @@ Implemented:
 
 ## Known Limitations
 
-- Hosted planner provider is the production target. Current BYOK planner requires `OPENAI_API_KEY` or `AGENTBRIDGE_OPENAI_API_KEY` until cloud auth/provider code lands.
 - Codex deep-link result observation is unavailable by design; Codex App Server sessions provide the event monitoring and steering path.
 - Existing Codex thread continuation requires Codex App Server; deep links can only open an existing thread.
-- Advanced Codex Local Planner avoids hosted planning but uses Codex on both planning and execution sides, so it is not cross-agent diverse.
 - Legacy ChatGPT/browser/Desktop capture is Advanced-only and still experimental.
 - The optional Chrome extension still requires local unpacked-extension setup until there is a published extension ID.
 - Firefox/external-browser support should be added as another optional adapter, not as the default flow.

@@ -1,9 +1,9 @@
 # AgentBridge on macOS
 
-macOS support targets the provider Workbench path first:
+macOS support targets the Workbench path first:
 
 ```text
-choose repo -> ask OpenAI Planner -> send TaskSpec to Codex -> verify -> planner review
+choose repo -> import ChatGPT plan -> send TaskSpec to Codex -> verify -> review evidence
 ```
 
 ## Install
@@ -18,24 +18,22 @@ Code signing and notarization are future production requirements.
 
 ## Configure
 
-Set provider configuration before launching AgentBridge:
+`CODEX_APP_SERVER_URL` is optional. Without it, new Codex thread deep links can still work if Codex has registered the `codex://` protocol, but existing-thread prompt injection requires the Codex App Server.
 
 ```sh
-export OPENAI_API_KEY="..."
 export CODEX_APP_SERVER_URL="http://127.0.0.1:..."
 ```
-
-`CODEX_APP_SERVER_URL` is optional. Without it, new Codex thread deep links can still work if Codex has registered the `codex://` protocol, but existing-thread prompt injection requires the Codex App Server.
 
 ## Use
 
 1. Open AgentBridge.
-2. Choose a repo.
-3. Ask the Planner what should be done.
-4. Generate a TaskSpec.
-5. Send the TaskSpec to Codex.
-6. Run configured verification commands.
-7. Ask the Planner to review verification output.
+2. Choose a repo if Codex new-thread delivery or verification needs it.
+3. Enter the mission.
+4. Use the ChatGPT planner handoff and capture the selected plan.
+5. Generate a TaskSpec.
+6. Send the TaskSpec to Codex.
+7. Run configured verification commands.
+8. Review the evidence.
 
 ## Optional Browser Import
 

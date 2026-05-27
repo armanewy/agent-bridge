@@ -41,11 +41,11 @@ describe("provider artifact capabilities", () => {
     expect(ProviderArtifactCapabilitiesSchema.parse(capabilities).canAcceptFileInputs).toBe(true);
     expect(
       AgentProviderProfileSchema.parse({
-        id: "openai-planner",
+        id: "chatgpt-manual",
         kind: "planner",
-        displayName: "OpenAI Planner",
+        displayName: "ChatGPT handoff",
         capabilities: ["canPlan"],
-        authMode: "apiKey",
+        authMode: "none",
         status: "available",
         artifactCapabilities: capabilities,
         metadata: {}

@@ -31,11 +31,8 @@ import type {
   AgentSessionRef,
   AgentTurn,
   ExecutorTaskResult,
-  PlannerProviderMode,
   PlannerRequest,
-  PlannerResponse,
   PlatformCapabilities,
-  ReviewResult,
   VerificationResult,
   WorkflowLink,
   WorkspaceCandidate
@@ -44,7 +41,6 @@ import type { AgentEventFilter } from "@agentbridge/local-store";
 import type { RepoCommandConfig } from "./repo-context-service.js";
 import type { AttachWorkspaceInput, CreateWorkbenchMissionInput } from "./workbench-service.js";
 import type { AutopilotStatus } from "./autopilot-service.js";
-import type { PlannerModeInfo } from "./provider-registry-service.js";
 export type { AutopilotStatus } from "./autopilot-service.js";
 
 export interface WindowRevalidation {
@@ -247,10 +243,6 @@ export interface AgentBridgeApi {
   listAgentSessions(providerId?: string): Promise<AgentSessionRef[]>;
   listAgentTurns(sessionRefId: string): Promise<AgentTurn[]>;
   listAgentEvents(filter?: AgentEventFilter): Promise<AgentEvent[]>;
-  getPlannerMode(): Promise<PlannerProviderMode>;
-  setPlannerMode(mode: PlannerProviderMode): Promise<PlannerProviderMode>;
-  listPlannerModes(): Promise<PlannerModeInfo[]>;
-  getActivePlannerProvider(): Promise<AgentProviderProfile | undefined>;
   getAgentBridgeAuthStatus(): Promise<AgentBridgeAuthStatus>;
   signInAgentBridgeDevMode(): Promise<AgentBridgeAuthStatus>;
   signOutAgentBridge(): Promise<AgentBridgeAuthStatus>;
@@ -260,11 +252,9 @@ export interface AgentBridgeApi {
   confirmWorkspaceCandidate(candidateId: string): Promise<WorkspaceCandidate | undefined>;
   attachWorkspaceToMission(missionId: string, input: AttachWorkspaceInput): Promise<Mission>;
   createWorkbenchMission(input?: CreateWorkbenchMissionInput): Promise<Mission>;
-  sendUserMessageToPlanner(missionId: string, text: string): Promise<PlannerResponse>;
   createTaskSpecFromLatestPlannerTurn(missionId: string): Promise<HandoffCard>;
   sendTaskSpecToExecutor(missionId: string, executorProviderId?: string, sessionRefId?: string): Promise<ExecutorTaskResult>;
   runMissionWorkbenchVerification(missionId: string, input?: Omit<VerificationRunRequest, "missionId">): Promise<VerificationRunResponse>;
-  sendVerificationToPlannerForReview(missionId: string): Promise<ReviewResult>;
   createFollowUpFromPlannerReview(missionId: string): Promise<HandoffCard>;
   sendFollowUpToExecutor(missionId: string, sessionRefId?: string): Promise<ExecutorTaskResult>;
   startAutopilot(missionId: string, policyId?: string): Promise<AutopilotStatus>;

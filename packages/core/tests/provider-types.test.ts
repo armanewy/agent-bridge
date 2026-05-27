@@ -52,16 +52,16 @@ const verificationResult: VerificationResult = {
 describe("provider schemas", () => {
   it("parses provider profiles", () => {
     const profile = AgentProviderProfileSchema.parse({
-      id: "openai-planner",
+      id: "chatgpt-manual",
       kind: "planner",
-      displayName: "OpenAI Planner",
+      displayName: "ChatGPT handoff",
       capabilities: ["canPlan", "canReview", "canCreateSession", "canSendMessage"],
-      authMode: "apiKey",
-      status: "needsAuth",
-      metadata: { model: "gpt-4.1" }
+      authMode: "none",
+      status: "available",
+      metadata: {}
     });
 
-    expect(profile.id).toBe("openai-planner");
+    expect(profile.id).toBe("chatgpt-manual");
     expect(profile.capabilities).toContain("canPlan");
   });
 
@@ -114,7 +114,7 @@ describe("provider schemas", () => {
       metadata: {}
     });
     const plannerResponse = PlannerResponseSchema.parse({
-      providerId: "openai-planner",
+      providerId: "chatgpt-manual",
       sessionRefId: "session_1",
       turnId: "turn_1",
       content: "Build the provider workbench in stages.",
@@ -156,7 +156,7 @@ describe("provider schemas", () => {
       metadata: {}
     });
     const result = ReviewResultSchema.parse({
-      providerId: "openai-planner",
+      providerId: "chatgpt-manual",
       sessionRefId: "session_1",
       turnId: "turn_review",
       content: "Follow up on the failing test only.",

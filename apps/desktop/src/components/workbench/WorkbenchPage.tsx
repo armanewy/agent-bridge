@@ -1,5 +1,5 @@
 import { CheckCircle2, FileText, MessageSquare, Play, Send, Square, Wrench } from "lucide-react";
-import { useEffect, useMemo, useState } from "react";
+import { useMemo, useState } from "react";
 import type {
   AgentProviderProfile,
   AgentSessionRef,
@@ -30,11 +30,9 @@ interface WorkbenchPageProps {
   onChooseRepo(): void | Promise<void>;
   onUseWorkspaceCandidate(candidate: WorkspaceCandidate): void | Promise<void>;
   onCreateMission(): void | Promise<void>;
-  onAskPlanner(text: string): void | Promise<void>;
   onGenerateTaskSpec(): void | Promise<void>;
   onSendToCodex(sessionRefId?: string): void | Promise<void>;
   onRunVerification(): void | Promise<void>;
-  onAskPlannerToReview(): void | Promise<void>;
   onCreateFollowUp(): void | Promise<void>;
   onSendFollowUp(sessionRefId?: string): void | Promise<void>;
   onStartMission(intent: string, mode: "manual" | "supervised" | "autonomous"): void | Promise<void>;
@@ -55,7 +53,6 @@ type WorkbenchOperation =
   | "taskSpec"
   | "sendCodex"
   | "verify"
-  | "review"
   | "followUp"
   | "sendFollowUp"
   | "workspace"
@@ -80,7 +77,6 @@ export function WorkbenchPage({
   onGenerateTaskSpec,
   onSendToCodex,
   onRunVerification,
-  onAskPlannerToReview,
   onCreateFollowUp,
   onSendFollowUp,
   onStartMission,
@@ -98,11 +94,9 @@ export function WorkbenchPage({
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
   const [pendingOperation, setPendingOperation] = useState<WorkbenchOperation | undefined>();
   const [activeTab, setActiveTab] = useState<WorkbenchTab>("task");
-  const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
   const [chatGptPlannerNotice, setChatGptPlannerNotice] = useState<string | undefined>();
 
-  const planner = providerProfiles.find((profile) => profile.id === "agentbridge-hosted-planner") ?? providerProfiles.find((profile) => profile.kind === "planner");
-  const intentContainsTaskSpec = Boolean(extractTaskSpecJson(intentText));
+  const intentContainsPlannerOutput = Boolean(extractTaskSpecJson(intentText));
   const codex = providerProfiles.find((profile) => profile.id === "codex");
   const taskCard = missionDetail?.handoffCards.find((card) => card.recipe !== "debuggingRequest");
   const followUpCard = missionDetail?.handoffCards.find((card) => card.recipe === "debuggingRequest");
@@ -116,9 +110,6 @@ export function WorkbenchPage({
   const activeRun = autopilotStatus?.run;
   const progressView = buildAutopilotProgressView(autopilotStatus);
   const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
-  const latestPayloadSummary = parsePlannerPayloadSummary(
-    missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
-  );
 
   const codexSessionRows = useMemo(() => {
     const fromThreads: AgentSessionRef[] = codexThreads.map((thread) => ({
@@ -145,16 +136,15 @@ export function WorkbenchPage({
   const canGenerateTaskSpec = Boolean(selectedMissionId && missionDetail?.artifacts.some((artifact) => artifact.kind === "modelResponse"));
   const canSend = Boolean(selectedMissionId && taskCard && codexReady);
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
-  const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard && codexReady);
-  const canStartMission = Boolean(intentText.trim() && codexReady && (planner?.status === "available" || intentContainsTaskSpec));
+  const canStartMission = Boolean(intentText.trim() && codexReady && intentContainsPlannerOutput);
   const canUseChatGptPlanner = Boolean(intentText.trim() && codexReady);
-  const showChatGptPlanner = Boolean(intentText.trim() && planner?.status !== "available" && !intentContainsTaskSpec);
+  const showChatGptPlanner = Boolean(intentText.trim() && !intentContainsPlannerOutput);
   const isBusy = Boolean(pendingOperation);
   const canStopRun = Boolean(activeRun && !["cancelled", "passed", "failed"].includes(activeRun.status));
   const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
   const blockers = [
-    planner?.status !== "available" && !intentContainsTaskSpec ? "Sign in or use ChatGPT Planner to start." : undefined,
+    intentText.trim() && !intentContainsPlannerOutput ? "Plan with ChatGPT before starting." : undefined,
     !codexReady ? "Codex is not ready." : undefined
   ].filter((item): item is string => Boolean(item));
 
@@ -179,12 +169,6 @@ export function WorkbenchPage({
       setPendingOperation(undefined);
     }
   }
-
-  useEffect(() => {
-    if (latestPayloadSummary?.redactionFindings.length) {
-      setPayloadPanelOpen(true);
-    }
-  }, [latestPayloadSummary?.artifactId, latestPayloadSummary?.redactionFindings.length]);
 
   return (
     <div className="workbench-layout" data-testid="workbench-view">
@@ -326,9 +310,6 @@ export function WorkbenchPage({
               isBusy={isBusy}
               pendingOperation={pendingOperation}
               onVerify={() => void runOperation("verify", onRunVerification)}
-              payloadSummary={latestPayloadSummary}
-              payloadOpen={payloadPanelOpen}
-              onTogglePayload={() => setPayloadPanelOpen((current) => !current)}
             />
           ) : null}
 
@@ -337,12 +318,10 @@ export function WorkbenchPage({
               activeRun={activeRun}
               steeringText={steeringText}
               setSteeringText={setSteeringText}
-              canReview={canReview}
               canSendFollowUp={canSendFollowUp}
               hasPlannerOutput={Boolean(missionDetail?.artifacts.some((artifact) => artifact.kind === "modelResponse"))}
               isBusy={isBusy}
               pendingOperation={pendingOperation}
-              onReview={() => void runOperation("review", onAskPlannerToReview)}
               onDraftFollowUp={() => void runOperation("followUp", onCreateFollowUp)}
               onSendFollowUp={() => void runOperation("sendFollowUp", () => onSendFollowUp(selectedSession?.id))}
               onContinue={(runId) => void runOperation("continue", () => onContinueAutopilot(runId))}
@@ -599,19 +578,13 @@ function VerifyTab({
   canVerify,
   isBusy,
   pendingOperation,
-  onVerify,
-  payloadSummary,
-  payloadOpen,
-  onTogglePayload
+  onVerify
 }: {
   verification?: NonNullable<MissionDetail["verificationResults"]>[number] | undefined;
   canVerify: boolean;
   isBusy: boolean;
   pendingOperation?: WorkbenchOperation | undefined;
   onVerify(): void;
-  payloadSummary?: PlannerPayloadSummary | undefined;
-  payloadOpen: boolean;
-  onTogglePayload(): void;
 }): JSX.Element {
   return (
     <div className="tab-grid">
@@ -629,7 +602,10 @@ function VerifyTab({
           {pendingOperation === "verify" ? "Verifying..." : "Run Verification"}
         </button>
       </section>
-      <PlannerPayloadPanel summary={payloadSummary} open={payloadOpen} onToggle={onTogglePayload} />
+      <section className="tab-card">
+        <span className="eyebrow">Evidence</span>
+        <p className="empty-copy">Verification output and artifacts appear here after checks run.</p>
+      </section>
     </div>
   );
 }
@@ -638,12 +614,10 @@ function ReviewTab({
   activeRun,
   steeringText,
   setSteeringText,
-  canReview,
   canSendFollowUp,
   hasPlannerOutput,
   isBusy,
   pendingOperation,
-  onReview,
   onDraftFollowUp,
   onSendFollowUp,
   onContinue,
@@ -652,12 +626,10 @@ function ReviewTab({
   activeRun?: AutopilotStatus["run"] | undefined;
   steeringText: string;
   setSteeringText(value: string): void;
-  canReview: boolean;
   canSendFollowUp: boolean;
   hasPlannerOutput: boolean;
   isBusy: boolean;
   pendingOperation?: WorkbenchOperation | undefined;
-  onReview(): void;
   onDraftFollowUp(): void;
   onSendFollowUp(): void;
   onContinue(runId: string): void;
@@ -668,11 +640,8 @@ function ReviewTab({
       <section className="tab-card primary-tab-card">
         <span className="eyebrow">Review</span>
         <h3>Next decision</h3>
+        <p className="empty-copy">Planner review is manual in the ChatGPT-first flow.</p>
         <div className="button-row">
-          <button type="button" className="secondary-button" onClick={onReview} disabled={!canReview || isBusy}>
-            {pendingOperation === "review" ? <span className="spinner" aria-hidden="true" /> : <CheckCircle2 size={16} />}
-            {pendingOperation === "review" ? "Reviewing..." : "Ask Planner"}
-          </button>
           <button type="button" className="secondary-button" onClick={onDraftFollowUp} disabled={!hasPlannerOutput || isBusy}>
             {pendingOperation === "followUp" ? <span className="spinner" aria-hidden="true" /> : <Wrench size={16} />}
             {pendingOperation === "followUp" ? "Drafting..." : "Draft Follow-up"}
@@ -761,67 +730,6 @@ function DoneMeansPanel({
       {!canPassAutonomously ? <p>This task cannot autonomously pass yet.</p> : null}
       <p>{contract.acceptanceCriteria.length} criteria · {evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"}.</p>
     </div>
-  );
-}
-
-interface PlannerPayloadSummary {
-  artifactId: string;
-  purpose: string;
-  estimatedBytes: number;
-  includedArtifactIds: string[];
-  excludedArtifactIds: string[];
-  excludedReasons: Record<string, string>;
-  redactionFindings: Array<{ kind: string; severity: string; preview: string }>;
-  payload: Record<string, unknown>;
-}
-
-function PlannerPayloadPanel({
-  summary,
-  open,
-  onToggle
-}: {
-  summary?: PlannerPayloadSummary | undefined;
-  open: boolean;
-  onToggle(): void;
-}): JSX.Element {
-  if (!summary) {
-    return (
-      <section className="tab-card">
-        <span className="eyebrow">Planner payload</span>
-        <p className="empty-copy">No planner payload yet.</p>
-      </section>
-    );
-  }
-  const payload = summary.payload;
-  return (
-    <section className={summary.redactionFindings.length ? "tab-card planner-payload-panel warning" : "tab-card planner-payload-panel"}>
-      <button type="button" className="payload-toggle" onClick={onToggle}>
-        <span>Planner payload</span>
-        <em>{summary.estimatedBytes} bytes</em>
-      </button>
-      {open ? (
-        <div className="payload-summary-grid">
-          <div>
-            <strong>Intent</strong>
-            <p>{String(payload.intent ?? "Not included")}</p>
-          </div>
-          <div>
-            <strong>Artifacts</strong>
-            <p>{summary.includedArtifactIds.length} included · {summary.excludedArtifactIds.length} excluded</p>
-          </div>
-          {summary.redactionFindings.length ? (
-            <div>
-              <strong>Redaction</strong>
-              <ul>
-                {summary.redactionFindings.slice(0, 4).map((finding, index) => (
-                  <li key={`${finding.kind}-${index}`}>{finding.severity}: {finding.kind}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-        </div>
-      ) : null}
-    </section>
   );
 }
 
@@ -924,8 +832,6 @@ function operationLabel(operation: WorkbenchOperation): string {
       return "Sending to Codex...";
     case "verify":
       return "Running verification...";
-    case "review":
-      return "Asking planner to review...";
     case "followUp":
       return "Drafting follow-up...";
     case "sendFollowUp":
@@ -963,48 +869,4 @@ function formatBytes(value: number): string {
     return `${Math.round(value / 1024)} KB`;
   }
   return `${(value / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function parsePlannerPayloadSummary(artifact?: Artifact | undefined): PlannerPayloadSummary | undefined {
-  if (!artifact?.content) {
-    return undefined;
-  }
-  try {
-    const record = JSON.parse(artifact.content) as unknown;
-    if (!isRecord(record)) {
-      return undefined;
-    }
-    const payload = isRecord(record.payload) ? record.payload : {};
-    return {
-      artifactId: artifact.id,
-      purpose: typeof record.purpose === "string" ? record.purpose : "planner",
-      estimatedBytes: typeof record.estimatedBytes === "number" ? record.estimatedBytes : 0,
-      includedArtifactIds: stringArray(record.includedArtifactIds),
-      excludedArtifactIds: stringArray(record.excludedArtifactIds),
-      excludedReasons: isRecord(record.excludedReasons) ? Object.fromEntries(Object.entries(record.excludedReasons).map(([key, value]) => [key, String(value)])) : {},
-      redactionFindings: Array.isArray(record.redactionFindings)
-        ? record.redactionFindings.flatMap((finding) => {
-            if (!isRecord(finding)) {
-              return [];
-            }
-            return [{
-              kind: String(finding.kind ?? "unknown"),
-              severity: String(finding.severity ?? "unknown"),
-              preview: String(finding.preview ?? "")
-            }];
-          })
-        : [],
-      payload
-    };
-  } catch {
-    return undefined;
-  }
-}
-
-function stringArray(value: unknown): string[] {
-  return Array.isArray(value) ? value.filter((item): item is string => typeof item === "string") : [];
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

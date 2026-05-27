@@ -130,7 +130,7 @@ function nextActionCopy(
     return "Choose an approval option to continue.";
   }
   if (isPlannerUnavailable(problemStep, detail)) {
-    return "Fix OpenAI API billing or plan with ChatGPT, then stop this run and start again.";
+    return "Plan with ChatGPT, then stop this run and start again.";
   }
   if (run?.status === "blocked") {
     return "Resolve the blocker, then continue or start again.";

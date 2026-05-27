@@ -34,6 +34,6 @@ Bundles group artifacts/files for a purpose such as planner input, executor inpu
 
 ## Safety
 
-The broker blocks path traversal, sanitizes file names, and enforces that reads stay inside the AgentBridge artifact root. Secret scanning and provider-upload approval are policy layers above the broker. The default hosted planner policy sends summaries and approved artifacts only; repo files are not uploaded by default.
+The broker blocks path traversal, sanitizes file names, and enforces that reads stay inside the AgentBridge artifact root. Secret scanning and provider-transfer approval are policy layers above the broker. Repo files are not uploaded by default.
 
 High-severity findings such as private keys, API keys, repo-tree upload requests, and file writes outside workspace should pause Autopilot through a `UserDecision`.

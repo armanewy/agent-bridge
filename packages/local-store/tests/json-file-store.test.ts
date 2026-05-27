@@ -27,7 +27,6 @@ import type {
   Mission,
   MissionQueueItem,
   MissionWorkspace,
-  OpenAIUploadedFileRef,
   TaskSpec,
   UserDecision,
   VerificationResult,
@@ -139,9 +138,9 @@ describe("JsonFileStore", () => {
       roles: [
         {
           role: "planner",
-          providerId: "agentbridge-hosted-planner",
-          requiredCapabilities: ["canPlan"],
-          optional: false,
+          providerId: "chatgpt-manual",
+          requiredCapabilities: [],
+          optional: true,
           defaultSessionPolicy: "reuseOrCreate"
         },
         {
@@ -328,13 +327,13 @@ describe("JsonFileStore", () => {
     const store = new JsonFileStore(tempDir);
     const now = new Date().toISOString();
     const profile: AgentProviderProfile = {
-      id: "openai-planner",
+      id: "chatgpt-manual",
       kind: "planner",
-      displayName: "OpenAI Planner",
+      displayName: "ChatGPT handoff",
       capabilities: ["canPlan", "canReview", "canCreateSession", "canSendMessage"],
-      authMode: "apiKey",
-      status: "needsAuth",
-      metadata: { model: "gpt-4.1" }
+      authMode: "none",
+      status: "available",
+      metadata: {}
     };
     const session: AgentSessionRef = {
       id: "session_1",
@@ -613,7 +612,6 @@ describe("JsonFileStore", () => {
     expect(await store.listPendingUserDecisions()).toEqual([]);
     expect(await store.listArtifactFilesForMission(mission.id)).toEqual([]);
     expect(await store.listArtifactBundlesForMission(mission.id)).toEqual([]);
-    expect(await store.listOpenAIUploadedFileRefs()).toEqual([]);
     expect(await store.listWorkflowTemplates()).toEqual([]);
     expect(await store.listCompletionContractsForMission(mission.id)).toEqual([]);
     expect(await store.listMissionWorkspaces(mission.id)).toEqual([]);
@@ -703,22 +701,6 @@ describe("JsonFileStore", () => {
     expect(await store.listArtifactFilesForMission(file.missionId)).toEqual([file]);
     expect(await store.getArtifactBundle(bundle.id)).toEqual(bundle);
     expect(await store.listArtifactBundlesForMission(file.missionId)).toEqual([bundle]);
-  });
-
-  it("roundtrips OpenAI uploaded file refs", async () => {
-    const store = new JsonFileStore(tempDir);
-    const ref: OpenAIUploadedFileRef = {
-      localFileId: "file_1",
-      openaiFileId: "file-openai-1",
-      uploadedAt: new Date().toISOString(),
-      purpose: "user_data",
-      sha256: "abc123"
-    };
-
-    await store.saveOpenAIUploadedFileRef(ref);
-
-    expect(await store.getOpenAIUploadedFileRef(ref.localFileId)).toEqual(ref);
-    expect(await store.listOpenAIUploadedFileRefs()).toEqual([ref]);
   });
 
   it("roundtrips verification results", async () => {

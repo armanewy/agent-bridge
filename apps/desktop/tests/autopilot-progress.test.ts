@@ -3,7 +3,7 @@ import type { AutopilotRun, AutopilotStep } from "@agentbridge/core";
 import { buildAutopilotProgressView, buildChatGptPlannerPrompt } from "../src/shared/autopilot-progress.js";
 
 describe("autopilot progress view", () => {
-  it("surfaces hosted planner quota blockers without asking users to write JSON", () => {
+  it("surfaces missing ChatGPT plan blockers without asking users to write JSON", () => {
     const run: AutopilotRun = {
       id: "autopilot_run_1",
       missionId: "mission_1",
@@ -14,7 +14,7 @@ describe("autopilot progress view", () => {
       currentStepId: "autopilot_step_1",
       startedAt: "2026-01-01T00:00:00.000Z",
       updatedAt: "2026-01-01T00:00:05.000Z",
-      stopReason: "Provider is unavailable. AgentBridge Cloud returned HTTP 429 quota."
+      stopReason: "Plan with ChatGPT before starting the mission."
     };
     const step: AutopilotStep = {
       id: "autopilot_step_1",
@@ -27,8 +27,8 @@ describe("autopilot progress view", () => {
       startedAt: "2026-01-01T00:00:01.000Z",
       completedAt: "2026-01-01T00:00:05.000Z",
       metadata: {
-        title: "Ask Planner",
-        error: "AgentBridge Cloud returned HTTP 429 quota.",
+        title: "Plan with ChatGPT",
+        error: "Plan with ChatGPT before starting the mission.",
         failureKind: "providerUnavailable"
       }
     };
@@ -36,10 +36,10 @@ describe("autopilot progress view", () => {
     const view = buildAutopilotProgressView({ run, steps: [step] });
 
     expect(view?.title).toBe("Blocked");
-    expect(view?.detail).toContain("HTTP 429");
-    expect(view?.nextAction).toContain("plan with ChatGPT");
+    expect(view?.detail).toContain("Plan with ChatGPT");
+    expect(view?.nextAction).toContain("Plan with ChatGPT");
     expect(view?.nextAction).not.toContain("JSON");
-    expect(view?.steps[0]).toMatchObject({ title: "Ask Planner", status: "blocked" });
+    expect(view?.steps[0]).toMatchObject({ title: "Plan with ChatGPT", status: "blocked" });
   });
 
   it("builds a readable ChatGPT planner request", () => {

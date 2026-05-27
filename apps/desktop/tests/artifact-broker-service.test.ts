@@ -64,7 +64,7 @@ describe("ArtifactBrokerService", () => {
   it("flags risky files before provider upload or repo import", async () => {
     const store = new JsonFileStore(tempDir);
     const broker = createBroker(store);
-    const file = await broker.importGeneratedTextAsFile("mission_1", "secrets.txt", "OPENAI_API_KEY=sk-secret-value");
+    const file = await broker.importGeneratedTextAsFile("mission_1", "secrets.txt", "SECRET_TOKEN=sk-secret-value");
 
     const findings = await broker.scanFileRisk(file.id, {
       allowedFileExtensions: [".md"],

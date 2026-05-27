@@ -12,7 +12,6 @@ import {
   ArtifactSchema,
   ArtifactBundleSchema,
   ArtifactFileSchema,
-  OpenAIUploadedFileRefSchema,
   AutopilotPolicySchema,
   AutopilotRunSchema,
   AutopilotStepSchema,
@@ -43,7 +42,6 @@ import {
   type Artifact,
   type ArtifactBundle,
   type ArtifactFile,
-  type OpenAIUploadedFileRef,
   type AutopilotPolicy,
   type AutopilotRun,
   type AutopilotRunStatus,
@@ -172,9 +170,6 @@ export interface LocalStore {
   saveArtifactBundle(bundle: ArtifactBundle): Promise<void>;
   getArtifactBundle(id: string): Promise<ArtifactBundle | undefined>;
   listArtifactBundlesForMission(missionId: string): Promise<ArtifactBundle[]>;
-  saveOpenAIUploadedFileRef(ref: OpenAIUploadedFileRef): Promise<void>;
-  getOpenAIUploadedFileRef(localFileId: string): Promise<OpenAIUploadedFileRef | undefined>;
-  listOpenAIUploadedFileRefs(): Promise<OpenAIUploadedFileRef[]>;
   saveRun(run: Run): Promise<void>;
   getRun(id: string): Promise<Run | undefined>;
   listRunsForMission(missionId: string): Promise<Run[]>;
@@ -228,7 +223,6 @@ interface StoreData {
   artifacts: Record<string, Artifact>;
   artifactFiles: Record<string, ArtifactFile>;
   artifactBundles: Record<string, ArtifactBundle>;
-  openAIUploadedFileRefs: Record<string, OpenAIUploadedFileRef>;
   runs: Record<string, Run>;
   runSteps: Record<string, RunStep>;
   verificationResults: Record<string, VerificationResult>;
@@ -817,21 +811,6 @@ export class JsonFileStore implements LocalStore {
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt));
   }
 
-  async saveOpenAIUploadedFileRef(ref: OpenAIUploadedFileRef): Promise<void> {
-    OpenAIUploadedFileRefSchema.parse(ref);
-    await this.update((data) => {
-      data.openAIUploadedFileRefs[ref.localFileId] = ref;
-    });
-  }
-
-  async getOpenAIUploadedFileRef(localFileId: string): Promise<OpenAIUploadedFileRef | undefined> {
-    return (await this.read()).openAIUploadedFileRefs[localFileId];
-  }
-
-  async listOpenAIUploadedFileRefs(): Promise<OpenAIUploadedFileRef[]> {
-    return Object.values((await this.read()).openAIUploadedFileRefs).sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
-  }
-
   async saveRun(run: Run): Promise<void> {
     RunSchema.parse(run);
     await this.update((data) => {
@@ -998,7 +977,6 @@ export function createEmptyStore(): StoreData {
     artifacts: {},
     artifactFiles: {},
     artifactBundles: {},
-    openAIUploadedFileRefs: {},
     runs: {},
     runSteps: {},
     verificationResults: {},

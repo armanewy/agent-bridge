@@ -33,11 +33,11 @@ describe("WorkflowTemplateService", () => {
 
     const issues = service.validateTemplateProviders(template, [
       {
-        id: "agentbridge-hosted-planner",
+        id: "chatgpt-manual",
         kind: "planner",
-        displayName: "Planner",
-        capabilities: ["canPlan", "canReview", "canSendMessage"],
-        authMode: "agentBridgeCloud",
+        displayName: "ChatGPT handoff",
+        capabilities: [],
+        authMode: "none",
         status: "available",
         metadata: {}
       },

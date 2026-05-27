@@ -75,5 +75,5 @@ Use evidence in this order:
 ## Non-Goals
 
 - Reading repo files during inference.
-- Uploading repo contents to the hosted planner by default.
+- Uploading repo contents to a remote planner by default.
 - Making repo selection a first-run requirement.

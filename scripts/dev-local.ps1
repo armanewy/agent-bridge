@@ -1,8 +1,5 @@
 param(
-  [switch]$MockPlanner,
   [switch]$NoDevSignIn,
-  [switch]$RequireOpenAI,
-  [switch]$SkipPlannerProbe,
   [int]$CloudPort = 0,
   [string]$EnvFile = ".env.local"
 )
@@ -117,52 +114,6 @@ function Set-DesktopDevAuth {
   Write-Host "Dev auth: signed in to local AgentBridge Cloud as $($login.user.email)"
 }
 
-function Get-CloudErrorMessage {
-  param([Parameter(Mandatory=$true)]$ErrorRecord)
-
-  if ($ErrorRecord.ErrorDetails -and $ErrorRecord.ErrorDetails.Message) {
-    try {
-      $payload = $ErrorRecord.ErrorDetails.Message | ConvertFrom-Json
-      if ($payload.error) {
-        return [string]$payload.error
-      }
-    } catch {
-      return $ErrorRecord.ErrorDetails.Message
-    }
-  }
-  return $ErrorRecord.Exception.Message
-}
-
-function Test-MockPlannerEnabled {
-  $value = "$env:AGENTBRIDGE_CLOUD_MOCK".ToLowerInvariant()
-  $allowValue = "$env:AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER".ToLowerInvariant()
-  $requested = $value -eq "1" -or $value -eq "true"
-  $allowed = $allowValue -eq "1" -or $allowValue -eq "true"
-  return $requested -and $allowed
-}
-
-function Test-CloudPlanner {
-  param([Parameter(Mandatory=$true)][string]$CloudBaseUrl)
-
-  try {
-    $login = Invoke-RestMethod -Method Post -Uri "$CloudBaseUrl/v1/auth/session/dev-login" -ContentType "application/json"
-    $body = @{
-      payload = @{
-        intent = "AgentBridge local planner startup probe."
-      }
-    } | ConvertTo-Json -Depth 5
-    Invoke-RestMethod `
-      -Method Post `
-      -Uri "$CloudBaseUrl/v1/planner/task-spec" `
-      -Headers @{ authorization = "Bearer $($login.token)" } `
-      -ContentType "application/json" `
-      -Body $body | Out-Null
-    return @{ ok = $true; message = "" }
-  } catch {
-    return @{ ok = $false; message = Get-CloudErrorMessage -ErrorRecord $_ }
-  }
-}
-
 function Start-AgentBridgeCloud {
   param(
     [Parameter(Mandatory=$true)][string]$NodeCommand,
@@ -186,13 +137,6 @@ try {
   if (!$env:AGENTBRIDGE_CLOUD_ALLOW_DEV_LOGIN) {
     $env:AGENTBRIDGE_CLOUD_ALLOW_DEV_LOGIN = "1"
   }
-  if ($MockPlanner) {
-    $env:AGENTBRIDGE_CLOUD_MOCK = "1"
-    $env:AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER = "1"
-  }
-  if (!$env:OPENAI_API_KEY -and !(Test-MockPlannerEnabled)) {
-    Write-Warning "OPENAI_API_KEY is not set; the hosted planner will be unavailable. Plan with ChatGPT in the app or rerun with -MockPlanner for integration tests only."
-  }
 
   if ($CloudPort -le 0) {
     $CloudPort = Get-FreeTcpPort
@@ -211,21 +155,11 @@ try {
 
   try {
     Wait-ForHttp -Url "$env:AGENTBRIDGE_CLOUD_URL/health" -Process $cloud -Name "AgentBridge Cloud"
-    if (!(Test-MockPlannerEnabled) -and !$SkipPlannerProbe) {
-      $probe = Test-CloudPlanner -CloudBaseUrl $env:AGENTBRIDGE_CLOUD_URL
-      if (!$probe.ok) {
-        if ($RequireOpenAI) {
-          throw "OpenAI planner startup probe failed: $($probe.message)"
-        }
-        Write-Warning "OpenAI planner startup probe failed: $($probe.message)"
-        Write-Warning "Continuing without planner fallback. Plan with ChatGPT in the app, fix API billing, or rerun with -MockPlanner for integration tests only."
-      }
-    }
     if (!$NoDevSignIn) {
       Set-DesktopDevAuth -CloudBaseUrl $env:AGENTBRIDGE_CLOUD_URL
     }
     Write-Host "AgentBridge Cloud: $env:AGENTBRIDGE_CLOUD_URL"
-    Write-Host "Planner mode: $(if (Test-MockPlannerEnabled) { 'deterministic mock (explicit integration-test mode)' } elseif ($env:OPENAI_API_KEY) { 'OpenAI' } else { 'unavailable' })"
+    Write-Host "Planner mode: ChatGPT handoff"
     pnpm desktop:dev
   } finally {
     if (!$cloud.HasExited) {
