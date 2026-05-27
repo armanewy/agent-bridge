@@ -86,6 +86,7 @@ export class PlatformService {
     if (!this.options.openExternal) {
       throw new Error("No platform opener is configured.");
     }
+    assertAllowedExternalUrl(url);
     await this.options.openExternal(url);
   }
 
@@ -149,6 +150,20 @@ export class PlatformService {
     return this.pathModuleFor(base).join(base, ...segments);
   }
 }
+
+export function assertAllowedExternalUrl(rawUrl: string): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(rawUrl);
+  } catch {
+    throw new Error("External URL must be absolute.");
+  }
+  if (!ALLOWED_EXTERNAL_PROTOCOLS.has(parsed.protocol)) {
+    throw new Error(`External URL protocol is not allowed: ${parsed.protocol}`);
+  }
+}
+
+const ALLOWED_EXTERNAL_PROTOCOLS = new Set(["http:", "https:", "mailto:", "codex:"]);
 
 export function platformKindFromNodePlatform(platform: NodeJS.Platform | PlatformKind | string): PlatformKind {
   if (platform === "win32" || platform === "windows") {

@@ -127,6 +127,17 @@ describe("ProviderRegistryService", () => {
     expect(modes.find((mode) => mode.mode === "userOpenAiApiKey")?.advanced).toBe(true);
   });
 
+  it("persists selected planner mode across registry instances", async () => {
+    const store = new JsonFileStore(tempDir);
+    const registry = new ProviderRegistryService(store);
+
+    await registry.setPlannerMode("userOpenAiApiKey");
+
+    const nextRegistry = new ProviderRegistryService(store);
+    await expect(nextRegistry.getPlannerMode()).resolves.toBe("userOpenAiApiKey");
+    await expect(nextRegistry.getActivePlannerProvider()).resolves.toMatchObject({ id: "openai-planner" });
+  });
+
   it("resolves the active planner adapter from the selected planner mode", async () => {
     const registry = new ProviderRegistryService(new JsonFileStore(tempDir));
     registry.registerProvider(new MockPlanner("agentbridge-hosted-planner", "hosted response"));

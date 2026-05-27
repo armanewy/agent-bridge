@@ -1,4 +1,4 @@
-import { mkdir, rm, writeFile } from "node:fs/promises";
+import { access, mkdir, rm, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { mkdtemp } from "node:fs/promises";
@@ -57,6 +57,27 @@ describe("WorktreeManagerService", () => {
     await expect(store.getMissionWorkspace(workspace.id)).resolves.toEqual(workspace);
     expect(await service.detectChangedFiles(workspace.id)).toContain("changed.txt");
     expect(await service.abandonWorkspace(workspace.id)).toMatchObject({ status: "abandoned" });
+  });
+
+  it("creates worktrees from the requested base branch and removes them on cleanup", async () => {
+    await git(["checkout", "-b", "feature-base"], repoPath);
+    await writeFile(join(repoPath, "feature.txt"), "feature\n", "utf8");
+    await git(["add", "feature.txt"], repoPath);
+    await git(["commit", "-m", "feature base"], repoPath);
+    await git(["checkout", "master"], repoPath);
+    const store = new JsonFileStore(tempDir);
+    const service = new WorktreeManagerService(store);
+
+    const workspace = await service.createMissionWorkspace({
+      missionId: "mission cleanup",
+      baseRepoPath: repoPath,
+      strategy: "gitWorktree",
+      baseBranch: "feature-base"
+    });
+
+    await expect(access(join(workspace.workingPath, "feature.txt"))).resolves.toBeUndefined();
+    await expect(service.cleanupWorkspace(workspace.id)).resolves.toMatchObject({ status: "abandoned" });
+    await expect(access(workspace.workingPath)).rejects.toThrow();
   });
 
   it("uses the mission title for readable worktree names", async () => {

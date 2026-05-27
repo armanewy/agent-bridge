@@ -40,4 +40,15 @@ describe("PlatformService", () => {
     expect(windows.pathEquals("C:\\Repo\\AgentBridge\\", "c:/repo/agentbridge")).toBe(true);
     expect(macos.pathEquals("/Users/me/Repo", "/Users/me/repo")).toBe(false);
   });
+
+  it("allows only safe external URL protocols", async () => {
+    const opened: string[] = [];
+    const service = new PlatformService({ openExternal: async (url) => { opened.push(url); } });
+
+    await service.openExternal("https://example.com");
+    await service.openExternal("codex://threads/new");
+    await expect(service.openExternal("file:///C:/Windows/System32/calc.exe")).rejects.toThrow("not allowed");
+
+    expect(opened).toEqual(["https://example.com", "codex://threads/new"]);
+  });
 });

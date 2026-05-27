@@ -15,6 +15,7 @@ import type {
 import type { AgentEventFilter, LocalStore } from "@agentbridge/local-store";
 
 type ProviderAdapter = PlannerProvider | ExecutorProvider | ReviewerProvider;
+const PLANNER_MODE_SETTING_KEY = "plannerMode";
 
 export interface PlannerModeInfo {
   mode: PlannerProviderMode;
@@ -122,7 +123,7 @@ export class ProviderRegistryService {
   }
 
   async getPlannerMode(): Promise<PlannerProviderMode> {
-    return this.plannerMode;
+    return this.currentPlannerMode();
   }
 
   async setPlannerMode(mode: PlannerProviderMode): Promise<PlannerProviderMode> {
@@ -131,6 +132,7 @@ export class ProviderRegistryService {
       throw new Error(`Planner mode ${mode} is not supported.`);
     }
     this.plannerMode = mode;
+    await this.store.saveSetting(PLANNER_MODE_SETTING_KEY, mode);
     return this.plannerMode;
   }
 
@@ -146,7 +148,8 @@ export class ProviderRegistryService {
   }
 
   async getActivePlannerProvider(): Promise<AgentProviderProfile | undefined> {
-    const mode = plannerModeInfos().find((item) => item.mode === this.plannerMode);
+    const plannerMode = await this.currentPlannerMode();
+    const mode = plannerModeInfos().find((item) => item.mode === plannerMode);
     return mode ? this.getProviderStatus(mode.providerId) : undefined;
   }
 
@@ -160,7 +163,8 @@ export class ProviderRegistryService {
 
   async getActivePlannerAdapter(): Promise<PlannerProvider> {
     const modes = plannerModeInfos();
-    const mode = modes.find((item) => item.mode === this.plannerMode) ?? requireFirst(modes, "No planner modes are configured.");
+    const plannerMode = await this.currentPlannerMode();
+    const mode = modes.find((item) => item.mode === plannerMode) ?? requireFirst(modes, "No planner modes are configured.");
     const provider = this.providers.get(mode.providerId);
     if (!provider || !isPlannerProvider(provider)) {
       throw new Error(`Active planner mode ${mode.mode} is not available. Check Settings > Planner.`);
@@ -174,6 +178,14 @@ export class ProviderRegistryService {
       return provider.status();
     }
     return defaultProviderProfiles().find((profile) => profile.id === providerId) ?? this.store.getProviderProfile(providerId);
+  }
+
+  private async currentPlannerMode(): Promise<PlannerProviderMode> {
+    const stored = await this.store.getSetting<PlannerProviderMode>(PLANNER_MODE_SETTING_KEY);
+    if (stored && plannerModeInfos().some((item) => item.mode === stored)) {
+      this.plannerMode = stored;
+    }
+    return this.plannerMode;
   }
 }
 

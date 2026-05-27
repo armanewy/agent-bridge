@@ -3,7 +3,7 @@ import { createCloudApp, type CloudPlannerRequest, type CloudPlannerTransport } 
 
 describe("AgentBridge Cloud scaffold", () => {
   it("responds to health checks", async () => {
-    const app = createCloudApp();
+    const app = createTestCloudApp();
 
     const response = await app.handle({ method: "GET", path: "/health" });
 
@@ -12,7 +12,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("rejects unauthenticated planner routes", async () => {
-    const app = createCloudApp();
+    const app = createTestCloudApp();
 
     const response = await app.handle({ method: "POST", path: "/v1/planner/task-spec", body: {} });
 
@@ -20,7 +20,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("supports development login and user lookup", async () => {
-    const app = createCloudApp();
+    const app = createTestCloudApp();
 
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
@@ -30,8 +30,16 @@ describe("AgentBridge Cloud scaffold", () => {
     expect(me.body.user).toMatchObject({ id: "user_dev" });
   });
 
+  it("disables development login unless explicitly configured", async () => {
+    const app = createCloudApp({ allowDevLogin: false });
+
+    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
+
+    expect(login.status).toBe(404);
+  });
+
   it("returns a valid mocked task spec", async () => {
-    const app = createCloudApp({}, { plannerTransport: mockPlannerTransport(JSON.stringify(mockTaskSpec())) });
+    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport(JSON.stringify(mockTaskSpec())) });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
@@ -48,7 +56,7 @@ describe("AgentBridge Cloud scaffold", () => {
 
   it("repairs an invalid task spec response once", async () => {
     const requests: CloudPlannerRequest[] = [];
-    const app = createCloudApp(
+    const app = createTestCloudApp(
       {},
       {
         plannerTransport: {
@@ -78,7 +86,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("returns hosted review JSON from the planner transport", async () => {
-    const app = createCloudApp(
+    const app = createTestCloudApp(
       {},
       {
         plannerTransport: mockPlannerTransport(JSON.stringify({
@@ -102,7 +110,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("returns unavailable when no server-side planner transport or OpenAI key exists", async () => {
-    const app = createCloudApp({ openAiApiKey: undefined, openAiApiKeyConfigured: false });
+    const app = createTestCloudApp({ openAiApiKey: undefined, openAiApiKeyConfigured: false });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
@@ -118,7 +126,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("supports deterministic runtime mock planner mode without an OpenAI key", async () => {
-    const app = createCloudApp({ mockPlanner: true, openAiApiKey: undefined, openAiApiKeyConfigured: false });
+    const app = createTestCloudApp({ mockPlanner: true, openAiApiKey: undefined, openAiApiKeyConfigured: false });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
@@ -137,7 +145,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("does not store raw request bodies in request logs", async () => {
-    const app = createCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
+    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
@@ -152,7 +160,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("records usage without raw prompt text", async () => {
-    const app = createCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
+    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
     await app.handle({
@@ -167,7 +175,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("rejects oversized hosted planner payloads", async () => {
-    const app = createCloudApp({ maxPlannerPayloadBytes: 64 }, { plannerTransport: mockPlannerTransport("Planner response.") });
+    const app = createTestCloudApp({ maxPlannerPayloadBytes: 64 }, { plannerTransport: mockPlannerTransport("Planner response.") });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
@@ -182,7 +190,7 @@ describe("AgentBridge Cloud scaffold", () => {
   });
 
   it("rejects file payloads unless enabled", async () => {
-    const app = createCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
+    const app = createTestCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
     const token = String(login.body.token);
 
@@ -209,6 +217,13 @@ function mockPlannerTransport(outputText: string): CloudPlannerTransport {
       };
     }
   };
+}
+
+function createTestCloudApp(
+  config: Parameters<typeof createCloudApp>[0] = {},
+  options: Parameters<typeof createCloudApp>[1] = {}
+) {
+  return createCloudApp({ allowDevLogin: true, ...config }, options);
 }
 
 function mockTaskSpec() {

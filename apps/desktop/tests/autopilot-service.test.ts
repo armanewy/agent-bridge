@@ -2,7 +2,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
-import type { Artifact, AutopilotPolicy, CompletionContract, HandoffCard, Mission, Run, TaskSpec, VerificationResult } from "@agentbridge/core";
+import type { Artifact, AutopilotPolicy, AutopilotRun, CompletionContract, HandoffCard, Mission, Run, TaskSpec, VerificationResult } from "@agentbridge/core";
 import { JsonFileStore } from "@agentbridge/local-store";
 import { ArtifactBrokerService } from "../src/services/artifact-broker-service.js";
 import { AutopilotService } from "../src/services/autopilot-service.js";
@@ -233,7 +233,85 @@ describe("AutopilotService", () => {
 
     expect((await store.listArtifactsForMission("mission_1")).some((artifact) => artifact.title === "User steering note")).toBe(true);
   });
+
+  it("does not continue a cancelled run", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    await store.saveAutopilotPolicy(policy({ id: "policy_manual", maxIterations: 1 }));
+    const run: AutopilotRun = {
+      id: "autopilot_run_cancelled",
+      missionId: "mission_1",
+      policyId: "policy_manual",
+      status: "cancelled",
+      iteration: 0,
+      maxIterations: 1,
+      startedAt: fixedNow(),
+      updatedAt: fixedNow(),
+      completedAt: fixedNow(),
+      stopReason: "Stopped by user."
+    };
+    await store.saveAutopilotRun(run);
+    const service = new AutopilotService(store, fakeWorkbench(store), fixedNow);
+
+    const status = await service.continueAutopilot(run.id);
+
+    expect(status.run?.status).toBe("cancelled");
+    expect(status.steps).toEqual([]);
+  });
+
+  it("blocks verification when policy forbids shell commands", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(mission());
+    const blockedPolicy = policy({ id: "policy_no_shell", allowShellCommands: "never", maxIterations: 3 });
+    await store.saveAutopilotPolicy(blockedPolicy);
+    await store.saveArtifact(textArtifact("mission_1", "modelResponse", "Planner response"));
+    await store.saveHandoffCard({
+      id: "card_1",
+      missionId: "mission_1",
+      sourceId: "provider:openai-planner",
+      captureId: "artifact_modelResponse",
+      targetId: "provider:codex",
+      recipe: "implementationBrief",
+      taskSpec: taskSpec(),
+      generatedPrompt: "Goal:\nDo the thing.",
+      redactionFindings: [],
+      deliveryAttemptIds: [],
+      artifactIds: [],
+      createdAt: fixedNow(),
+      updatedAt: fixedNow()
+    });
+    const delivery = textArtifact("mission_1", "deliveryResult", "Delivered");
+    delivery.title = "Executor delivery result";
+    await store.saveArtifact(delivery);
+    const service = new AutopilotService(store, fakeWorkbench(store), fixedNow);
+
+    const status = await service.startAutopilot("mission_1", blockedPolicy.id);
+
+    expect(status.run?.status).toBe("blocked");
+    expect(status.run?.stopReason).toContain("forbids shell commands");
+  });
 });
+
+function policy(overrides: Partial<AutopilotPolicy> = {}): AutopilotPolicy {
+  return {
+    id: "policy",
+    name: "Policy",
+    mode: "supervised",
+    maxIterations: 3,
+    allowPlannerTurnsWithoutApproval: true,
+    allowCodexTurnsWithoutApproval: true,
+    allowVerificationWithoutApproval: true,
+    allowShellCommands: "configuredOnly",
+    allowFileWrites: "repoOnly",
+    allowNetworkAccess: false,
+    stopOnVerificationFailure: false,
+    stopOnRedactionFinding: true,
+    stopOnProviderWarning: true,
+    createdAt: fixedNow(),
+    updatedAt: fixedNow(),
+    ...overrides
+  };
+}
 
 function fakeWorkbench(store: JsonFileStore): WorkbenchService {
   return {

@@ -95,12 +95,23 @@ export async function handleNativeHostMessage(
     }
     case "capture": {
       const capture = createCapture(message, receivedAt);
-      await options.appendLog?.({ type: "capture", capture, receivedAt });
+      await options.appendLog?.({ type: "capture", capture: captureLogSummary(capture), receivedAt });
       return { ok: true, type: "capture", capture, heartbeat: createHeartbeat(message, receivedAt), receivedAt };
     }
     default:
       return { ok: false, type: message.type, error: `Unsupported message type: ${message.type}`, receivedAt };
   }
+}
+
+function captureLogSummary(capture: Capture): Record<string, unknown> {
+  return {
+    id: capture.id,
+    sourceId: capture.sourceId,
+    captureType: capture.captureType,
+    textLength: capture.text.length,
+    userTriggered: capture.userTriggered,
+    createdAt: capture.createdAt
+  };
 }
 
 function createHeartbeat(message: Record<string, unknown>, receivedAt: string): ExtensionHeartbeat {

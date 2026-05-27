@@ -23,6 +23,12 @@ describe("AuthService", () => {
     await expect(service.getAuthToken()).resolves.toMatch(/^dev_local_/);
   });
 
+  it("blocks development sign-in in production mode", async () => {
+    const service = new AuthService(new MemoryAuthStorage(), "https://cloud.agentbridge.local", "production");
+
+    await expect(service.signInDevMode()).rejects.toThrow("disabled in production");
+  });
+
   it("clears token on sign-out", async () => {
     const service = new AuthService(new MemoryAuthStorage());
     await service.signInDevMode();

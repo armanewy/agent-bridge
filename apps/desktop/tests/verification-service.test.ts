@@ -107,6 +107,60 @@ describe("VerificationService", () => {
     ]);
     await expect(store.getMissionWorkspace("workspace_1")).resolves.toMatchObject({ status: "dirty" });
   });
+
+  it("includes staged and untracked files in git diff evidence", async () => {
+    const repoPath = join(tempDir, "repo");
+    await mkdir(repoPath, { recursive: true });
+    await git(["init"], repoPath);
+    await git(["config", "user.email", "agentbridge@example.com"], repoPath);
+    await git(["config", "user.name", "AgentBridge Tests"], repoPath);
+    await writeFile(join(repoPath, "README.md"), "hello\n", "utf8");
+    await git(["add", "README.md"], repoPath);
+    await git(["commit", "-m", "initial"], repoPath);
+    await writeFile(join(repoPath, "README.md"), "staged\n", "utf8");
+    await git(["add", "README.md"], repoPath);
+    await writeFile(join(repoPath, "new-test.md"), "untracked\n", "utf8");
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission({
+      ...createMission({}),
+      repoContext: { repoPath, repoName: "repo" }
+    });
+    await store.saveMissionWorkspace({
+      id: "workspace_1",
+      missionId: "mission_1",
+      baseRepoPath: repoPath,
+      workingPath: repoPath,
+      strategy: "none",
+      status: "active",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      updatedAt: "2026-01-01T00:00:00.000Z"
+    });
+
+    const response = await new VerificationService(store).runVerification({ missionId: "mission_1" });
+    const gitDiff = response.artifacts.find((artifact) => artifact.kind === "gitDiff");
+
+    expect(gitDiff?.metadata.changedFiles).toEqual(expect.arrayContaining(["README.md", "new-test.md"]));
+    await expect(store.listFileOwnershipForMission("mission_1")).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({ relativePath: "README.md" }),
+        expect.objectContaining({ relativePath: "new-test.md" })
+      ])
+    );
+  });
+
+  it("rejects verification command cwd outside the mission repo", async () => {
+    const store = new JsonFileStore(tempDir);
+    await store.saveMission(createMission({}));
+    const outsidePath = join(tempDir, "..");
+    const runner: CommandRunner = async () => ({ exitCode: 0, stdout: "ok", stderr: "", durationMs: 1 });
+
+    await expect(
+      new VerificationService(store, runner).runVerification({
+        missionId: "mission_1",
+        commands: [{ kind: "custom", command: "echo nope", cwd: outsidePath }]
+      })
+    ).rejects.toThrow("cwd must stay inside");
+  });
 });
 
 function createMission(commands: {

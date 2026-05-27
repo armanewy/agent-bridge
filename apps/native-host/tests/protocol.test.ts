@@ -21,6 +21,7 @@ describe("native host protocol", () => {
   });
 
   it("converts selected text captures", async () => {
+    const logs: unknown[] = [];
     const response = await handleNativeHostMessage(
       {
         type: "capture",
@@ -34,12 +35,21 @@ describe("native host protocol", () => {
         text: "selected text",
         userTriggered: true
       },
-      { now: () => "2026-01-01T00:00:00.000Z" }
+      {
+        now: () => "2026-01-01T00:00:00.000Z",
+        appendLog: async (entry) => { logs.push(entry); }
+      }
     );
 
     expect(response.ok).toBe(true);
     expect(response.capture?.text).toBe("selected text");
     expect(response.capture?.userTriggered).toBe(true);
+    expect(JSON.stringify(logs)).not.toContain("selected text");
+    expect(logs).toEqual([
+      expect.objectContaining({
+        capture: expect.objectContaining({ textLength: "selected text".length })
+      })
+    ]);
   });
 
   it("converts discovered browser tabs into linkable components", async () => {

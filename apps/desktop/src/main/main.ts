@@ -34,7 +34,7 @@ import { OpenAIPlannerProvider } from "../services/providers/openai-planner-prov
 import { CodexLocalPlannerProvider } from "../services/providers/codex-local-planner-provider.js";
 import { CodexExecutorProvider } from "../services/providers/codex-executor-provider.js";
 import { WorkbenchService, type CreateWorkbenchMissionInput } from "../services/workbench-service.js";
-import { PlatformService } from "../services/platform-service.js";
+import { PlatformService, assertAllowedExternalUrl } from "../services/platform-service.js";
 import { ArtifactBrokerService } from "../services/artifact-broker-service.js";
 import { AutopilotService } from "../services/autopilot-service.js";
 import { AuthService, FetchAuthTransport, FileAuthStorage } from "../services/auth-service.js";
@@ -95,8 +95,9 @@ async function createWindow(): Promise<void> {
     }
   });
 
-  if (process.env.VITE_DEV_SERVER_URL) {
-    await mainWindow.loadURL(process.env.VITE_DEV_SERVER_URL);
+  const devServerUrl = rendererDevServerUrl();
+  if (devServerUrl) {
+    await mainWindow.loadURL(devServerUrl);
   } else {
     await mainWindow.loadFile(join(__dirname, "../../dist-renderer/index.html"));
   }
@@ -117,6 +118,24 @@ async function createWindow(): Promise<void> {
       { role: "selectAll", enabled: params.editFlags.canSelectAll }
     ]).popup(window ? { window } : {});
   });
+}
+
+function rendererDevServerUrl(): string | undefined {
+  if (app.isPackaged) {
+    return undefined;
+  }
+  const rawUrl = process.env.VITE_DEV_SERVER_URL;
+  if (!rawUrl) {
+    return undefined;
+  }
+  try {
+    const parsed = new URL(rawUrl);
+    const hostname = parsed.hostname.toLowerCase();
+    const isLocalHost = hostname === "localhost" || hostname === "127.0.0.1" || hostname === "::1" || hostname === "[::1]";
+    return (parsed.protocol === "http:" || parsed.protocol === "https:") && isLocalHost ? parsed.toString() : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 if (hasSingleInstanceLock) {
@@ -540,8 +559,15 @@ async function showEmbeddedChatGptWindow(rawUrl?: string): Promise<BrowserWindow
         chatGptWindow?.loadURL(url).catch((error: unknown) => console.error("Failed to open ChatGPT popup URL", error));
         return { action: "deny" };
       }
-      shell.openExternal(url).catch((error: unknown) => console.error("Failed to open external URL", error));
+      openAllowedExternalUrl(url).catch((error: unknown) => console.error("Failed to open external URL", error));
       return { action: "deny" };
+    });
+    chatGptWindow.webContents.on("will-navigate", (event, url) => {
+      if (isAllowedChatGptNavigation(url)) {
+        return;
+      }
+      event.preventDefault();
+      openAllowedExternalUrl(url).catch((error: unknown) => console.error("Failed to open external URL", error));
     });
     chatGptWindow.on("closed", () => {
       chatGptWindow = undefined;
@@ -568,6 +594,11 @@ async function showEmbeddedChatGptWindow(rawUrl?: string): Promise<BrowserWindow
     }
   }, 750);
   return chatGptWindow;
+}
+
+async function openAllowedExternalUrl(url: string): Promise<void> {
+  assertAllowedExternalUrl(url);
+  await shell.openExternal(url);
 }
 
 function isAllowedChatGptNavigation(rawUrl: string): boolean {
@@ -659,5 +690,12 @@ async function openNativeHostLog(platformService: PlatformService, dataDir: stri
 }
 
 async function clearLocalData(dataDir: string): Promise<void> {
-  await rm(join(dataDir, "agentbridge-store.json"), { force: true });
+  await Promise.all([
+    rm(join(dataDir, "agentbridge-store.json"), { force: true }),
+    rm(join(dataDir, "agentbridge-auth.json"), { force: true }),
+    rm(join(dataDir, "native-host-dev-log.jsonl"), { force: true }),
+    rm(join(dataDir, "artifacts"), { recursive: true, force: true }),
+    rm(join(dataDir, "staging"), { recursive: true, force: true }),
+    rm(join(dataDir, "logs"), { recursive: true, force: true })
+  ]);
 }

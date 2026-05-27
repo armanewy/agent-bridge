@@ -66,6 +66,9 @@ export class AutopilotService {
 
   async continueAutopilot(autopilotRunId: string): Promise<AutopilotStatus> {
     let run = await this.requireRun(autopilotRunId);
+    if (isTerminalRunStatus(run.status)) {
+      return this.statusForRunId(run.id);
+    }
     const policy = await this.requirePolicy(run.policyId);
     while (run.iteration < run.maxIterations) {
       const action = await this.nextAction(run, policy);
@@ -250,6 +253,13 @@ export class AutopilotService {
       };
     }
     if (!latestVerification) {
+      if (policy.allowShellCommands === "never") {
+        return {
+          kind: "stop",
+          status: "blocked",
+          reason: "Verification requires shell commands, but this policy forbids shell commands."
+        };
+      }
       return {
         kind: "verify",
         title: "Run verification",
@@ -359,7 +369,7 @@ export class AutopilotService {
       return true;
     }
     if (kind === "verify") {
-      return !policy.allowVerificationWithoutApproval;
+      return policy.allowShellCommands === "askEachTime" || !policy.allowVerificationWithoutApproval;
     }
     if (kind === "plan" || kind === "review" || kind === "createFollowUp") {
       return !policy.allowPlannerTurnsWithoutApproval;
@@ -645,6 +655,10 @@ type AutopilotAction = ExecutableAutopilotAction | StopAutopilotAction;
 
 function isStopAction(action: AutopilotAction): action is StopAutopilotAction {
   return action.kind === "stop";
+}
+
+function isTerminalRunStatus(status: AutopilotRunStatus): boolean {
+  return status === "cancelled" || status === "passed" || status === "failed";
 }
 
 function statusForStep(kind: AutopilotStep["kind"]): AutopilotRunStatus {

@@ -1,5 +1,6 @@
 import { exec, execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
+import { isAbsolute, relative, resolve } from "node:path";
 import { promisify } from "node:util";
 import { evaluateCompletionContract } from "@agentbridge/core";
 import type {
@@ -87,7 +88,7 @@ export class VerificationService {
     artifacts.push(await this.saveGitDiffArtifact(mission, run.id));
 
     for (const command of commands) {
-      const output = await this.commandRunner(command, command.cwd ?? mission.repoContext.repoPath);
+      const output = await this.commandRunner(command, resolveCommandCwd(command, mission.repoContext.repoPath));
       const artifact = await this.saveCommandArtifact(mission.id, run.id, command, output);
       artifacts.push(artifact);
       commandResults.push({
@@ -206,7 +207,8 @@ export class VerificationService {
 
   private async saveGitDiffArtifact(mission: Mission, runId: string): Promise<Artifact> {
     const createdAt = new Date().toISOString();
-    const content = await readGitDiffSummary(mission.repoContext?.repoPath ?? "");
+    const workspace = (await this.store.listMissionWorkspaces(mission.id))[0];
+    const content = await readGitDiffSummary(mission.repoContext?.repoPath ?? "", workspace?.baseBranch);
     const changedFiles = parseChangedFilesFromGitDiffSummary(content);
     const artifact: Artifact = {
       id: `artifact_${randomUUID()}`,
@@ -632,26 +634,96 @@ function unique(values: string[]): string[] {
   return [...new Set(values)];
 }
 
-async function readGitDiffSummary(repoPath: string): Promise<string> {
+function resolveCommandCwd(command: VerificationCommand, repoPath: string): string {
+  const resolvedRepoPath = resolve(repoPath);
+  const resolvedCwd = resolve(command.cwd?.trim() || repoPath);
+  const relativePath = relative(resolvedRepoPath, resolvedCwd);
+  if (relativePath === "" || (!relativePath.startsWith("..") && !isAbsolute(relativePath))) {
+    return resolvedCwd;
+  }
+  throw new Error(`Verification command cwd must stay inside the mission repository: ${command.cwd}`);
+}
+
+async function readGitDiffSummary(repoPath: string, baseRef?: string): Promise<string> {
   if (!repoPath) {
     return "No repository path configured.";
   }
   try {
-    const [{ stdout: statOutput }, { stdout: nameOutput }] = await Promise.all([
+    const [
+      { stdout: statusOutput },
+      { stdout: unstagedStatOutput },
+      { stdout: stagedStatOutput },
+      { stdout: unstagedNameOutput },
+      { stdout: stagedNameOutput },
+      { stdout: untrackedNameOutput },
+      committedDiff
+    ] = await Promise.all([
+      execFileAsync("git", ["-C", repoPath, "status", "--short"], { windowsHide: true }),
       execFileAsync("git", ["-C", repoPath, "diff", "--stat"], { windowsHide: true }),
-      execFileAsync("git", ["-C", repoPath, "diff", "--name-only"], { windowsHide: true })
+      execFileAsync("git", ["-C", repoPath, "diff", "--cached", "--stat"], { windowsHide: true }),
+      execFileAsync("git", ["-C", repoPath, "diff", "--name-only"], { windowsHide: true }),
+      execFileAsync("git", ["-C", repoPath, "diff", "--cached", "--name-only"], { windowsHide: true }),
+      execFileAsync("git", ["-C", repoPath, "ls-files", "--others", "--exclude-standard"], { windowsHide: true }),
+      readCommittedDiff(repoPath, baseRef)
+    ]);
+    const changedFiles = unique([
+      ...splitLines(unstagedNameOutput),
+      ...splitLines(stagedNameOutput),
+      ...splitLines(untrackedNameOutput),
+      ...committedDiff.changedFiles
     ]);
     return [
-      "git diff --stat:",
-      statOutput.trim() || "No unstaged diff.",
+      "git status --short:",
+      statusOutput.trim() || "Clean working tree.",
+      "",
+      "git diff --stat (unstaged):",
+      unstagedStatOutput.trim() || "No unstaged diff.",
+      "",
+      "git diff --cached --stat (staged):",
+      stagedStatOutput.trim() || "No staged diff.",
+      "",
+      "git diff --stat (committed since base):",
+      committedDiff.stat.trim() || "No committed diff from base.",
       "",
       "changed files:",
-      nameOutput.trim() || "No changed files in diff."
+      changedFiles.length ? changedFiles.join("\n") : "No changed files in diff."
     ].join("\n");
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error);
     return `Git diff unavailable: ${message}`;
   }
+}
+
+async function readCommittedDiff(repoPath: string, baseRef?: string): Promise<{ stat: string; changedFiles: string[] }> {
+  const verifiedBaseRef = await verifyGitRef(repoPath, baseRef);
+  if (!verifiedBaseRef) {
+    return { stat: "", changedFiles: [] };
+  }
+  try {
+    const [{ stdout: stat }, { stdout: names }] = await Promise.all([
+      execFileAsync("git", ["-C", repoPath, "diff", "--stat", `${verifiedBaseRef}...HEAD`], { windowsHide: true }),
+      execFileAsync("git", ["-C", repoPath, "diff", "--name-only", `${verifiedBaseRef}...HEAD`], { windowsHide: true })
+    ]);
+    return { stat, changedFiles: splitLines(names) };
+  } catch {
+    return { stat: "", changedFiles: [] };
+  }
+}
+
+async function verifyGitRef(repoPath: string, ref?: string): Promise<string | undefined> {
+  if (!ref?.trim()) {
+    return undefined;
+  }
+  try {
+    await execFileAsync("git", ["-C", repoPath, "rev-parse", "--verify", ref], { windowsHide: true });
+    return ref;
+  } catch {
+    return undefined;
+  }
+}
+
+function splitLines(value: string): string[] {
+  return value.split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
 }
 
 function parseChangedFilesFromGitDiffSummary(content: string): string[] {

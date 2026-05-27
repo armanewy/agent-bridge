@@ -49,10 +49,11 @@ export class WorktreeManagerService {
     if (input.strategy === "gitWorktree" && existsSync(workingPath)) {
       throw new Error(`Mission worktree path already exists: ${workingPath}`);
     }
+    const baseRef = input.baseBranch ?? "HEAD";
     if (input.strategy === "branch") {
-      await runGit(input.baseRepoPath, ["checkout", "-b", branchName]);
+      await runGit(input.baseRepoPath, ["checkout", "-b", branchName, baseRef]);
     } else {
-      await runGit(input.baseRepoPath, ["worktree", "add", "-b", branchName, workingPath]);
+      await runGit(input.baseRepoPath, ["worktree", "add", "-b", branchName, workingPath, baseRef]);
     }
     const workspace: MissionWorkspace = {
       id: `workspace_${randomUUID()}`,
@@ -97,9 +98,12 @@ export class WorktreeManagerService {
   }
 
   async cleanupWorkspace(workspaceId: string): Promise<MissionWorkspace | undefined> {
-    const workspace = this.workspaces.get(workspaceId);
+    const workspace = this.workspaces.get(workspaceId) ?? await this.store?.getMissionWorkspace(workspaceId);
     if (!workspace) {
       return undefined;
+    }
+    if (workspace.strategy === "gitWorktree" && existsSync(workspace.workingPath)) {
+      await runGit(workspace.baseRepoPath, ["worktree", "remove", "--force", workspace.workingPath]);
     }
     return this.updateStatus(workspaceId, "abandoned");
   }

@@ -55,6 +55,9 @@ export class AuthService {
   }
 
   async signInDevMode(): Promise<AgentBridgeAuthStatus> {
+    if (this.mode === "production") {
+      throw new Error("Development login is disabled in production mode.");
+    }
     if (this.transport) {
       const result = await this.transport.request<{ token: string; user?: AgentBridgeUser }>("/v1/auth/session/dev-login", {
         method: "POST"

@@ -18,4 +18,11 @@ describe("native messaging framing", () => {
     expect(decoded.messages).toEqual([]);
     expect(decoded.remaining).toEqual(partial);
   });
+
+  it("rejects oversized frames", () => {
+    const frame = Buffer.alloc(4);
+    frame.writeUInt32LE(1025, 0);
+
+    expect(() => decodeNativeFrames(frame, 1024)).toThrow("exceeds");
+  });
 });

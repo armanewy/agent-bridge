@@ -20,6 +20,7 @@ export interface CloudConfig {
   logRawPayloads: boolean;
   maxPlannerPayloadBytes: number;
   allowFileUploads: boolean;
+  allowDevLogin: boolean;
 }
 
 export interface CloudRequest {
@@ -114,6 +115,10 @@ export class AgentBridgeCloudApp {
     return [...this.usage];
   }
 
+  getConfig(): CloudConfig {
+    return { ...this.config };
+  }
+
   async handle(request: CloudRequest): Promise<CloudResponse> {
     const requestId = `req_${randomUUID()}`;
     const route = `${request.method.toUpperCase()} ${request.path}`;
@@ -126,6 +131,9 @@ export class AgentBridgeCloudApp {
         return { status, body: { ok: true, requestId } };
       }
       if (method === "POST" && request.path === "/v1/auth/session/dev-login") {
+        if (!this.config.allowDevLogin) {
+          throw new CloudHttpError(404, "development login is disabled");
+        }
         const token = `dev_${randomUUID()}`;
         this.devTokens.add(token);
         userId = DEV_USER.id;
@@ -473,20 +481,28 @@ export async function startServer(app = createCloudApp()): Promise<void> {
   const server = createServer((request, response) => {
     void handleNodeRequest(app, request, response);
   });
-  const port = loadConfig().port;
+  const port = app.getConfig().port;
   server.listen(port, () => {
     console.log(`AgentBridge Cloud listening on ${port}`);
   });
 }
 
 async function handleNodeRequest(app: AgentBridgeCloudApp, request: IncomingMessage, response: ServerResponse): Promise<void> {
-  const body = await readJsonBody(request);
-  const result = await app.handle({
-    method: request.method ?? "GET",
-    path: request.url?.split("?")[0] ?? "/",
-    headers: normalizeHeaders(request.headers),
-    body
-  });
+  let result: CloudResponse;
+  try {
+    const body = await readJsonBody(request, app.getConfig().maxPlannerPayloadBytes);
+    result = await app.handle({
+      method: request.method ?? "GET",
+      path: request.url?.split("?")[0] ?? "/",
+      headers: normalizeHeaders(request.headers),
+      body
+    });
+  } catch (error) {
+    result = {
+      status: error instanceof CloudHttpError ? error.status : 400,
+      body: { error: error instanceof Error ? error.message : String(error) }
+    };
+  }
   response.writeHead(result.status, { "content-type": "application/json" });
   response.end(JSON.stringify(result.body));
 }
@@ -501,7 +517,8 @@ function loadConfig(): CloudConfig {
     openAiModel: process.env.AGENTBRIDGE_CLOUD_OPENAI_MODEL ?? "gpt-4.1-mini",
     logRawPayloads: process.env.LOG_RAW_PAYLOADS === "true",
     maxPlannerPayloadBytes: Number(process.env.MAX_PLANNER_PAYLOAD_BYTES ?? 64 * 1024),
-    allowFileUploads: process.env.AGENTBRIDGE_CLOUD_ALLOW_FILE_UPLOADS === "true"
+    allowFileUploads: process.env.AGENTBRIDGE_CLOUD_ALLOW_FILE_UPLOADS === "true",
+    allowDevLogin: process.env.AGENTBRIDGE_CLOUD_ALLOW_DEV_LOGIN === "true" || process.env.AGENTBRIDGE_CLOUD_ALLOW_DEV_LOGIN === "1"
   };
 }
 
@@ -679,10 +696,20 @@ function normalizeHeaders(headers: IncomingMessage["headers"]): Record<string, s
   return normalized;
 }
 
-async function readJsonBody(request: IncomingMessage): Promise<unknown> {
+async function readJsonBody(request: IncomingMessage, maxBytes: number): Promise<unknown> {
+  const declaredLength = Number(request.headers["content-length"]);
+  if (Number.isFinite(declaredLength) && declaredLength > maxBytes) {
+    throw new CloudHttpError(413, "request body is too large");
+  }
   const chunks: Buffer[] = [];
+  let totalBytes = 0;
   for await (const chunk of request) {
-    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+    const buffer = Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk);
+    totalBytes += buffer.length;
+    if (totalBytes > maxBytes) {
+      throw new CloudHttpError(413, "request body is too large");
+    }
+    chunks.push(buffer);
   }
   if (!chunks.length) {
     return undefined;

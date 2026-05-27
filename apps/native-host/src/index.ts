@@ -24,11 +24,21 @@ process.stdin.on("data", (chunk: Buffer) => {
 
 async function handleChunk(chunk: Buffer): Promise<void> {
   pending = Buffer.concat([pending, chunk]);
-  const decoded = decodeNativeFrames(pending);
+  let decoded: ReturnType<typeof decodeNativeFrames>;
+  try {
+    decoded = decodeNativeFrames(pending);
+  } catch (error) {
+    pending = Buffer.alloc(0);
+    throw error;
+  }
   pending = decoded.remaining;
 
   for (const message of decoded.messages) {
-    const response = await handleNativeHostMessage(message, { appendLog: appendDevLog });
+    const response = await handleNativeHostMessage(message, {
+      ...(process.env.AGENTBRIDGE_NATIVE_HOST_DEV_LOG === "1" || process.env.AGENTBRIDGE_NATIVE_HOST_DEV_LOG === "true"
+        ? { appendLog: appendDevLog }
+        : {})
+    });
     await persistResponse(response);
     process.stdout.write(encodeNativeMessage(response));
   }
