@@ -52,4 +52,38 @@ test.describe("desktop renderer mock scenarios", () => {
     await expect(page.getByText("AgentBridge can send prompts into selected existing Codex threads.")).toBeVisible();
     await expect(page.getByText("Can send", { exact: true })).toBeVisible();
   });
+
+  test("keeps the simple workbench inside 760x940 without diagnostic surfaces", async ({ page }) => {
+    await page.setViewportSize({ width: 760, height: 940 });
+    await page.goto("/?scenario=connected&view=workbench");
+
+    await expect(page.getByTestId("workbench-view")).toBeVisible();
+    await expect(page.getByText("Link Center")).toHaveCount(0);
+    await expect(page.getByText("Capture Inbox")).toHaveCount(0);
+    await expect(page.getByText("Chrome extension setup")).toHaveCount(0);
+    await expect(page.getByText("agentbridge-hosted-planner")).toHaveCount(0);
+
+    const overflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      body: document.body.scrollWidth - document.body.clientWidth
+    }));
+    expect(overflow.document).toBeLessThanOrEqual(0);
+    expect(overflow.body).toBeLessThanOrEqual(0);
+  });
+
+  test("keeps advanced diagnostics available at 760x940", async ({ page }) => {
+    await page.setViewportSize({ width: 760, height: 940 });
+    await page.goto("/?scenario=connected&view=advanced&advancedView=captures");
+
+    await expect(page.getByTestId("advanced-view")).toBeVisible();
+    await expect(page.getByText("Link Center")).toBeVisible();
+    await expect(page.getByText("Capture Inbox")).toBeVisible();
+
+    const overflow = await page.evaluate(() => ({
+      document: document.documentElement.scrollWidth - document.documentElement.clientWidth,
+      body: document.body.scrollWidth - document.body.clientWidth
+    }));
+    expect(overflow.document).toBeLessThanOrEqual(0);
+    expect(overflow.body).toBeLessThanOrEqual(0);
+  });
 });
