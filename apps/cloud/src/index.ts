@@ -509,11 +509,13 @@ async function handleNodeRequest(app: AgentBridgeCloudApp, request: IncomingMess
 
 function loadConfig(): CloudConfig {
   const openAiApiKey = process.env.OPENAI_API_KEY;
+  const mockPlannerAllowed = process.env.AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER === "1" || process.env.AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER === "true";
+  const mockPlannerRequested = process.env.AGENTBRIDGE_CLOUD_MOCK === "1" || process.env.AGENTBRIDGE_CLOUD_MOCK === "true";
   return {
     port: Number(process.env.AGENTBRIDGE_CLOUD_PORT ?? 8787),
     ...(openAiApiKey ? { openAiApiKey } : {}),
     openAiApiKeyConfigured: Boolean(openAiApiKey),
-    mockPlanner: process.env.AGENTBRIDGE_CLOUD_MOCK === "1" || process.env.AGENTBRIDGE_CLOUD_MOCK === "true",
+    mockPlanner: mockPlannerAllowed && mockPlannerRequested,
     openAiModel: process.env.AGENTBRIDGE_CLOUD_OPENAI_MODEL ?? "gpt-4.1-mini",
     logRawPayloads: process.env.LOG_RAW_PAYLOADS === "true",
     maxPlannerPayloadBytes: Number(process.env.MAX_PLANNER_PAYLOAD_BYTES ?? 64 * 1024),

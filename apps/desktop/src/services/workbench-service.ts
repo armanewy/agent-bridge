@@ -1,7 +1,6 @@
 import { randomUUID } from "node:crypto";
 import {
   renderTaskSpecForTarget,
-  TaskSpecSchema,
   type AgentSessionRef,
   type AgentTurn,
   type Artifact,
@@ -26,12 +25,14 @@ import type { CompletionContractService } from "./completion-contract-service.js
 import type { VerificationService } from "./verification-service.js";
 import type { WorkspaceResolverService } from "./workspace-resolver-service.js";
 import { RepoContextService } from "./repo-context-service.js";
+import { parseTaskSpecText } from "../shared/task-spec-import.js";
 
 export interface CreateWorkbenchMissionInput {
   title?: string;
   goal?: string;
   repoContext?: Mission["repoContext"];
   verificationCommands?: VerificationCommand[];
+  importedPlannerResponse?: string;
 }
 
 export interface AttachWorkspaceInput {
@@ -79,7 +80,31 @@ export class WorkbenchService {
       updatedAt: now
     };
     await this.store.saveMission(mission);
-    const savedMission = input.repoContext ? mission : await this.attachHighConfidenceWorkspace(mission);
+    let savedMission = input.repoContext ? mission : await this.attachHighConfidenceWorkspace(mission);
+    if (input.importedPlannerResponse?.trim()) {
+      const plannerArtifact: Artifact = {
+        id: `artifact_${randomUUID()}`,
+        missionId: savedMission.id,
+        kind: "modelResponse",
+        title: "Imported ChatGPT planner response",
+        content: input.importedPlannerResponse.trim(),
+        metadata: {
+          providerId: "chatgpt-manual",
+          source: "manualChatGptPlannerImport",
+          imported: true
+        },
+        createdAt: now
+      };
+      await this.store.saveArtifact(plannerArtifact);
+      savedMission = {
+        ...savedMission,
+        status: "planned",
+        sourceIds: unique([...savedMission.sourceIds, "provider:chatgpt-manual"]),
+        artifactIds: unique([...savedMission.artifactIds, plannerArtifact.id]),
+        updatedAt: now
+      };
+      await this.store.saveMission(savedMission);
+    }
     await this.appendRunStep(mission.id, "planning", "Create workbench mission", "passed", []);
     return savedMission;
   }
@@ -109,7 +134,8 @@ export class WorkbenchService {
     if (!plannerArtifact?.content) {
       throw new Error("No planner response artifact found for this mission.");
     }
-    const taskSpecResponse = hasCreateTaskSpec(this.planner)
+    const parsedPlannerTaskSpec = parseTaskSpecText(plannerArtifact.content);
+    const taskSpecResponse = !parsedPlannerTaskSpec && hasCreateTaskSpec(this.planner)
       ? await this.planner.createTaskSpec({
           missionId,
           prompt: plannerArtifact.content,
@@ -118,7 +144,7 @@ export class WorkbenchService {
           metadata: { source: "workbenchTaskSpec" }
         })
       : undefined;
-    const taskSpec = taskSpecResponse?.taskSpec ?? taskSpecFromPlannerText(plannerArtifact.content, mission);
+    const taskSpec = parsedPlannerTaskSpec ?? taskSpecResponse?.taskSpec ?? taskSpecFromPlannerText(plannerArtifact.content, mission);
     const createdAt = this.now();
     const generatedFromArtifactId = taskSpecResponse?.artifactIds[0] ?? plannerArtifact.id;
     const taskArtifact: Artifact = {
@@ -529,7 +555,7 @@ export class WorkbenchService {
 }
 
 function taskSpecFromPlannerText(content: string, mission: Mission, fallback?: TaskSpec): TaskSpec {
-  const parsed = parseTaskSpec(content);
+  const parsed = parseTaskSpecText(content);
   if (parsed) {
     return parsed;
   }
@@ -546,23 +572,6 @@ function taskSpecFromPlannerText(content: string, mission: Mission, fallback?: T
     verificationSteps: fallback?.verificationSteps ?? mission.verificationPlan?.commands.map((command) => command.command) ?? [],
     expectedSummaryFormat: fallback?.expectedSummaryFormat ?? "Summary, verification, and remaining risk."
   };
-}
-
-function parseTaskSpec(content: string): TaskSpec | undefined {
-  const candidates = [content, content.match(/```(?:json)?\s*([\s\S]*?)```/i)?.[1]?.trim()].filter(
-    (candidate): candidate is string => Boolean(candidate)
-  );
-  for (const candidate of candidates) {
-    try {
-      const result = TaskSpecSchema.safeParse(JSON.parse(candidate) as unknown);
-      if (result.success) {
-        return result.data;
-      }
-    } catch {
-      // Planner text can be plain prose. The fallback TaskSpec keeps the loop moving.
-    }
-  }
-  return undefined;
 }
 
 function buildPlannerReviewSummary(summary: string, artifacts: Artifact[]): string {

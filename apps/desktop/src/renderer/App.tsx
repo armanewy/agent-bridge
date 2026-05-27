@@ -44,6 +44,7 @@ import { MissionPanel } from "../components/mission/MissionPanel.js";
 import { SetupPanel } from "../components/setup/SetupPanel.js";
 import { StartPage } from "../components/start/StartPage.js";
 import { WorkbenchPage } from "../components/workbench/WorkbenchPage.js";
+import { extractTaskSpecJson } from "../shared/task-spec-import.js";
 
 type View = "workbench" | "tasks" | "settings" | "advanced";
 type AdvancedView = "legacy" | "components" | "captures" | "links" | "sources" | "targets" | "audit" | "demo";
@@ -563,6 +564,7 @@ export function App(): JSX.Element {
   async function startAutopilotMission(intent: string, mode: "manual" | "supervised" | "autonomous"): Promise<void> {
     setWorkbenchError(undefined);
     try {
+      const importedPlannerResponse = extractTaskSpecJson(intent);
       const repoContext = codexTarget
         ? {
             repoPath: codexTarget.repoPath,
@@ -574,7 +576,8 @@ export function App(): JSX.Element {
       const mission = await api.createWorkbenchMission({
         title: intent.trim().split(/\r?\n/)[0]?.slice(0, 80) || "Workbench mission",
         goal: intent.trim(),
-        ...(repoContext ? { repoContext } : {})
+        ...(repoContext ? { repoContext } : {}),
+        ...(importedPlannerResponse ? { importedPlannerResponse } : {})
       });
       selectedMissionIdRef.current = mission.id;
       setSelectedMissionId(mission.id);

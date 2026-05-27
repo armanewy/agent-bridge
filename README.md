@@ -118,9 +118,11 @@ pnpm dev:native-host
 pnpm test:win-uia-helper
 ```
 
-`pnpm dev:local` is the lowest-friction local app launcher. It loads optional gitignored `.env.local` configuration, starts AgentBridge Cloud on a free local port, seeds development auth for that local Cloud process, probes the OpenAI-backed planner when `OPENAI_API_KEY` is set, falls back to deterministic mock planner mode when the key is missing or unusable, then opens the Electron desktop with `AGENTBRIDGE_CLOUD_URL` already wired. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself.
+`pnpm dev:local` is the lowest-friction local app launcher. It loads optional gitignored `.env.local` configuration, starts AgentBridge Cloud on a free local port, seeds development auth for that local Cloud process, probes the OpenAI-backed planner when `OPENAI_API_KEY` is set, then opens the Electron desktop with `AGENTBRIDGE_CLOUD_URL` already wired. It does not create, seed, or run missions; paste mission prompts into the Workbench yourself. Deterministic mock planner mode is explicit integration-test mode only via `pnpm dev:local -- -MockPlanner`.
 
 For OpenAI-backed local planner runs, set `OPENAI_API_KEY` in your shell or copy `.env.example` to `.env.local` and fill it in. Do not commit `.env.local`.
+
+To use ChatGPT as the planner without API billing, ask ChatGPT to return a strict TaskSpec JSON object with `title`, `goal`, `background`, `instructions`, `requirements`, `constraints`, `nonGoals`, `acceptanceCriteria`, `suggestedFiles`, `verificationSteps`, and `expectedSummaryFormat`. Paste that JSON into the Workbench task box and start the mission. AgentBridge imports the JSON as the planner artifact, validates it locally, skips the hosted planner call, and continues with TaskSpec -> Codex -> verification.
 
 The packaged Windows app is written to:
 

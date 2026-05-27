@@ -708,7 +708,7 @@ function classifyStepFailure(error: unknown): AutopilotStepFailure {
 
   if (providerUnavailable) {
     const quotaHelp = normalized.includes("429") || normalized.includes("quota")
-      ? " OpenAI quota or billing is blocking the hosted planner; update the key/billing or restart local dev with mock planner mode."
+      ? " OpenAI quota or billing is blocking the hosted planner; update the key/billing or paste a ChatGPT TaskSpec JSON to skip the hosted planner."
       : "";
     return {
       runStatus: "blocked",

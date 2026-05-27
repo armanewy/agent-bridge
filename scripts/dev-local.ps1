@@ -135,7 +135,10 @@ function Get-CloudErrorMessage {
 
 function Test-MockPlannerEnabled {
   $value = "$env:AGENTBRIDGE_CLOUD_MOCK".ToLowerInvariant()
-  return $value -eq "1" -or $value -eq "true"
+  $allowValue = "$env:AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER".ToLowerInvariant()
+  $requested = $value -eq "1" -or $value -eq "true"
+  $allowed = $allowValue -eq "1" -or $allowValue -eq "true"
+  return $requested -and $allowed
 }
 
 function Test-CloudPlanner {
@@ -185,10 +188,10 @@ try {
   }
   if ($MockPlanner) {
     $env:AGENTBRIDGE_CLOUD_MOCK = "1"
+    $env:AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER = "1"
   }
   if (!$env:OPENAI_API_KEY -and !(Test-MockPlannerEnabled)) {
-    $env:AGENTBRIDGE_CLOUD_MOCK = "1"
-    Write-Warning "OPENAI_API_KEY is not set; starting AgentBridge Cloud in deterministic mock planner mode."
+    Write-Warning "OPENAI_API_KEY is not set; the hosted planner will be unavailable. Paste ChatGPT TaskSpec JSON or rerun with -MockPlanner for integration tests only."
   }
 
   if ($CloudPort -le 0) {
@@ -215,18 +218,14 @@ try {
           throw "OpenAI planner startup probe failed: $($probe.message)"
         }
         Write-Warning "OpenAI planner startup probe failed: $($probe.message)"
-        Write-Warning "Restarting AgentBridge Cloud in deterministic mock planner mode for local development. Use -RequireOpenAI to fail instead."
-        Stop-Process -Id $cloud.Id -Force -ErrorAction SilentlyContinue
-        $env:AGENTBRIDGE_CLOUD_MOCK = "1"
-        $cloud = Start-AgentBridgeCloud -NodeCommand $nodeCommand -WorkingDirectory $repoRoot
-        Wait-ForHttp -Url "$env:AGENTBRIDGE_CLOUD_URL/health" -Process $cloud -Name "AgentBridge Cloud"
+        Write-Warning "Continuing without planner fallback. Paste ChatGPT TaskSpec JSON, fix API billing, or rerun with -MockPlanner for integration tests only."
       }
     }
     if (!$NoDevSignIn) {
       Set-DesktopDevAuth -CloudBaseUrl $env:AGENTBRIDGE_CLOUD_URL
     }
     Write-Host "AgentBridge Cloud: $env:AGENTBRIDGE_CLOUD_URL"
-    Write-Host "Planner mode: $(if (Test-MockPlannerEnabled) { 'mock' } else { 'OpenAI' })"
+    Write-Host "Planner mode: $(if (Test-MockPlannerEnabled) { 'deterministic mock (explicit integration-test mode)' } elseif ($env:OPENAI_API_KEY) { 'OpenAI' } else { 'unavailable' })"
     pnpm desktop:dev
   } finally {
     if (!$cloud.HasExited) {

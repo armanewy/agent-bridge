@@ -125,6 +125,34 @@ describe("AgentBridge Cloud scaffold", () => {
     expect(String(response.body.error)).toContain("OPENAI_API_KEY");
   });
 
+  it("does not enable runtime mock planner unless explicitly allowed", async () => {
+    const previousMock = process.env.AGENTBRIDGE_CLOUD_MOCK;
+    const previousAllowMock = process.env.AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER;
+    const previousOpenAiKey = process.env.OPENAI_API_KEY;
+    try {
+      process.env.AGENTBRIDGE_CLOUD_MOCK = "1";
+      delete process.env.AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER;
+      delete process.env.OPENAI_API_KEY;
+      const app = createCloudApp({ allowDevLogin: true });
+      const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
+      const token = String(login.body.token);
+
+      const response = await app.handle({
+        method: "POST",
+        path: "/v1/planner/task-spec",
+        headers: { authorization: `Bearer ${token}` },
+        body: { payload: { intent: "Plan." } }
+      });
+
+      expect(response.status).toBe(503);
+      expect(app.getConfig().mockPlanner).toBe(false);
+    } finally {
+      restoreEnv("AGENTBRIDGE_CLOUD_MOCK", previousMock);
+      restoreEnv("AGENTBRIDGE_CLOUD_ALLOW_MOCK_PLANNER", previousAllowMock);
+      restoreEnv("OPENAI_API_KEY", previousOpenAiKey);
+    }
+  });
+
   it("preserves upstream planner error status codes", async () => {
     const app = createTestCloudApp(
       {},
@@ -242,6 +270,14 @@ function mockPlannerTransport(outputText: string): CloudPlannerTransport {
       };
     }
   };
+}
+
+function restoreEnv(key: string, value: string | undefined): void {
+  if (value === undefined) {
+    delete process.env[key];
+    return;
+  }
+  process.env[key] = value;
 }
 
 function createTestCloudApp(

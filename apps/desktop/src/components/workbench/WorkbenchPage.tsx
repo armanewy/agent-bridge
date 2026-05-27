@@ -12,6 +12,7 @@ import type {
   WorkspaceCandidate
 } from "@agentbridge/core";
 import type { AutopilotStatus, CodexAppServerStatus, MissionDetail } from "../../services/bridge-contract.js";
+import { extractTaskSpecJson } from "../../shared/task-spec-import.js";
 
 interface WorkbenchPageProps {
   missionDetail?: MissionDetail | undefined;
@@ -92,6 +93,7 @@ export function WorkbenchPage({
   const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
 
   const planner = providerProfiles.find((profile) => profile.id === "agentbridge-hosted-planner") ?? providerProfiles.find((profile) => profile.kind === "planner");
+  const intentContainsTaskSpec = Boolean(extractTaskSpecJson(intentText));
   const codex = providerProfiles.find((profile) => profile.id === "codex");
   const taskCard = missionDetail?.handoffCards.find((card) => card.recipe !== "debuggingRequest");
   const followUpCard = missionDetail?.handoffCards.find((card) => card.recipe === "debuggingRequest");
@@ -135,12 +137,12 @@ export function WorkbenchPage({
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard && codexReady);
-  const canStartMission = Boolean(intentText.trim() && planner?.status === "available" && codexReady);
+  const canStartMission = Boolean(intentText.trim() && codexReady && (planner?.status === "available" || intentContainsTaskSpec));
   const isBusy = Boolean(pendingOperation);
   const canStopRun = Boolean(activeRun && !["cancelled", "passed", "failed"].includes(activeRun.status));
   const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
   const blockers = [
-    planner?.status !== "available" ? "Sign in to start." : undefined,
+    planner?.status !== "available" && !intentContainsTaskSpec ? "Sign in or paste a ChatGPT TaskSpec JSON to start." : undefined,
     !codexReady ? "Codex is not ready." : undefined
   ].filter((item): item is string => Boolean(item));
 

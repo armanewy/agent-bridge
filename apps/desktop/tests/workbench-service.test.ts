@@ -78,6 +78,47 @@ describe("WorkbenchService", () => {
     expect(response.content).toContain("Codex local planner");
   });
 
+  it("imports a ChatGPT TaskSpec without calling the hosted planner again", async () => {
+    const store = new JsonFileStore(tempDir);
+    const plannerRequests: OpenAIPlannerResponseRequest[] = [];
+    const planner = new OpenAIPlannerProvider(store, {
+      transport: queuedTransport(["Planner should not be called."], plannerRequests),
+      now: fixedNow
+    });
+    const workbench = new WorkbenchService(
+      store,
+      planner,
+      new MockExecutorProvider(),
+      new VerificationService(store, async () => ({ exitCode: 0, stdout: "ok", stderr: "", durationMs: 0 })),
+      fixedNow,
+      undefined,
+      new CompletionContractService(store)
+    );
+
+    const mission = await workbench.createWorkbenchMission({
+      goal: "Use ChatGPT as the planner.",
+      importedPlannerResponse: [
+        "ChatGPT planner output:",
+        "```json",
+        JSON.stringify(sampleTaskSpec()),
+        "```"
+      ].join("\n")
+    });
+    const card = await workbench.createTaskSpecFromLatestPlannerTurn(mission.id);
+
+    expect(card.taskSpec.title).toBe("Provider workbench");
+    expect(plannerRequests).toEqual([]);
+    await expect(store.listArtifactsForMission(mission.id)).resolves.toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          title: "Imported ChatGPT planner response",
+          metadata: expect.objectContaining({ source: "manualChatGptPlannerImport" })
+        }),
+        expect.objectContaining({ title: "TaskSpec" })
+      ])
+    );
+  });
+
   it("attaches a high-confidence Codex workspace candidate", async () => {
     const store = new JsonFileStore(tempDir);
     await store.saveCodexThreadRef(codexThreadRef(tempDir));
