@@ -512,8 +512,20 @@ export class FetchHostedPlannerTransport implements HostedPlannerTransport {
       ...(input.body === undefined ? {} : { body: JSON.stringify(input.body) })
     });
     if (!response.ok) {
-      throw new Error(`AgentBridge Cloud returned HTTP ${response.status}.`);
+      throw new Error(await hostedPlannerErrorMessage(response));
     }
     return await response.json() as T;
+  }
+}
+
+async function hostedPlannerErrorMessage(response: Response): Promise<string> {
+  const prefix = `AgentBridge Cloud returned HTTP ${response.status}`;
+  try {
+    const payload = await response.json() as { error?: unknown; requestId?: unknown };
+    const error = typeof payload.error === "string" && payload.error.trim() ? payload.error.trim() : undefined;
+    const requestId = typeof payload.requestId === "string" && payload.requestId.trim() ? payload.requestId.trim() : undefined;
+    return [prefix, error].filter(Boolean).join(": ") + (requestId ? ` (${requestId})` : ".");
+  } catch {
+    return `${prefix}.`;
   }
 }

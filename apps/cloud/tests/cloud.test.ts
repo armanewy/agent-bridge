@@ -125,6 +125,31 @@ describe("AgentBridge Cloud scaffold", () => {
     expect(String(response.body.error)).toContain("OPENAI_API_KEY");
   });
 
+  it("preserves upstream planner error status codes", async () => {
+    const app = createTestCloudApp(
+      {},
+      {
+        plannerTransport: {
+          async createResponse() {
+            throw Object.assign(new Error("quota exceeded"), { status: 429 });
+          }
+        }
+      }
+    );
+    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
+    const token = String(login.body.token);
+
+    const response = await app.handle({
+      method: "POST",
+      path: "/v1/planner/task-spec",
+      headers: { authorization: `Bearer ${token}` },
+      body: { payload: { intent: "Plan." } }
+    });
+
+    expect(response.status).toBe(429);
+    expect(response.body.error).toBe("quota exceeded");
+  });
+
   it("supports deterministic runtime mock planner mode without an OpenAI key", async () => {
     const app = createTestCloudApp({ mockPlanner: true, openAiApiKey: undefined, openAiApiKeyConfigured: false });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });

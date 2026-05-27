@@ -7,6 +7,7 @@ import { AuthService, MemoryAuthStorage } from "../src/services/auth-service.js"
 import {
   AGENTBRIDGE_HOSTED_PLANNER_PROVIDER_ID,
   AgentBridgeHostedPlannerProvider,
+  FetchHostedPlannerTransport,
   type HostedPlannerTransport
 } from "../src/services/providers/agentbridge-hosted-planner-provider.js";
 
@@ -138,6 +139,29 @@ describe("AgentBridgeHostedPlannerProvider", () => {
     const artifacts = await store.listArtifactsForMission("mission_4");
     expect(artifacts.map((artifact) => artifact.title)).toContain("Hosted Planner payload summary");
     expect(JSON.stringify(artifacts)).toContain("bearerToken");
+  });
+
+  it("includes cloud error body details in hosted transport failures", async () => {
+    const originalFetch = globalThis.fetch;
+    globalThis.fetch = (async () =>
+      new Response(JSON.stringify({ error: "quota exceeded", requestId: "req_123" }), {
+        status: 429,
+        headers: { "content-type": "application/json" }
+      })) as typeof fetch;
+
+    try {
+      const transport = new FetchHostedPlannerTransport();
+      await expect(
+        transport.request("/v1/planner/task-spec", {
+          method: "POST",
+          token: "token",
+          baseUrl: "http://127.0.0.1:8787",
+          body: { payload: { intent: "Plan." } }
+        })
+      ).rejects.toThrow("AgentBridge Cloud returned HTTP 429: quota exceeded (req_123)");
+    } finally {
+      globalThis.fetch = originalFetch;
+    }
   });
 });
 

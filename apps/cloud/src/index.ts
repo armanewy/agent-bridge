@@ -261,7 +261,7 @@ export class AgentBridgeCloudApp {
       }
       return { status, body: { error: "not_found", requestId } };
     } catch (error) {
-      status = error instanceof CloudHttpError ? error.status : 500;
+      status = httpStatusFromError(error);
       return { status, body: { error: error instanceof Error ? error.message : String(error), requestId } };
     } finally {
       this.requestLogs.push({
@@ -719,6 +719,23 @@ async function readJsonBody(request: IncomingMessage, maxBytes: number): Promise
 
 function asRecord(value: unknown): Record<string, unknown> {
   return typeof value === "object" && value !== null ? (value as Record<string, unknown>) : {};
+}
+
+function httpStatusFromError(error: unknown): number {
+  if (error instanceof CloudHttpError) {
+    return error.status;
+  }
+  const record = asRecord(error);
+  const directStatus = httpStatusNumber(record.status) ?? httpStatusNumber(record.statusCode);
+  if (directStatus) {
+    return directStatus;
+  }
+  const response = asRecord(record.response);
+  return httpStatusNumber(response.status) ?? 500;
+}
+
+function httpStatusNumber(value: unknown): number | undefined {
+  return typeof value === "number" && Number.isInteger(value) && value >= 400 && value <= 599 ? value : undefined;
 }
 
 function containsFilePayload(value: unknown): boolean {
