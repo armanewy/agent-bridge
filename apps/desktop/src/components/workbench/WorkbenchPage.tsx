@@ -137,6 +137,7 @@ export function WorkbenchPage({
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard && codexReady);
   const canStartMission = Boolean(intentText.trim() && planner?.status === "available" && codexReady);
   const isBusy = Boolean(pendingOperation);
+  const canStopRun = Boolean(activeRun && !["cancelled", "passed", "failed"].includes(activeRun.status));
   const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
   const blockers = [
     planner?.status !== "available" ? "Sign in to start." : undefined,
@@ -198,19 +199,25 @@ export function WorkbenchPage({
             </label>
             <button
               type="button"
-              className="primary-button"
-              disabled={!canStartMission || isBusy}
-              onClick={() => void runOperation("startMission", () => onStartMission(intentText, autopilotMode))}
+              className={canStopRun ? "danger-button run-control-button" : "primary-button run-control-button"}
+              disabled={canStopRun ? isBusy : !canStartMission || isBusy}
+              onClick={() => {
+                if (canStopRun && activeRun) {
+                  void runOperation("stop", () => onStopAutopilot(activeRun.id));
+                  return;
+                }
+                void runOperation("startMission", () => onStartMission(intentText, autopilotMode));
+              }}
             >
-              {pendingOperation === "startMission" ? <span className="spinner light" aria-hidden="true" /> : <Play size={16} />}
-              {pendingOperation === "startMission" ? "Starting..." : "Start"}
+              {pendingOperation === "startMission" || pendingOperation === "stop" ? (
+                <span className="spinner light" aria-hidden="true" />
+              ) : canStopRun ? (
+                <Square size={16} fill="currentColor" />
+              ) : (
+                <Play size={16} />
+              )}
+              {pendingOperation === "startMission" ? "Starting..." : pendingOperation === "stop" ? "Stopping..." : canStopRun ? "Stop" : "Start"}
             </button>
-            {activeRun && activeRun.status !== "cancelled" && activeRun.status !== "passed" && activeRun.status !== "failed" ? (
-              <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("stop", () => onStopAutopilot(activeRun.id))}>
-                <Square size={16} />
-                Stop
-              </button>
-            ) : null}
           </div>
         </div>
 

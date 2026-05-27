@@ -240,7 +240,8 @@ nav {
 }
 
 .workbench-controls .primary-button,
-.workbench-controls .secondary-button {
+.workbench-controls .secondary-button,
+.workbench-controls .danger-button {
   width: 100%;
 }
 
@@ -1210,6 +1211,7 @@ nav {
 
 .primary-button,
 .secondary-button,
+.danger-button,
 .icon-button {
   border: 1px solid transparent;
   min-height: 36px;
@@ -1241,6 +1243,14 @@ nav {
   border-color: #efb1aa;
 }
 
+.danger-button {
+  padding: 0 14px;
+  background: #b42318;
+  color: #ffffff;
+  border-color: #b42318;
+  box-shadow: 0 2px 5px rgba(180, 35, 24, 0.18);
+}
+
 .icon-button {
   width: 36px;
   padding: 0;
@@ -1269,8 +1279,15 @@ nav {
   color: #84261d;
 }
 
+.danger-button:not(:disabled):hover {
+  background: #d92d20;
+  border-color: #d92d20;
+  box-shadow: 0 4px 10px rgba(180, 35, 24, 0.24);
+}
+
 .primary-button:not(:disabled):active,
 .secondary-button:not(:disabled):active,
+.danger-button:not(:disabled):active,
 .icon-button:not(:disabled):active {
   transform: translateY(1px) scale(0.985);
   box-shadow: inset 0 3px 7px rgba(17, 24, 29, 0.24);
@@ -1286,6 +1303,11 @@ nav {
   background: #d8eee6;
   border-color: #205f4b;
   color: #0f3d2e;
+}
+
+.danger-button:not(:disabled):active {
+  background: #912018;
+  border-color: #912018;
 }
 
 button:disabled {
