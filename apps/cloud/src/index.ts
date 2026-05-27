@@ -15,6 +15,7 @@ export interface CloudConfig {
   port: number;
   openAiApiKey?: string | undefined;
   openAiApiKeyConfigured: boolean;
+  mockPlanner: boolean;
   openAiModel: string;
   logRawPayloads: boolean;
   maxPlannerPayloadBytes: number;
@@ -101,6 +102,7 @@ export class AgentBridgeCloudApp {
   ) {
     this.plannerTransport =
       options.plannerTransport ??
+      (config.mockPlanner ? new DeterministicMockPlannerTransport() : undefined) ??
       (config.openAiApiKey ? new OpenAIResponsesPlannerTransport(config.openAiApiKey) : undefined);
   }
 
@@ -436,6 +438,24 @@ class OpenAIResponsesPlannerTransport implements CloudPlannerTransport {
   }
 }
 
+class DeterministicMockPlannerTransport implements CloudPlannerTransport {
+  async createResponse(request: CloudPlannerRequest): Promise<CloudPlannerResponse> {
+    const route = typeof request.metadata?.route === "string" ? request.metadata.route : "message";
+    return {
+      responseId: `mock_${randomUUID()}`,
+      outputText: mockPlannerOutput(route),
+      usage: {
+        inputTokens: Math.ceil(request.input.length / 4),
+        outputTokens: 200
+      },
+      metadata: {
+        transport: "deterministic-mock",
+        route
+      }
+    };
+  }
+}
+
 export function createCloudApp(
   config: Partial<CloudConfig> = {},
   options: AgentBridgeCloudAppOptions = {}
@@ -477,11 +497,67 @@ function loadConfig(): CloudConfig {
     port: Number(process.env.AGENTBRIDGE_CLOUD_PORT ?? 8787),
     ...(openAiApiKey ? { openAiApiKey } : {}),
     openAiApiKeyConfigured: Boolean(openAiApiKey),
+    mockPlanner: process.env.AGENTBRIDGE_CLOUD_MOCK === "1" || process.env.AGENTBRIDGE_CLOUD_MOCK === "true",
     openAiModel: process.env.AGENTBRIDGE_CLOUD_OPENAI_MODEL ?? "gpt-4.1-mini",
     logRawPayloads: process.env.LOG_RAW_PAYLOADS === "true",
     maxPlannerPayloadBytes: Number(process.env.MAX_PLANNER_PAYLOAD_BYTES ?? 64 * 1024),
     allowFileUploads: process.env.AGENTBRIDGE_CLOUD_ALLOW_FILE_UPLOADS === "true"
   };
+}
+
+function mockPlannerOutput(route: string): string {
+  if (route === "task-spec" || route === "task-spec-repair") {
+    return JSON.stringify({
+      title: "Completion contract evidence regression",
+      goal: "Add regression coverage proving completion contracts cannot pass autonomously without required evidence.",
+      background: "AgentBridge must avoid false autonomous pass states when visual, textual, command, or human-review evidence is missing.",
+      instructions: [
+        "Add focused regression tests for completion-contract evidence evaluation.",
+        "Keep the change scoped to tests unless a minimal implementation fix is required."
+      ],
+      requirements: [
+        "A required visual or textual criterion without evidence cannot pass.",
+        "Human-review-only criteria result in needs_review, not passed.",
+        "Existing build, test, and lint commands pass."
+      ],
+      constraints: [
+        "Do not change provider routing.",
+        "Do not change Codex delivery.",
+        "Do not change hosted planner behavior.",
+        "Do not change Workbench UI.",
+        "Do not change store schema."
+      ],
+      nonGoals: [
+        "Do not add new providers.",
+        "Do not redesign Simple Mode."
+      ],
+      acceptanceCriteria: [
+        "Regression tests fail if missing required evidence can produce autonomous passed.",
+        "Regression tests cover human-review-only criteria returning needs_review.",
+        "pnpm test, pnpm build, and pnpm lint pass."
+      ],
+      suggestedFiles: [
+        "packages/core/tests/completion-contracts.test.ts",
+        "apps/desktop/tests/autopilot-service.test.ts"
+      ],
+      verificationSteps: [
+        "pnpm test",
+        "pnpm build",
+        "pnpm lint"
+      ],
+      expectedSummaryFormat: "Summary, tests added, verification commands, and remaining risks."
+    });
+  }
+  if (route === "review" || route === "review-repair") {
+    return JSON.stringify({
+      reviewSummary: "Mock planner review: inspect verification evidence and do not mark passed unless command results and completion evidence support it.",
+      statusSuggestion: "needs_review"
+    });
+  }
+  return [
+    "Plan: add focused regression coverage for completion-contract evidence handling.",
+    "Keep the change scoped. Verify with pnpm test, pnpm build, and pnpm lint."
+  ].join("\n");
 }
 
 function renderPlannerMessagePrompt(body: unknown): string {

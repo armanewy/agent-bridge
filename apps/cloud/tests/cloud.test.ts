@@ -117,6 +117,25 @@ describe("AgentBridge Cloud scaffold", () => {
     expect(String(response.body.error)).toContain("OPENAI_API_KEY");
   });
 
+  it("supports deterministic runtime mock planner mode without an OpenAI key", async () => {
+    const app = createCloudApp({ mockPlanner: true, openAiApiKey: undefined, openAiApiKeyConfigured: false });
+    const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
+    const token = String(login.body.token);
+
+    const response = await app.handle({
+      method: "POST",
+      path: "/v1/planner/task-spec",
+      headers: { authorization: `Bearer ${token}` },
+      body: { payload: { intent: "Add completion contract regression tests." } }
+    });
+
+    expect(response.status).toBe(200);
+    expect(response.body.taskSpec).toMatchObject({
+      title: "Completion contract evidence regression",
+      verificationSteps: ["pnpm test", "pnpm build", "pnpm lint"]
+    });
+  });
+
   it("does not store raw request bodies in request logs", async () => {
     const app = createCloudApp({}, { plannerTransport: mockPlannerTransport("Planner response.") });
     const login = await app.handle({ method: "POST", path: "/v1/auth/session/dev-login" });
