@@ -1,4 +1,4 @@
-import { Bot, CheckCircle2, FileText, Play, Send, Square, Wrench } from "lucide-react";
+import { CheckCircle2, FileText, Play, Send, Square, Wrench } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type {
   AgentProviderProfile,
@@ -47,8 +47,6 @@ type WorkbenchOperation =
   | "stop"
   | "continue"
   | "steer"
-  | "askPlanner"
-  | "newTask"
   | "taskSpec"
   | "sendCodex"
   | "verify"
@@ -58,10 +56,11 @@ type WorkbenchOperation =
   | "workspace"
   | "decision";
 
+type WorkbenchTab = "task" | "codex" | "verify" | "review" | "artifacts";
+
 export function WorkbenchPage({
   missionDetail,
   selectedMissionId,
-  codexTarget,
   codexThreads,
   agentSessions,
   workspaceCandidates,
@@ -71,8 +70,6 @@ export function WorkbenchPage({
   error,
   onChooseRepo,
   onUseWorkspaceCandidate,
-  onCreateMission,
-  onAskPlanner,
   onGenerateTaskSpec,
   onSendToCodex,
   onRunVerification,
@@ -86,12 +83,14 @@ export function WorkbenchPage({
   onResolvePendingDecision,
   onRevealArtifactFile
 }: WorkbenchPageProps): JSX.Element {
-  const [plannerText, setPlannerText] = useState("");
   const [intentText, setIntentText] = useState("");
   const [steeringText, setSteeringText] = useState("");
   const [autopilotMode, setAutopilotMode] = useState<"manual" | "supervised" | "autonomous">("supervised");
   const [selectedSessionId, setSelectedSessionId] = useState<string | undefined>();
   const [pendingOperation, setPendingOperation] = useState<WorkbenchOperation | undefined>();
+  const [activeTab, setActiveTab] = useState<WorkbenchTab>("task");
+  const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
+
   const planner = providerProfiles.find((profile) => profile.id === "agentbridge-hosted-planner") ?? providerProfiles.find((profile) => profile.kind === "planner");
   const codex = providerProfiles.find((profile) => profile.id === "codex");
   const taskCard = missionDetail?.handoffCards.find((card) => card.recipe !== "debuggingRequest");
@@ -100,10 +99,15 @@ export function WorkbenchPage({
   const completionContract = missionDetail?.completionContracts?.[0];
   const missionWorkspaceRef = missionDetail?.missionWorkspaces?.[0];
   const ownedFiles = missionDetail?.fileOwnership ?? [];
-  const plannerResponses = missionDetail?.artifacts.filter((artifact) => artifact.kind === "modelResponse") ?? [];
   const latestDelivery = parseLatestExecutorDelivery(missionDetail?.artifacts ?? []);
   const selectedSession = agentSessions.find((session) => session.id === selectedSessionId);
   const codexReady = codex?.status === "available" || codexAppServerStatus?.available === true;
+  const activeRun = autopilotStatus?.run;
+  const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
+  const latestPayloadSummary = parsePlannerPayloadSummary(
+    missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
+  );
+
   const codexSessionRows = useMemo(() => {
     const fromThreads: AgentSessionRef[] = codexThreads.map((thread) => ({
       id: `codex_session_${thread.threadId}`,
@@ -125,31 +129,19 @@ export function WorkbenchPage({
     }
     return [...byId.values()];
   }, [agentSessions, codexThreads]);
-  const canAskPlanner = Boolean(selectedMissionId && plannerText.trim() && planner?.status === "available");
-  const canGenerateTaskSpec = Boolean(selectedMissionId && plannerResponses.length > 0);
+
+  const canGenerateTaskSpec = Boolean(selectedMissionId && missionDetail?.artifacts.some((artifact) => artifact.kind === "modelResponse"));
   const canSend = Boolean(selectedMissionId && taskCard && codexReady);
   const canVerify = Boolean(selectedMissionId && missionDetail?.mission.repoContext);
   const canReview = Boolean(selectedMissionId && taskCard && verification && planner?.status === "available");
   const canSendFollowUp = Boolean(selectedMissionId && followUpCard && codexReady);
   const canStartMission = Boolean(intentText.trim() && planner?.status === "available" && codexReady);
-  const activeRun = autopilotStatus?.run;
-  const missionWorkspace = missionDetail?.mission.repoContext;
-  const bestWorkspaceCandidate = workspaceCandidates.find((candidate) => candidate.repoPath);
-  const needsWorkspaceForNewCodexThread = Boolean(selectedMissionId && taskCard && !selectedSession && !missionWorkspace);
-  const shouldShowWorkspaceSurface = needsWorkspaceForNewCodexThread;
+  const isBusy = Boolean(pendingOperation);
+  const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
   const blockers = [
     planner?.status !== "available" ? "Sign in to start." : undefined,
     !codexReady ? "Codex is not ready." : undefined
   ].filter((item): item is string => Boolean(item));
-  const latestPayloadSummary = parsePlannerPayloadSummary(
-    missionDetail?.artifacts.find((artifact) => artifact.metadata.source === "hostedPlannerPayloadSummary")
-  );
-  const [payloadPanelOpen, setPayloadPanelOpen] = useState(false);
-  const isBusy = Boolean(pendingOperation);
-  const pendingLabel = pendingOperation ? operationLabel(pendingOperation) : undefined;
-  const newThreadCopy = codexAppServerStatus?.available
-    ? "Starts a Codex thread and sends the task."
-    : "Opens a new Codex draft.";
 
   async function runOperation(operation: WorkbenchOperation, action: () => void | Promise<void>): Promise<void> {
     if (pendingOperation) {
@@ -171,54 +163,59 @@ export function WorkbenchPage({
 
   return (
     <div className="workbench-layout">
-      <section className="panel intent-panel">
-        <div className="panel-heading compact-heading">
+      <section className="panel workbench-shell">
+        <div className="workbench-title-row">
           <div>
             <h2>What do you want done?</h2>
           </div>
-          {activeRun || missionDetail ? <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} /> : null}
+          <StatusPill status={activeRun?.status ?? missionDetail?.mission.status} />
         </div>
+
         {blockers.length ? <div className="inline-blocker">{blockers.join(" ")}</div> : null}
+        {error ? <div className="error-banner">{error}</div> : null}
         {pendingLabel ? (
           <div className="progress-banner" role="status" aria-live="polite">
             <span className="spinner" aria-hidden="true" />
             {pendingLabel}
           </div>
         ) : null}
-        <textarea
-          className="planner-input intent-input"
-          value={intentText}
-          onChange={(event) => setIntentText(event.target.value)}
-          placeholder="Describe the task..."
-        />
-        <div className="intent-actions">
-          <label className="field-label">
-            Mode
-            <select value={autopilotMode} onChange={(event) => setAutopilotMode(event.target.value as typeof autopilotMode)}>
-              <option value="manual">Manual</option>
-              <option value="supervised">Supervised</option>
-              <option value="autonomous">Autonomous</option>
-            </select>
-          </label>
-          <button
-            type="button"
-            className="primary-button"
-            disabled={!canStartMission || isBusy}
-            onClick={() => void runOperation("startMission", () => onStartMission(intentText, autopilotMode))}
-          >
-            {pendingOperation === "startMission" ? <span className="spinner light" aria-hidden="true" /> : <Play size={16} />}
-            {pendingOperation === "startMission" ? "Starting..." : "Start Mission"}
-          </button>
-          {activeRun && activeRun.status !== "cancelled" && activeRun.status !== "passed" && activeRun.status !== "failed" ? (
-            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("stop", () => onStopAutopilot(activeRun.id))}>
-              <Square size={16} />
-              Stop
+
+        <div className="workbench-intent-grid">
+          <textarea
+            className="planner-input intent-input"
+            value={intentText}
+            onChange={(event) => setIntentText(event.target.value)}
+            placeholder="Describe the task..."
+          />
+          <div className="workbench-controls">
+            <label className="field-label">
+              Mode
+              <select value={autopilotMode} onChange={(event) => setAutopilotMode(event.target.value as typeof autopilotMode)}>
+                <option value="manual">Manual</option>
+                <option value="supervised">Supervised</option>
+                <option value="autonomous">Autonomous</option>
+              </select>
+            </label>
+            <button
+              type="button"
+              className="primary-button"
+              disabled={!canStartMission || isBusy}
+              onClick={() => void runOperation("startMission", () => onStartMission(intentText, autopilotMode))}
+            >
+              {pendingOperation === "startMission" ? <span className="spinner light" aria-hidden="true" /> : <Play size={16} />}
+              {pendingOperation === "startMission" ? "Starting..." : "Start"}
             </button>
-          ) : null}
+            {activeRun && activeRun.status !== "cancelled" && activeRun.status !== "passed" && activeRun.status !== "failed" ? (
+              <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("stop", () => onStopAutopilot(activeRun.id))}>
+                <Square size={16} />
+                Stop
+              </button>
+            ) : null}
+          </div>
         </div>
-        <MissionTimeline status={autopilotStatus} />
+
         {autopilotStatus?.pendingDecision ? (
-          <div className="pending-decision">
+          <div className="pending-decision compact-decision">
             <strong>{autopilotStatus.pendingDecision.prompt}</strong>
             <div className="button-row">
               {autopilotStatus.pendingDecision.options.map((option) => (
@@ -235,179 +232,379 @@ export function WorkbenchPage({
             </div>
           </div>
         ) : null}
-        {activeRun ? (
-          <div className="steering-row">
-            <input
-              value={steeringText}
-              onChange={(event) => setSteeringText(event.target.value)}
-              placeholder="Steer..."
+
+        <ProgressTabs
+          activeTab={activeTab}
+          onSelect={setActiveTab}
+          hasTask={Boolean(taskCard)}
+          sent={latestDelivery?.success === true}
+          verified={Boolean(verification)}
+          reviewed={Boolean(followUpCard)}
+        />
+
+        <div className="workbench-tab-panel">
+          {activeTab === "task" ? (
+            <TaskTab
+              mission={missionDetail?.mission}
+              card={taskCard}
+              contract={completionContract}
+              evidenceCount={missionDetail?.completionEvidence?.length ?? 0}
+              workspace={missionWorkspaceRef}
+              fileCount={ownedFiles.length}
+              canGenerateTaskSpec={canGenerateTaskSpec}
+              isBusy={isBusy}
+              pendingOperation={pendingOperation}
+              onGenerateTaskSpec={() => void runOperation("taskSpec", onGenerateTaskSpec)}
+              onChooseWorkspace={() => void runOperation("workspace", onChooseRepo)}
+              workspaceCandidate={bestWorkspaceCandidate}
+              onUseWorkspaceCandidate={(candidate) => void runOperation("workspace", () => onUseWorkspaceCandidate(candidate))}
             />
+          ) : null}
+
+          {activeTab === "codex" ? (
+            <CodexTab
+              sessions={codexSessionRows}
+              selectedSessionId={selectedSessionId}
+              onSelectSession={setSelectedSessionId}
+              selectedSession={selectedSession}
+              appServerAvailable={codexAppServerStatus?.available === true}
+              latestDelivery={latestDelivery}
+              canSend={canSend}
+              isBusy={isBusy}
+              pendingOperation={pendingOperation}
+              onSend={() => void runOperation("sendCodex", () => onSendToCodex(selectedSession?.id))}
+            />
+          ) : null}
+
+          {activeTab === "verify" ? (
+            <VerifyTab
+              verification={verification}
+              canVerify={canVerify}
+              isBusy={isBusy}
+              pendingOperation={pendingOperation}
+              onVerify={() => void runOperation("verify", onRunVerification)}
+              payloadSummary={latestPayloadSummary}
+              payloadOpen={payloadPanelOpen}
+              onTogglePayload={() => setPayloadPanelOpen((current) => !current)}
+            />
+          ) : null}
+
+          {activeTab === "review" ? (
+            <ReviewTab
+              activeRun={activeRun}
+              steeringText={steeringText}
+              setSteeringText={setSteeringText}
+              canReview={canReview}
+              canSendFollowUp={canSendFollowUp}
+              hasPlannerOutput={Boolean(missionDetail?.artifacts.some((artifact) => artifact.kind === "modelResponse"))}
+              isBusy={isBusy}
+              pendingOperation={pendingOperation}
+              onReview={() => void runOperation("review", onAskPlannerToReview)}
+              onDraftFollowUp={() => void runOperation("followUp", onCreateFollowUp)}
+              onSendFollowUp={() => void runOperation("sendFollowUp", () => onSendFollowUp(selectedSession?.id))}
+              onContinue={(runId) => void runOperation("continue", () => onContinueAutopilot(runId))}
+              onSteer={(runId, text) => void runOperation("steer", () => onSteerAutopilot(runId, text))}
+            />
+          ) : null}
+
+          {activeTab === "artifacts" ? (
+            <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} onRevealFile={onRevealArtifactFile} />
+          ) : null}
+        </div>
+      </section>
+    </div>
+  );
+}
+
+function ProgressTabs({
+  activeTab,
+  onSelect,
+  hasTask,
+  sent,
+  verified,
+  reviewed
+}: {
+  activeTab: WorkbenchTab;
+  onSelect(tab: WorkbenchTab): void;
+  hasTask: boolean;
+  sent: boolean;
+  verified: boolean;
+  reviewed: boolean;
+}): JSX.Element {
+  const items: Array<{ tab: WorkbenchTab; label: string; complete: boolean }> = [
+    { tab: "task", label: "Task", complete: hasTask },
+    { tab: "codex", label: "Codex", complete: sent },
+    { tab: "verify", label: "Verify", complete: verified },
+    { tab: "review", label: "Review", complete: reviewed },
+    { tab: "artifacts", label: "Artifacts", complete: false }
+  ];
+  return (
+    <div className="workbench-step-tabs" role="tablist" aria-label="Mission steps">
+      {items.map((item, index) => (
+        <button
+          key={item.tab}
+          type="button"
+          className={[
+            "step-tab",
+            activeTab === item.tab ? "active" : "",
+            item.complete ? "complete" : ""
+          ].filter(Boolean).join(" ")}
+          onClick={() => onSelect(item.tab)}
+        >
+          <span>{index + 1}</span>
+          {item.label}
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function TaskTab({
+  mission,
+  card,
+  contract,
+  evidenceCount,
+  workspace,
+  fileCount,
+  canGenerateTaskSpec,
+  isBusy,
+  pendingOperation,
+  onGenerateTaskSpec,
+  workspaceCandidate,
+  onChooseWorkspace,
+  onUseWorkspaceCandidate
+}: {
+  mission?: Mission | undefined;
+  card?: HandoffCard | undefined;
+  contract: NonNullable<MissionDetail["completionContracts"]>[number] | undefined;
+  evidenceCount: number;
+  workspace: NonNullable<MissionDetail["missionWorkspaces"]>[number] | undefined;
+  fileCount: number;
+  canGenerateTaskSpec: boolean;
+  isBusy: boolean;
+  pendingOperation?: WorkbenchOperation | undefined;
+  onGenerateTaskSpec(): void;
+  workspaceCandidate?: WorkspaceCandidate | undefined;
+  onChooseWorkspace(): void;
+  onUseWorkspaceCandidate(candidate: WorkspaceCandidate): void;
+}): JSX.Element {
+  return (
+    <div className="tab-grid">
+      <section className="tab-card primary-tab-card">
+        <div className="tab-card-heading">
+          <div>
+            <span className="eyebrow">Task</span>
+            <h3>{mission?.title ?? "No task yet"}</h3>
+            <p>{taskStateCopy(mission, card)}</p>
+          </div>
+          <StatusPill status={mission?.status} />
+        </div>
+        <div className="button-row">
+          <button type="button" className="primary-button" onClick={onGenerateTaskSpec} disabled={!canGenerateTaskSpec || isBusy}>
+            {pendingOperation === "taskSpec" ? <span className="spinner light" aria-hidden="true" /> : <FileText size={16} />}
+            {pendingOperation === "taskSpec" ? "Generating..." : "Generate TaskSpec"}
+          </button>
+          {!workspace && workspaceCandidate?.repoPath ? (
+            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => onUseWorkspaceCandidate(workspaceCandidate)}>
+              Use workspace
+            </button>
+          ) : null}
+          {!workspace && !workspaceCandidate?.repoPath ? (
+            <button type="button" className="secondary-button" disabled={isBusy} onClick={onChooseWorkspace}>
+              Choose workspace
+            </button>
+          ) : null}
+        </div>
+        {card ? <TaskSpecSummary card={card} /> : <p className="empty-copy">The task summary appears here after planning.</p>}
+      </section>
+      <div className="tab-side-stack">
+        <DoneMeansPanel contract={contract} evidenceCount={evidenceCount} />
+        {workspace ? <WorkspaceIsolationPanel workspace={workspace} fileCount={fileCount} /> : null}
+      </div>
+    </div>
+  );
+}
+
+function CodexTab({
+  sessions,
+  selectedSessionId,
+  selectedSession,
+  onSelectSession,
+  appServerAvailable,
+  latestDelivery,
+  canSend,
+  isBusy,
+  pendingOperation,
+  onSend
+}: {
+  sessions: AgentSessionRef[];
+  selectedSessionId?: string | undefined;
+  selectedSession?: AgentSessionRef | undefined;
+  onSelectSession(value: string | undefined): void;
+  appServerAvailable: boolean;
+  latestDelivery?: { success: boolean; label: string; detail?: string } | undefined;
+  canSend: boolean;
+  isBusy: boolean;
+  pendingOperation?: WorkbenchOperation | undefined;
+  onSend(): void;
+}): JSX.Element {
+  return (
+    <div className="tab-grid">
+      <section className="tab-card primary-tab-card">
+        <div className="tab-card-heading">
+          <div>
+            <span className="eyebrow">Codex</span>
+            <h3>{selectedSession?.title ?? "New Codex thread"}</h3>
+            <p>{selectedSession ? sessionModeCopy(selectedSession) : appServerAvailable ? "Starts a Codex thread and sends the task." : "Opens a new Codex draft."}</p>
+          </div>
+          <StatusPill status={appServerAvailable ? "available" : "fallback"} />
+        </div>
+        <label className="field-label">
+          Session
+          <select value={selectedSessionId ?? ""} onChange={(event) => onSelectSession(event.target.value || undefined)}>
+            <option value="">New Codex thread</option>
+            {sessions.slice(0, 40).map((session) => (
+              <option key={session.id} value={session.id}>
+                {session.title ?? shortId(session.externalSessionId)}
+              </option>
+            ))}
+          </select>
+        </label>
+        <button type="button" className="primary-button full-width-button" onClick={onSend} disabled={!canSend || isBusy}>
+          {pendingOperation === "sendCodex" ? <span className="spinner light" aria-hidden="true" /> : <Send size={16} />}
+          {pendingOperation === "sendCodex" ? "Sending..." : "Send to Codex"}
+        </button>
+      </section>
+      <section className="tab-card">
+        <span className="eyebrow">Delivery</span>
+        {latestDelivery ? (
+          <div className={latestDelivery.success ? "delivery-status" : "delivery-status warning"}>
+            <strong>{latestDelivery.label}</strong>
+            {latestDelivery.detail ? <span>{latestDelivery.detail}</span> : null}
+          </div>
+        ) : (
+          <p className="empty-copy">No delivery yet.</p>
+        )}
+      </section>
+    </div>
+  );
+}
+
+function VerifyTab({
+  verification,
+  canVerify,
+  isBusy,
+  pendingOperation,
+  onVerify,
+  payloadSummary,
+  payloadOpen,
+  onTogglePayload
+}: {
+  verification?: NonNullable<MissionDetail["verificationResults"]>[number] | undefined;
+  canVerify: boolean;
+  isBusy: boolean;
+  pendingOperation?: WorkbenchOperation | undefined;
+  onVerify(): void;
+  payloadSummary?: PlannerPayloadSummary | undefined;
+  payloadOpen: boolean;
+  onTogglePayload(): void;
+}): JSX.Element {
+  return (
+    <div className="tab-grid">
+      <section className="tab-card primary-tab-card">
+        <div className="tab-card-heading">
+          <div>
+            <span className="eyebrow">Verify</span>
+            <h3>{verification?.status ?? "Not run"}</h3>
+            <p>{verification ? verification.summary : "Run checks when the task has been sent."}</p>
+          </div>
+          <StatusPill status={verification?.status} />
+        </div>
+        <button type="button" className="primary-button" onClick={onVerify} disabled={!canVerify || isBusy}>
+          {pendingOperation === "verify" ? <span className="spinner light" aria-hidden="true" /> : <Play size={16} />}
+          {pendingOperation === "verify" ? "Verifying..." : "Run Verification"}
+        </button>
+      </section>
+      <PlannerPayloadPanel summary={payloadSummary} open={payloadOpen} onToggle={onTogglePayload} />
+    </div>
+  );
+}
+
+function ReviewTab({
+  activeRun,
+  steeringText,
+  setSteeringText,
+  canReview,
+  canSendFollowUp,
+  hasPlannerOutput,
+  isBusy,
+  pendingOperation,
+  onReview,
+  onDraftFollowUp,
+  onSendFollowUp,
+  onContinue,
+  onSteer
+}: {
+  activeRun?: AutopilotStatus["run"] | undefined;
+  steeringText: string;
+  setSteeringText(value: string): void;
+  canReview: boolean;
+  canSendFollowUp: boolean;
+  hasPlannerOutput: boolean;
+  isBusy: boolean;
+  pendingOperation?: WorkbenchOperation | undefined;
+  onReview(): void;
+  onDraftFollowUp(): void;
+  onSendFollowUp(): void;
+  onContinue(runId: string): void;
+  onSteer(runId: string, text: string): void;
+}): JSX.Element {
+  return (
+    <div className="tab-grid">
+      <section className="tab-card primary-tab-card">
+        <span className="eyebrow">Review</span>
+        <h3>Next decision</h3>
+        <div className="button-row">
+          <button type="button" className="secondary-button" onClick={onReview} disabled={!canReview || isBusy}>
+            {pendingOperation === "review" ? <span className="spinner" aria-hidden="true" /> : <CheckCircle2 size={16} />}
+            {pendingOperation === "review" ? "Reviewing..." : "Ask Planner"}
+          </button>
+          <button type="button" className="secondary-button" onClick={onDraftFollowUp} disabled={!hasPlannerOutput || isBusy}>
+            {pendingOperation === "followUp" ? <span className="spinner" aria-hidden="true" /> : <Wrench size={16} />}
+            {pendingOperation === "followUp" ? "Drafting..." : "Draft Follow-up"}
+          </button>
+          <button type="button" className="primary-button" onClick={onSendFollowUp} disabled={!canSendFollowUp || isBusy}>
+            {pendingOperation === "sendFollowUp" ? <span className="spinner light" aria-hidden="true" /> : <Send size={16} />}
+            {pendingOperation === "sendFollowUp" ? "Sending..." : "Send Follow-up"}
+          </button>
+        </div>
+      </section>
+      <section className="tab-card">
+        <span className="eyebrow">Steer</span>
+        {activeRun ? (
+          <div className="steering-row compact-steering-row">
+            <input value={steeringText} onChange={(event) => setSteeringText(event.target.value)} placeholder="Steer..." />
             <button
               type="button"
               className="secondary-button"
               disabled={!steeringText.trim() || isBusy}
               onClick={() => {
-                void runOperation("steer", () => onSteerAutopilot(activeRun.id, steeringText));
+                onSteer(activeRun.id, steeringText);
                 setSteeringText("");
               }}
             >
               Steer
             </button>
             {activeRun.status === "blocked" ? (
-              <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("continue", () => onContinueAutopilot(activeRun.id))}>
+              <button type="button" className="secondary-button" disabled={isBusy} onClick={() => onContinue(activeRun.id)}>
                 {pendingOperation === "continue" ? "Continuing..." : "Continue"}
               </button>
             ) : null}
           </div>
-        ) : null}
+        ) : (
+          <p className="empty-copy">No active run.</p>
+        )}
       </section>
-
-      {shouldShowWorkspaceSurface ? (
-        <section className="panel workbench-repo-strip">
-          <div>
-            <h2>Workspace required</h2>
-            <p>
-              {bestWorkspaceCandidate
-                  ? `${bestWorkspaceCandidate.repoName ?? repoName(bestWorkspaceCandidate.repoPath ?? "")} · inferred from ${bestWorkspaceCandidate.source} · ${bestWorkspaceCandidate.confidence}% confidence`
-                  : "Choose a workspace to create a new Codex thread."}
-            </p>
-          </div>
-          <div className="button-row">
-            {!missionWorkspace && bestWorkspaceCandidate?.repoPath ? (
-              <button
-                type="button"
-                className="primary-button compact"
-                disabled={isBusy}
-                onClick={() => void runOperation("workspace", () => onUseWorkspaceCandidate(bestWorkspaceCandidate))}
-              >
-                Use inferred workspace
-              </button>
-            ) : null}
-            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("workspace", onChooseRepo)}>
-              Choose workspace
-            </button>
-          </div>
-        </section>
-      ) : null}
-
-      {error ? <div className="error-banner">{error}</div> : null}
-
-      <details className="workbench-details">
-        <summary>Details</summary>
-      <section className="panel workbench-task-panel">
-        <div className="panel-heading compact-heading">
-          <div>
-            <span className="eyebrow">Task</span>
-            <h2>{missionDetail?.mission.title ?? "No task yet"}</h2>
-            <p>{taskStateCopy(missionDetail?.mission, taskCard)}</p>
-          </div>
-          <StatusPill status={missionDetail?.mission.status} />
-        </div>
-        <div className="task-action-grid">
-          <button type="button" className="secondary-button" onClick={() => void runOperation("taskSpec", onGenerateTaskSpec)} disabled={!canGenerateTaskSpec || isBusy}>
-            {pendingOperation === "taskSpec" ? <span className="spinner" aria-hidden="true" /> : <FileText size={16} />}
-            {pendingOperation === "taskSpec" ? "Generating..." : "Generate TaskSpec"}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => void runOperation("verify", onRunVerification)} disabled={!canVerify || isBusy}>
-            {pendingOperation === "verify" ? <span className="spinner" aria-hidden="true" /> : <Play size={16} />}
-            {pendingOperation === "verify" ? "Verifying..." : "Run Verification"}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => void runOperation("review", onAskPlannerToReview)} disabled={!canReview || isBusy}>
-            {pendingOperation === "review" ? <span className="spinner" aria-hidden="true" /> : <CheckCircle2 size={16} />}
-            {pendingOperation === "review" ? "Reviewing..." : "Ask Planner to Review"}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => void runOperation("followUp", onCreateFollowUp)} disabled={!selectedMissionId || !plannerResponses.length || isBusy}>
-            {pendingOperation === "followUp" ? <span className="spinner" aria-hidden="true" /> : <Wrench size={16} />}
-            {pendingOperation === "followUp" ? "Drafting..." : "Draft Follow-up"}
-          </button>
-          <button type="button" className="secondary-button" onClick={() => void runOperation("sendFollowUp", () => onSendFollowUp(selectedSession?.id))} disabled={!canSendFollowUp || isBusy}>
-            {pendingOperation === "sendFollowUp" ? <span className="spinner" aria-hidden="true" /> : <Send size={16} />}
-            {pendingOperation === "sendFollowUp" ? "Sending..." : "Send Follow-up"}
-          </button>
-        </div>
-        <DoneMeansPanel contract={completionContract} evidenceCount={missionDetail?.completionEvidence?.length ?? 0} />
-        {missionWorkspaceRef ? <WorkspaceIsolationPanel workspace={missionWorkspaceRef} fileCount={ownedFiles.length} /> : null}
-        {taskCard ? <TaskSpecSummary card={taskCard} /> : null}
-        {verification ? <pre className="compact-output">{verification.summary}</pre> : null}
-      </section>
-      <div className="workbench-grid">
-        <section className="panel workbench-pane">
-          <div className="panel-heading compact-heading">
-            <div>
-              <span className="eyebrow">Planner</span>
-              <h2>Planner</h2>
-              <p>{plannerCopy(planner)}</p>
-            </div>
-            <StatusPill status={planner?.status} />
-          </div>
-          <textarea
-            className="planner-input"
-            value={plannerText}
-            onChange={(event) => setPlannerText(event.target.value)}
-            placeholder="Ask the planner what Codex should do..."
-          />
-          <div className="button-row">
-            <button type="button" className="primary-button" onClick={() => void runOperation("askPlanner", () => onAskPlanner(plannerText))} disabled={!canAskPlanner || isBusy}>
-              {pendingOperation === "askPlanner" ? <span className="spinner light" aria-hidden="true" /> : <Bot size={16} />}
-              {pendingOperation === "askPlanner" ? "Asking..." : "Ask Planner"}
-            </button>
-            <button type="button" className="secondary-button" disabled={isBusy} onClick={() => void runOperation("newTask", onCreateMission)}>
-              New task
-            </button>
-          </div>
-          <ArtifactList title="Planner notes" items={plannerResponses.map((artifact) => artifact.content ?? "")} />
-        </section>
-
-        <section className="panel workbench-pane">
-          <div className="panel-heading compact-heading">
-            <div>
-              <span className="eyebrow">Codex</span>
-              <h2>Executor</h2>
-              <p>{codexCopy(codex, codexAppServerStatus)}</p>
-            </div>
-            <StatusPill status={codexReady ? "available" : codex?.status} />
-          </div>
-          <div className="session-list">
-            <button
-              type="button"
-              className={!selectedSessionId ? "session-row selected" : "session-row"}
-              onClick={() => setSelectedSessionId(undefined)}
-              disabled={isBusy}
-            >
-              <strong>New Codex thread</strong>
-              <span>{newThreadCopy}</span>
-            </button>
-            {codexSessionRows.map((session) => (
-              <button
-                key={session.id}
-                type="button"
-                className={selectedSessionId === session.id ? "session-row selected" : "session-row"}
-                onClick={() => setSelectedSessionId(session.id)}
-                disabled={isBusy}
-              >
-                <strong>{session.title ?? shortId(session.externalSessionId)}</strong>
-                <span>{sessionModeCopy(session)}</span>
-              </button>
-            ))}
-          </div>
-          <button type="button" className="primary-button" onClick={() => void runOperation("sendCodex", () => onSendToCodex(selectedSession?.id))} disabled={!canSend || isBusy}>
-            {pendingOperation === "sendCodex" ? <span className="spinner light" aria-hidden="true" /> : <Send size={16} />}
-            {pendingOperation === "sendCodex" ? "Sending..." : "Send TaskSpec"}
-          </button>
-          {latestDelivery ? (
-            <div className={latestDelivery.success ? "delivery-status" : "delivery-status warning"}>
-              <strong>{latestDelivery.label}</strong>
-              {latestDelivery.detail ? <span>{latestDelivery.detail}</span> : null}
-            </div>
-          ) : null}
-          {needsWorkspaceForNewCodexThread ? (
-            <p className="empty-copy">Choose a workspace to create a new Codex thread, or select an existing Codex session.</p>
-          ) : null}
-        </section>
-      </div>
-      <PlannerPayloadPanel summary={latestPayloadSummary} open={payloadPanelOpen} onToggle={() => setPayloadPanelOpen((current) => !current)} />
-      <ArtifactTray artifacts={missionDetail?.artifacts ?? []} files={missionDetail?.artifactFiles ?? []} onRevealFile={onRevealArtifactFile} />
-      </details>
     </div>
   );
 }
@@ -425,12 +622,11 @@ function WorkspaceIsolationPanel({
   return (
     <div className={workspace.strategy === "none" ? "workspace-isolation-panel warning" : "workspace-isolation-panel"}>
       <div className="done-means-heading">
-        <strong>Workspace isolation</strong>
+        <strong>Workspace</strong>
         <span>{workspace.status}</span>
       </div>
-      <p>{workspace.strategy === "gitWorktree" ? "Git worktree" : workspace.strategy === "branch" ? "Branch" : "No isolation"}</p>
       <p>{workspace.branchName ?? workspace.worktreeName ?? workspace.workingPath}</p>
-      <p>{fileCount} changed/claimed file{fileCount === 1 ? "" : "s"} tracked.</p>
+      <p>{fileCount} file{fileCount === 1 ? "" : "s"} tracked.</p>
     </div>
   );
 }
@@ -446,7 +642,7 @@ function DoneMeansPanel({
     return (
       <div className="done-means-panel muted">
         <strong>Done means</strong>
-        <p>Generate a TaskSpec to create objective acceptance criteria.</p>
+        <p>Task criteria appear here after planning.</p>
       </div>
     );
   }
@@ -459,16 +655,7 @@ function DoneMeansPanel({
         <span>{contract.status}</span>
       </div>
       {!canPassAutonomously ? <p>This task cannot autonomously pass yet.</p> : null}
-      <ul>
-        {contract.acceptanceCriteria.slice(0, 3).map((criterion) => (
-          <li key={criterion.id}>
-            {criterion.statement}
-            <em>{criterion.verifierKind}</em>
-          </li>
-        ))}
-      </ul>
-      {contract.acceptanceCriteria.length > 3 ? <p>{contract.acceptanceCriteria.length - 3} more criteria.</p> : null}
-      <p>{evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"} recorded.</p>
+      <p>{contract.acceptanceCriteria.length} criteria · {evidenceCount} evidence item{evidenceCount === 1 ? "" : "s"}.</p>
     </div>
   );
 }
@@ -492,17 +679,20 @@ function PlannerPayloadPanel({
   summary?: PlannerPayloadSummary | undefined;
   open: boolean;
   onToggle(): void;
-}): JSX.Element | null {
+}): JSX.Element {
   if (!summary) {
-    return null;
+    return (
+      <section className="tab-card">
+        <span className="eyebrow">Planner payload</span>
+        <p className="empty-copy">No planner payload yet.</p>
+      </section>
+    );
   }
   const payload = summary.payload;
-  const repoIdentity = isRecord(payload.repoIdentity) ? payload.repoIdentity : undefined;
-  const taskSpec = isRecord(payload.taskSpec) ? payload.taskSpec : undefined;
   return (
-    <section className={summary.redactionFindings.length ? "panel planner-payload-panel warning" : "panel planner-payload-panel"}>
+    <section className={summary.redactionFindings.length ? "tab-card planner-payload-panel warning" : "tab-card planner-payload-panel"}>
       <button type="button" className="payload-toggle" onClick={onToggle}>
-        <span>What will be sent to Planner</span>
+        <span>Planner payload</span>
         <em>{summary.estimatedBytes} bytes</em>
       </button>
       {open ? (
@@ -512,33 +702,15 @@ function PlannerPayloadPanel({
             <p>{String(payload.intent ?? "Not included")}</p>
           </div>
           <div>
-            <strong>Task summary</strong>
-            <p>{taskSpec ? String(taskSpec.title ?? "TaskSpec included") : "No TaskSpec in this payload"}</p>
-          </div>
-          <div>
-            <strong>Repo identity</strong>
-            <p>{repoIdentity ? JSON.stringify(repoIdentity) : "Not included"}</p>
-          </div>
-          <div>
             <strong>Artifacts</strong>
             <p>{summary.includedArtifactIds.length} included · {summary.excludedArtifactIds.length} excluded</p>
           </div>
-          {summary.excludedArtifactIds.length ? (
-            <div>
-              <strong>Excluded</strong>
-              <ul>
-                {summary.excludedArtifactIds.slice(0, 4).map((id) => (
-                  <li key={id}>{summary.excludedReasons[id] ?? id}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
           {summary.redactionFindings.length ? (
             <div>
-              <strong>Redaction findings</strong>
+              <strong>Redaction</strong>
               <ul>
-                {summary.redactionFindings.map((finding, index) => (
-                  <li key={`${finding.kind}-${index}`}>{finding.severity}: {finding.kind} ({finding.preview})</li>
+                {summary.redactionFindings.slice(0, 4).map((finding, index) => (
+                  <li key={`${finding.kind}-${index}`}>{finding.severity}: {finding.kind}</li>
                 ))}
               </ul>
             </div>
@@ -550,80 +722,32 @@ function PlannerPayloadPanel({
 }
 
 function ArtifactTray({ artifacts, files, onRevealFile }: { artifacts: Artifact[]; files: ArtifactFile[]; onRevealFile(fileId: string): void }): JSX.Element {
-  const [transferSelections, setTransferSelections] = useState<Record<string, "planner" | "codex" | "excluded" | undefined>>({});
   const fileByArtifact = new Map(files.map((file) => [file.artifactId, file]));
-  const rows = artifacts.slice(0, 10);
-  const transferHistory = rows
-    .map((artifact) => ({ artifact, transfer: transferSelections[artifact.id] }))
-    .filter((item): item is { artifact: Artifact; transfer: "planner" | "codex" | "excluded" } => Boolean(item.transfer));
+  const rows = artifacts.slice(0, 12);
   return (
-    <section className="panel artifact-tray">
-      <div className="panel-heading compact-heading">
-        <div>
-          <span className="eyebrow">Artifacts</span>
-          <h2>Mission files and records</h2>
-          <p>Prompts, diffs, logs, generated files, and provider messages stay local unless policy allows sending them.</p>
-        </div>
-      </div>
+    <section className="tab-card artifact-tray compact-artifact-tray">
+      <span className="eyebrow">Artifacts</span>
       {rows.length === 0 ? (
-        <p>No artifacts yet.</p>
+        <p className="empty-copy">No artifacts yet.</p>
       ) : (
         <div className="artifact-tray-list">
           {rows.map((artifact) => {
             const file = fileByArtifact.get(artifact.id);
-            const transfer = transferSelections[artifact.id];
             return (
-              <div key={artifact.id} className="artifact-tray-row">
+              <div key={artifact.id} className="artifact-tray-row compact-artifact-row">
                 <div>
                   <strong>{artifact.title}</strong>
-                  <span>{artifact.kind} · {artifact.metadata.providerId ? String(artifact.metadata.providerId) : "local"} · {file ? formatBytes(file.sizeBytes) : "text"}</span>
+                  <span>{artifact.kind} · {file ? formatBytes(file.sizeBytes) : "text"}</span>
                 </div>
-                <em>{transfer ? transferStatusCopy(transfer) : artifactTransferStatus(artifact, file)}</em>
-                <div className="artifact-actions">
-                  <button type="button" className="secondary-button" disabled={!artifact.content} onClick={() => void navigator.clipboard?.writeText(artifact.content ?? "")}>
-                    Copy
-                  </button>
-                  <button type="button" className="secondary-button" disabled={!file} onClick={() => file && onRevealFile(file.id)}>
-                    Reveal
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => setTransferSelections((current) => ({ ...current, [artifact.id]: "planner" }))}>
-                    Planner
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => setTransferSelections((current) => ({ ...current, [artifact.id]: "codex" }))}>
-                    Codex
-                  </button>
-                  <button type="button" className="secondary-button" onClick={() => setTransferSelections((current) => ({ ...current, [artifact.id]: "excluded" }))}>
-                    Exclude
-                  </button>
-                </div>
+                <button type="button" className="secondary-button" disabled={!file} onClick={() => file && onRevealFile(file.id)}>
+                  Reveal
+                </button>
               </div>
             );
           })}
         </div>
       )}
-      {transferHistory.length ? (
-        <div className="artifact-transfer-history">
-          <strong>Transfer history</strong>
-          {transferHistory.map(({ artifact, transfer }) => (
-            <span key={`${artifact.id}-${transfer}`}>{artifact.title}: {transferStatusCopy(transfer)}</span>
-          ))}
-        </div>
-      ) : null}
     </section>
-  );
-}
-
-function MissionTimeline({ status }: { status?: AutopilotStatus | undefined }): JSX.Element {
-  const steps = status?.steps ?? [];
-  const labels = ["Planning", "TaskSpec", "Codex execution", "Verification", "Planner review", "Follow-up", "Done"];
-  return (
-    <div className="mission-timeline">
-      {labels.map((label, index) => (
-        <span key={label} className={index <= steps.length ? "timeline-step active" : "timeline-step"}>
-          {label}
-        </span>
-      ))}
-    </div>
   );
 }
 
@@ -631,51 +755,17 @@ function TaskSpecSummary({ card }: { card: HandoffCard }): JSX.Element {
   return (
     <div className="taskspec-summary">
       <strong>{card.taskSpec.title}</strong>
-      <p>{card.taskSpec.goal}</p>
-      <ul>
-        {card.taskSpec.acceptanceCriteria.slice(0, 3).map((item) => (
-          <li key={item}>{item}</li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-function ArtifactList({ title, items }: { title: string; items: string[] }): JSX.Element {
-  return (
-    <div className="artifact-snippets">
-      <strong>{title}</strong>
-      {items.length === 0 ? <p>No planner turns yet.</p> : items.slice(0, 2).map((item, index) => <pre key={index}>{item.slice(0, 700)}</pre>)}
+      <p>{card.taskSpec.acceptanceCriteria.length} acceptance criteria · {card.taskSpec.verificationSteps.length} checks</p>
     </div>
   );
 }
 
 function StatusPill({ status }: { status?: string | undefined }): JSX.Element {
-  return <span className={status === "available" || status === "passed" || status === "delivered" ? "status-pill" : "status-pill muted"}>{status ?? "unknown"}</span>;
-}
-
-function plannerCopy(profile?: AgentProviderProfile): string {
-  if (!profile) {
-    return "Planner provider has not reported status yet.";
-  }
-  if (profile.status === "needsAuth") {
-    return "Sign in to AgentBridge to enable hosted planning. No OpenAI API key is needed here.";
-  }
-  return "Ask for scoped implementation direction, acceptance criteria, and review feedback.";
-}
-
-function codexCopy(profile?: AgentProviderProfile, appServer?: CodexAppServerStatus): string {
-  if (appServer?.available) {
-    return "App Server connected. Existing Codex sessions can receive turns.";
-  }
-  if (profile?.status === "available") {
-    return "Deep-link delivery is available. Existing sessions may be open-only fallback.";
-  }
-  return "Codex is not connected yet. Planning can still start; execution will wait for Codex.";
+  return <span className={status === "available" || status === "passed" || status === "delivered" ? "status-pill" : "status-pill muted"}>{status ?? "idle"}</span>;
 }
 
 function sessionModeCopy(session: AgentSessionRef): string {
-  const mode = session.metadata.integrationMode === "appServer" ? "Sends to this Codex thread" : "Opens this thread only";
+  const mode = session.metadata.integrationMode === "appServer" ? "Sends to this thread" : "Opens this thread only";
   return `${mode} · ${shortId(session.externalSessionId)}`;
 }
 
@@ -724,10 +814,6 @@ function operationLabel(operation: WorkbenchOperation): string {
       return "Continuing...";
     case "steer":
       return "Sending steering...";
-    case "askPlanner":
-      return "Asking planner...";
-    case "newTask":
-      return "Creating task...";
     case "taskSpec":
       return "Generating TaskSpec...";
     case "sendCodex":
@@ -749,43 +835,16 @@ function operationLabel(operation: WorkbenchOperation): string {
 
 function taskStateCopy(mission: Mission | undefined, card: HandoffCard | undefined): string {
   if (!mission) {
-    return "Create a task, then ask the planner. Workspace can wait.";
+    return "Start a mission to create a task.";
   }
   if (!card) {
-    return "Ask the planner, then generate a TaskSpec.";
+    return "Planning is ready to create a TaskSpec.";
   }
   return `${mission.status} · ${card.taskSpec.acceptanceCriteria.length} acceptance criteria`;
 }
 
-function repoName(path: string): string {
-  return path.replace(/\\/g, "/").split("/").filter(Boolean).at(-1) ?? path;
-}
-
 function shortId(value: string): string {
-  return value.length > 12 ? `${value.slice(0, 6)}…${value.slice(-4)}` : value;
-}
-
-function artifactTransferStatus(artifact: Artifact, file?: ArtifactFile): string {
-  if (artifact.metadata.uploadedToProvider) {
-    return "uploaded";
-  }
-  if (artifact.metadata.stagedForPlanner) {
-    return "staged for planner";
-  }
-  if (artifact.metadata.stagedForCodex || file?.localPath.includes("staging")) {
-    return "staged for codex";
-  }
-  return "local only";
-}
-
-function transferStatusCopy(value: "planner" | "codex" | "excluded"): string {
-  if (value === "planner") {
-    return "staged for planner";
-  }
-  if (value === "codex") {
-    return "staged for codex";
-  }
-  return "excluded";
+  return value.length > 12 ? `${value.slice(0, 6)}...${value.slice(-4)}` : value;
 }
 
 function formatBytes(value: number): string {

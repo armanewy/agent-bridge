@@ -183,18 +183,76 @@ nav {
 
 .workbench-layout {
   display: grid;
-  gap: 14px;
+  gap: 0;
+  height: calc(100vh - 104px);
   min-width: 0;
+  overflow: hidden;
 }
 
-.intent-panel {
+.workbench-shell {
   display: grid;
-  gap: 12px;
+  grid-template-rows: auto auto auto auto minmax(0, 1fr);
+  gap: 10px;
+  height: 100%;
   min-width: 0;
+  overflow: hidden;
+  padding: 14px;
+}
+
+.workbench-title-row {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.workbench-title-row h2 {
+  font-size: 24px;
+}
+
+.workbench-title-row p {
+  margin-top: 2px;
+  max-width: 560px;
+}
+
+.workbench-intent-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 170px;
+  gap: 10px;
+  min-height: 0;
 }
 
 .intent-input {
-  min-height: 104px;
+  min-height: 96px;
+  max-height: 132px;
+  resize: none;
+}
+
+.planner-input.intent-input {
+  min-height: 94px;
+  max-height: 104px;
+}
+
+.workbench-controls {
+  display: grid;
+  gap: 8px;
+  align-content: start;
+}
+
+.workbench-controls .primary-button,
+.workbench-controls .secondary-button {
+  width: 100%;
+}
+
+.workbench-controls select,
+.tab-card select {
+  min-height: 38px;
+  width: 100%;
+  border: 1px solid #c8d2db;
+  border-radius: 8px;
+  padding: 0 10px;
+  background: #ffffff;
+  color: #172026;
 }
 
 .inline-blocker {
@@ -216,6 +274,124 @@ nav {
   display: inline-flex;
   align-items: center;
   gap: 8px;
+}
+
+.workbench-step-tabs {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.step-tab {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  min-height: 38px;
+  background: #f5f7f9;
+  color: #445664;
+  font-weight: 800;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  padding: 0 8px;
+}
+
+.step-tab span {
+  width: 20px;
+  height: 20px;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  background: #ffffff;
+  color: #64737f;
+  font-size: 12px;
+}
+
+.step-tab.complete {
+  background: #edf8f3;
+  border-color: #b9dccf;
+  color: #0f563f;
+}
+
+.step-tab.active {
+  background: #205f4b;
+  border-color: #205f4b;
+  color: #ffffff;
+}
+
+.step-tab.active span {
+  color: #205f4b;
+}
+
+.workbench-tab-panel {
+  min-height: 0;
+  overflow: hidden;
+}
+
+.tab-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(220px, 0.45fr);
+  gap: 10px;
+  height: 100%;
+  min-height: 0;
+}
+
+.tab-card {
+  border: 1px solid #dce3e9;
+  border-radius: 8px;
+  background: #fbfcfd;
+  padding: 12px;
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-width: 0;
+  min-height: 0;
+  overflow: hidden;
+}
+
+.primary-tab-card {
+  background: #ffffff;
+}
+
+.tab-card-heading {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  align-items: flex-start;
+}
+
+.tab-card h3 {
+  margin: 2px 0 0;
+  font-size: 20px;
+  line-height: 1.18;
+  display: -webkit-box;
+  -webkit-line-clamp: 3;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
+.tab-card p {
+  margin-top: 4px;
+}
+
+.tab-side-stack {
+  display: grid;
+  gap: 10px;
+  align-content: start;
+  min-height: 0;
+  overflow: auto;
+}
+
+.full-width-button {
+  width: 100%;
+}
+
+.compact-decision {
+  padding: 9px 10px;
+}
+
+.compact-steering-row {
+  align-items: center;
 }
 
 .spinner {
@@ -537,6 +713,11 @@ nav {
   padding: 10px;
 }
 
+.primary-tab-card .taskspec-summary {
+  max-height: 98px;
+  overflow: hidden;
+}
+
 .workbench-task-panel .taskspec-summary ul,
 .workbench-task-panel .done-means-panel ul {
   margin: 6px 0;
@@ -549,6 +730,13 @@ nav {
   background: #fbfcfd;
 }
 
+.taskspec-summary strong {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+}
+
 .done-means-panel,
 .workspace-isolation-panel {
   border: 1px solid #cfe2d8;
@@ -557,6 +745,18 @@ nav {
   background: #f3fbf7;
   display: grid;
   gap: 8px;
+}
+
+.done-means-panel,
+.workspace-isolation-panel {
+  max-height: 178px;
+  overflow: hidden;
+}
+
+.workspace-isolation-panel p {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
 }
 
 .done-means-panel.warning,
